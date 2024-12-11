@@ -105,6 +105,7 @@ class DexCube(VecTask):
         self.reward_settings = {
             "height_reward_scale": self.cfg["env"]["heightRewardScale"],
             "distance_reward_scale": self.cfg["env"]["distanceRewardScale"],
+            "arm_height_reward_scale": self.cfg["env"]["armHeightRewardScale"],
             "action_penalty_scale": self.cfg["env"]["actionPenaltyScale"],
             "pregrasp_deviation_scale": self.cfg["env"]["pregraspPenaltyScale"],
             "qdot_penalty_scale": self.cfg["env"]["qdotPenaltyScale"],
@@ -202,7 +203,7 @@ class DexCube(VecTask):
         asset_root = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "../../assets"
         )
-        dex_asset_file = "mjcf/dex_hand_assets/"
+        dex_asset_file = None
 
         if "asset" in self.cfg["env"]:
             asset_root = os.path.join(
@@ -408,7 +409,6 @@ class DexCube(VecTask):
                 gymapi.MESH_VISUAL,
                 self.object_color,
             )
-            print(f"Created object with color: {self.object_color}")
 
             if self.aggregate_mode > 0:
                 self.gym.end_aggregate(env_ptr)
@@ -942,7 +942,7 @@ def compute_dex_reward(
 
     # Main reward: clipped object height
     height_reward = reward_settings["height_reward_scale"] * torch.clamp(
-        object_height, 0.0, 0.3
+        object_height, 0.0, 1.0
     )
 
     # Penalty for large actions
@@ -952,6 +952,10 @@ def compute_dex_reward(
     action_hand_penalty = torch.sum(actions_hand**2, dim=-1)
     action_penalty = action_arm_penalty + 1e-2 * action_hand_penalty
     action_penalty = reward_settings["action_penalty_scale"] * action_penalty
+
+    # if actions_arm is lifted enough height, give reward
+    arm_height = actions[:, 2]
+    arm_height_reward = reward_settings["arm_height_reward_scale"] * torch.clamp(arm_height, 0.0, 1.0)
 
     # Penalty for deviation from pregrasp gesture
     pregrasp_deviation = torch.sum(
@@ -966,7 +970,7 @@ def compute_dex_reward(
     )
     dist_reward = dist_reward.mean(dim=-1)  # average across 5 fingers
 
-    rewards = height_reward + dist_reward - action_penalty - pregrasp_penalty
+    rewards = height_reward + dist_reward + arm_height_reward - action_penalty - pregrasp_penalty
 
     """
     **Boolean indexing** is a powerful array indexing technique that uses arrays of True/False to select specific elements.

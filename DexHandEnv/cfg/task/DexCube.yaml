@@ -24,8 +24,9 @@ env:
   actionScale: 0.1
 
   # reward weights
-  heightRewardScale: 10.0
+  heightRewardScale: 30.0
   distanceRewardScale: 2.0
+  armHeightRewardScale: 2.0
   successRewardScale: 10.0
   qdotPenaltyScale: 0.1
   actionPenaltyScale: 1.0

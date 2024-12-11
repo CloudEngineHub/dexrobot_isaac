@@ -4,7 +4,7 @@ This repository provides a framework for training dexterous grasping policies fo
 
 ### Installation
 
-1. Download and install Isaac Gym Preview 4 from NVIDIA's website
+1. Download and install [Isaac Gym Preview 4](https://developer.nvidia.com/isaac-gym) from NVIDIA's website
 
 2. Verify Isaac Gym installation:
 
@@ -26,7 +26,7 @@ pip install -e .
 ### Training
 
 ```bash
-python DexHandEnv/train.py task=DexHand num_envs=4096 headless=True
+python DexHandEnv/train.py task=DexCube num_envs=4096 headless=True
 ```
 - `num_envs`: Number of parallel environments (default: 4096)
 - `headless`: Run without visualization for faster training
@@ -36,8 +36,8 @@ python DexHandEnv/train.py task=DexHand num_envs=4096 headless=True
 To test a trained model:
 
 ```bash
-python DexHandEnv/train.py task=DexHand test=True num_envs=2 checkpoint=runs/DexHand_*/nn/DexHand.pth
-python DexHandEnv/train.py task=DexHand test=True num_envs=2 checkpoint=runs/DexHand_02-17-39-23/nn/DexHand.pth
+python DexHandEnv/train.py task=DexCube test=True num_envs=2 checkpoint=runs/DexCube_*/nn/DexHand.pth
+python DexHandEnv/train.py task=DexCube test=True num_envs=2 checkpoint=runs/DexCube_06-14-42-29/nn/DexCube.pth
 ```
 
 ### Configuration

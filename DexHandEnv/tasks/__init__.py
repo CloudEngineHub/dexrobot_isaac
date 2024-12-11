@@ -28,9 +28,11 @@
 
 from .ant import Ant
 from .dex_cube import DexCube
+from .dex_hand import DexHand
 
 # Mappings from strings to environments
 isaacgym_task_map = {
     "Ant": Ant,
     "DexCube": DexCube,
+    "DexHand": DexHand,
 }

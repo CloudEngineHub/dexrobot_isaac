@@ -1,8 +1,8 @@
 videos
+cloud
 recorded_frames
 /DexHandEnv/logs
 *train_dir*
-*wandb*
 *ige_logs*
 *.egg-info
 /.vs
