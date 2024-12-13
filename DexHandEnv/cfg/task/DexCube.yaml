@@ -21,7 +21,7 @@ env:
 
   aggregateMode: 3
 
-  actionScale: 0.1
+  actionScale: 0.1 # complimentary control rather than absolute control
 
   # reward weights
   heightRewardScale: 30.0
@@ -39,7 +39,7 @@ env:
 
   asset:
     assetRoot: "../../assets"
-    assetFileNamedex: "dexhand/mjcf/dexhand021_right.xml"
+    assetFileNamedex: "dexhand/mjcf/dexhand021_right_floating.xml"
 
   # set to True if you use camera sensors in the environment
   enableCameraSensors: False

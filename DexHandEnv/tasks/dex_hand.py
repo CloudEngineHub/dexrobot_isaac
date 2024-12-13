@@ -369,7 +369,9 @@ class DexHand(VecTask):
 
         self.num_dex_hand_bodies = self.gym.get_asset_rigid_body_count(dex_hand_asset)
         self.num_dex_hand_shapes = self.gym.get_asset_rigid_shape_count(dex_hand_asset)
-        self.num_dex_hand_dofs = self.gym.get_asset_dof_count(dex_hand_asset)
+        self.num_dex_hand_dofs = self.gym.get_asset_dof_count(
+            dex_hand_asset
+        )  # 谜之错误 25
         self.num_dex_hand_actuators = self.gym.get_asset_actuator_count(dex_hand_asset)
         self.num_dex_hand_tendons = self.gym.get_asset_tendon_count(dex_hand_asset)
 
@@ -391,20 +393,54 @@ class DexHand(VecTask):
                     tendon_props[i].damping = t_damping
         self.gym.set_asset_tendon_properties(dex_hand_asset, tendon_props)
 
+        # actuated_dof_names = [
+        #     self.gym.get_asset_actuator_joint_name(dex_hand_asset, i)
+        #     for i in range(self.num_dex_hand_actuators)
+        # ]
+
         actuated_dof_names = [
-            self.gym.get_asset_actuator_joint_name(dex_hand_asset, i)
-            for i in range(self.num_dex_hand_actuators)
+            "ARRx",
+            "ARRy",
+            "r_f_joint2_2",
+            "r_f_joint2_3",
+            "r_f_joint2_4",
+            "r_f_joint3_2",
+            "r_f_joint3_3",
+            "r_f_joint3_4",
+            "r_f_joint4_2",
+            "r_f_joint4_3",
+            "r_f_joint4_4",
+            "r_f_joint5_2",
+            "r_f_joint5_3",
+            "r_f_joint5_4",
+            "r_f_joint1_2",
+            "r_f_joint1_3",
+            "r_f_joint1_1",
+            "r_f_joint2_1",
+            "r_f_joint3_1",
+            "r_f_joint4_1",
+            "r_f_joint5_1",
         ]
+
         self.actuated_dof_indices = [
             self.gym.find_asset_dof_index(dex_hand_asset, name)
             for name in actuated_dof_names
         ]
+        self.unactuated_dof_indices = [
+            i
+            for i in range(self.num_dex_hand_dofs)
+            if i not in self.actuated_dof_indices
+        ]
+
         ic(self.actuated_dof_indices, actuated_dof_names)
 
         # get dex_hand dof properties, loaded by Isaac Gym from the MJCF file
         dex_hand_dof_props = self.gym.get_asset_dof_properties(dex_hand_asset)
-        dex_hand_dof_props[0]["velocity"] = 1
-        dex_hand_dof_props[1]["velocity"] = 1
+        # set velocity limits for ARRx and ARRy
+        dex_hand_dof_props[self.actuated_dof_indices][0]["velocity"] = 1.0
+        dex_hand_dof_props[self.actuated_dof_indices][1]["velocity"] = 1.0
+        # dex_hand_dof_props[self.unactuated_dof_indices][:]["velocity"] = 0.0
+
         ic(dex_hand_dof_props)
         ic(dex_hand_dof_props["lower"].shape)
 
@@ -414,8 +450,9 @@ class DexHand(VecTask):
         self.dex_hand_dof_default_vel = []
 
         for i in range(self.num_dex_hand_dofs):
-            self.dex_hand_dof_lower_limits.append(dex_hand_dof_props["lower"][i])
-            self.dex_hand_dof_upper_limits.append(dex_hand_dof_props["upper"][i])
+            self.dex_hand_dof_lower_limits.append(0.0)
+            self.dex_hand_dof_upper_limits.append(0.1)
+
             self.dex_hand_dof_default_pos.append(0.0)
             self.dex_hand_dof_default_vel.append(0.0)
 
@@ -484,14 +521,14 @@ class DexHand(VecTask):
 
         dex_hand_start_pose = gymapi.Transform()
         dex_hand_start_pose.p = gymapi.Vec3(*get_axis_params(0.5, self.up_axis_idx))
-        dex_hand_start_pose.r = gymapi.Quat(0.0, 1, 0, 0.0)
+        dex_hand_start_pose.r = gymapi.Quat(0.0, 1, 0, 0)
         # dex_hand_start_pose.r = gymapi.Quat(-0.07, 0, 0.997, 0.0)
 
         object_start_pose = gymapi.Transform()
         object_start_pose.p = gymapi.Vec3()
         object_start_pose.p.x = dex_hand_start_pose.p.x
 
-        pose_dx, pose_dy, pose_dz = -0.32, -0.03, 0.10
+        pose_dx, pose_dy, pose_dz = -0.22, -0, 0.10
         object_start_pose.p.x = dex_hand_start_pose.p.x + pose_dx
         object_start_pose.p.y = dex_hand_start_pose.p.y + pose_dy
         object_start_pose.p.z = dex_hand_start_pose.p.z + pose_dz
@@ -1104,6 +1141,7 @@ class DexHand(VecTask):
         )
 
         pos = self.dex_hand_default_dof_pos + self.reset_dof_pos_noise * rand_delta
+        # import ipdb; ipdb.set_trace()
         self.dex_hand_dof_pos[env_ids, :] = pos
         self.dex_hand_dof_vel[env_ids, :] = (
             self.dex_hand_dof_default_vel
@@ -1112,6 +1150,8 @@ class DexHand(VecTask):
                 :, 5 + self.num_dex_hand_dofs : 5 + self.num_dex_hand_dofs * 2
             ]
         )
+        self.dex_hand_dof_pos[:, self.unactuated_dof_indices] = 0.0
+        self.dex_hand_dof_vel[:, self.unactuated_dof_indices] = 0.0
         self.prev_targets[env_ids, : self.num_dex_hand_dofs] = pos
         self.cur_targets[env_ids, : self.num_dex_hand_dofs] = pos
 
@@ -1177,6 +1217,7 @@ class DexHand(VecTask):
                 self.dex_hand_dof_upper_limits[self.actuated_dof_indices],
             )
         else:
+            self.cur_targets[:, self.unactuated_dof_indices] = 0.0
             self.cur_targets[:, self.actuated_dof_indices] = scale(
                 self.actions,
                 self.dex_hand_dof_lower_limits[self.actuated_dof_indices],
@@ -1192,7 +1233,7 @@ class DexHand(VecTask):
                 self.dex_hand_dof_lower_limits[self.actuated_dof_indices],
                 self.dex_hand_dof_upper_limits[self.actuated_dof_indices],
             )
-            # ic(self.cur_targets[0, self.actuated_dof_indices], self.actions[0, :])
+            ic(self.cur_targets[0, self.actuated_dof_indices], self.actions[0, :])
 
         self.prev_targets[:, self.actuated_dof_indices] = self.cur_targets[
             :, self.actuated_dof_indices
@@ -1234,6 +1275,9 @@ class DexHand(VecTask):
         self.gym.refresh_net_contact_force_tensor(self.sim)
 
         self.compute_observations()
+        # import ipdb
+
+        # ipdb.set_trace()
         self.compute_reward(self.actions)
 
         if self.viewer and self.debug_viz:

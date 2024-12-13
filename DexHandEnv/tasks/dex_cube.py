@@ -20,6 +20,59 @@ from DexHandEnv.utils.torch_jit_utils import (
 )
 
 
+# TODO：定义手部 19 个关节的位置 + 手腕（手的基座）的位置和姿态
+# x 前后，y 左右，z 上下
+"""
+# mujoco 中场景初始定义如下：
+<worldbody>
+    <body name="floating_hand_base" pos="0 0 1.2">
+        <include file="../parts/dexhand021_right_floating_body.xml" />
+    </body>
+    <body name="scenetable" pos="0 0 0" euler="0 0 1.57">
+        <include
+            file="furniture_sim/simpleTable/simpleMarbleTable_body.xml" />
+    </body>
+    <body name="box" pos="0 0 0.82">
+        <inertial pos="0 0 0" mass="0.03" diaginertia="0.00002 0.00002 0.00002" />
+        <geom type="box" size="0.03 0.03 0.03" pos="0 0 0" euler="0. 0. 0."
+            rgba="0.49803922 0.72156863 0.87058824 1" />
+        <freejoint />
+    </body>
+</worldbody>
+"""
+# 一个具有 6 自由度基座和 5 指灵巧手的机器人结构
+base_joint_names = [
+    "base_ARTx",
+    "base_ARTy",
+    "base_ARTz",
+    "base_ARRx",
+    "base_ARRy",
+    "base_ARRz",
+]
+finger_joint_names = [
+    "r_f_joint1_1_pos",
+    "r_f_joint1_2_pos",
+    "r_f_joint1_3_pos",
+    "r_f_joint1_4_pos",
+    "r_f_joint2_1_pos",
+    "r_f_joint2_2_pos",
+    "r_f_joint2_3_pos",
+    "r_f_joint2_4_pos",
+    # "r_f_joint3_1_pos",  # fixed
+    "r_f_joint3_2_pos",
+    "r_f_joint3_3_pos",
+    "r_f_joint3_4_pos",
+    "r_f_joint4_1_pos",
+    "r_f_joint4_2_pos",
+    "r_f_joint4_3_pos",
+    "r_f_joint4_4_pos",
+    "r_f_joint5_1_pos",
+    "r_f_joint5_2_pos",
+    "r_f_joint5_3_pos",
+    "r_f_joint5_4_pos",
+]
+
+
 class DexCube(VecTask):
 
     def __init__(
@@ -128,7 +181,7 @@ class DexCube(VecTask):
         pregrasp_dataset_path = os.path.join(
             current_file_dir, cfg["env"]["pregraspDatasetPath"]
         )
-        self.pregrasp_finger_qpos, self.pregrasp_hand_pose = self.load_pregrasp_dataset(
+        self.finger_joint_qpos, self.base_joint_pose = self.load_pregrasp_dataset(
             pregrasp_dataset_path
         )
         self.pregrasp_indices = torch.zeros(
@@ -153,27 +206,23 @@ class DexCube(VecTask):
         self._object_state = self._root_state[:, 2, :]
 
     def load_pregrasp_dataset(self, dataset_path):
-        df = pd.read_csv(dataset_path)
+        df = pd.read_csv(dataset_path).drop("tag", axis=1)
 
-        df = df.drop("tag", axis=1)
+        if self.control_type == "joint_pos":
+            base_joint_pose = df[base_joint_names].values
+            finger_joint_qpos = df[finger_joint_names].values
+            assert (
+                base_joint_pose.shape[1] == 6 and finger_joint_qpos.shape[1] == 19
+            ), "Expected 6 base joints and 19 finger joints"
+        else:
+            raise NotImplementedError(
+                "Please set correct dataset for joint pos control"
+            )
 
-        # Extract finger joint positions
-        finger_cols = [
-            col for col in df.columns if col.startswith("r_f_") and col.endswith("_pos")
-        ]
-        pregrasp_finger_qpos = df[finger_cols].values
-
-        # Extract hand pose
-        pose_cols = [col for col in df.columns if col.startswith("hand")]
-        pregrasp_hand_pose = df[pose_cols].values
-
-        # Convert to torch tensors
-        pregrasp_finger_qpos = torch.tensor(pregrasp_finger_qpos, dtype=torch.float32)
-        pregrasp_hand_pose = torch.tensor(pregrasp_hand_pose, dtype=torch.float32)
-
-        pregrasp_finger_qpos = pregrasp_finger_qpos.to(self.device)
-        pregrasp_hand_pose = pregrasp_hand_pose.to(self.device)
-        return pregrasp_finger_qpos, pregrasp_hand_pose
+        return (
+            torch.tensor(finger_joint_qpos, dtype=torch.float32).to(self.device),
+            torch.tensor(base_joint_pose, dtype=torch.float32).to(self.device),
+        )
 
     def create_sim(self):
         self.sim_params.up_axis = gymapi.UP_AXIS_Z
@@ -598,13 +647,13 @@ class DexCube(VecTask):
 
         # Select pregrasp poses
         pregrasp_indices = torch.randint(
-            0, len(self.pregrasp_hand_pose), (num_resets,), device=self.device
+            0, len(self.base_joint_pose), (num_resets,), device=self.device
         )
         self.pregrasp_indices[env_ids] = pregrasp_indices
 
         # Get selected pregrasp poses
-        selected_hand_poses = self.pregrasp_hand_pose[pregrasp_indices]
-        selected_finger_qpos = self.pregrasp_finger_qpos[pregrasp_indices]
+        selected_hand_poses = self.base_joint_pose[pregrasp_indices]
+        selected_finger_qpos = self.finger_joint_qpos[pregrasp_indices]
         # Set hand pose and DOF states
         self._set_hand_pose_and_dof_states(
             env_ids, selected_hand_poses, selected_finger_qpos
@@ -692,10 +741,8 @@ class DexCube(VecTask):
                 "object_pos": self._object_state[:, :3],
                 "object_quat": self._object_state[:, 3:7],
                 # pregrasp pose (fixed in one episode)
-                "pregrasp_finger_qpos": self.pregrasp_finger_qpos[
-                    self.pregrasp_indices
-                ],
-                "pregrasp_hand_pose": self.pregrasp_hand_pose[self.pregrasp_indices],
+                "finger_joint_qpos": self.finger_joint_qpos[self.pregrasp_indices],
+                "base_joint_pose": self.base_joint_pose[self.pregrasp_indices],
                 "finger_to_object_dist": finger_to_object_dist,
                 # 5 physics steps per RL step
                 "episode_time": self.progress_buf.unsqueeze(-1) * self.dt * 5,
@@ -719,8 +766,8 @@ class DexCube(VecTask):
     def compute_observations(self):
         self._refresh()
         obs = [
-            "pregrasp_finger_qpos",
-            "pregrasp_hand_pose",
+            "finger_joint_qpos",
+            "base_joint_pose",
             "q",
             "dq",
             "episode_time",
@@ -955,11 +1002,13 @@ def compute_dex_reward(
 
     # if actions_arm is lifted enough height, give reward
     arm_height = actions[:, 2]
-    arm_height_reward = reward_settings["arm_height_reward_scale"] * torch.clamp(arm_height, 0.0, 1.0)
+    arm_height_reward = reward_settings["arm_height_reward_scale"] * torch.clamp(
+        arm_height, 0.0, 1.0
+    )
 
     # Penalty for deviation from pregrasp gesture
     pregrasp_deviation = torch.sum(
-        (states["q"][:, 6:] - states["pregrasp_finger_qpos"]) ** 2, dim=-1
+        (states["q"][:, 6:] - states["finger_joint_qpos"]) ** 2, dim=-1
     )
     pregrasp_penalty = reward_settings["pregrasp_deviation_scale"] * pregrasp_deviation
 
@@ -970,7 +1019,13 @@ def compute_dex_reward(
     )
     dist_reward = dist_reward.mean(dim=-1)  # average across 5 fingers
 
-    rewards = height_reward + dist_reward + arm_height_reward - action_penalty - pregrasp_penalty
+    rewards = (
+        height_reward
+        + dist_reward
+        + arm_height_reward
+        - action_penalty
+        - pregrasp_penalty
+    )
 
     """
     **Boolean indexing** is a powerful array indexing technique that uses arrays of True/False to select specific elements.

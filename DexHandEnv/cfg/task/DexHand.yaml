@@ -54,7 +54,7 @@ env:
 
   asset:
     assetRoot: "../../assets"
-    assetFileNamedex: "dexhand/mjcf/floating_dex_hand.xml"
+    assetFileNamedex: "dexhand/mjcf/dexhand021_right_floating.xml"
     assetFileNameBlock: "dexhand/urdf/objects/cube_multicolor.urdf"
     assetFileNameEgg: "dexhand/mjcf/open_ai_assets/hand/egg.xml"
     assetFileNamePen: "dexhand/mjcf/open_ai_assets/hand/pen.xml"
