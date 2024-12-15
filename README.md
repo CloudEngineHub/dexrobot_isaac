@@ -1,4 +1,4 @@
-# GALAG-DexHand
+# Isaac Gym Envs for DexHand
 
 This repository provides a framework for training dexterous grasping policies for robotic hands using NVIDIA's Isaac Gym simulator.
 
@@ -16,8 +16,8 @@ python joint_monkey.py
 3. Clone and install this repository:
 
 ```bash
-git clone https://github.com/lei00764/GALAG-DexHand
-cd GALAG-DexHand
+git clone https://github.com/dexrobot/dexrobot_isaac
+cd dexrobot_isaac
 pip install -e .
 ```
 
@@ -65,7 +65,7 @@ torchrun --standalone --nnodes=1 --nproc_per_node=2 DexHandEnv/train.py multi_gp
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the Apache License.
 
 ## Acknowledgements
 
