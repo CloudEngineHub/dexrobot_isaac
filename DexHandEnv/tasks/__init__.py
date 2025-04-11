@@ -27,12 +27,15 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from .ant import Ant
-from .dex_cube import DexCube
-from .dex_hand import DexHand
+from .dex_grasp import DexGrasp
+from .dex_reorient import DexReorient
 
 # Mappings from strings to environments
 isaacgym_task_map = {
     "Ant": Ant,
-    "DexCube": DexCube,
-    "DexHand": DexHand,
+    "DexGrasp": DexGrasp,
+    "DexReorient": DexReorient,
+    # Aliases for backward compatibility
+    "DexCube": DexGrasp,
+    "DexHand": DexReorient,
 }

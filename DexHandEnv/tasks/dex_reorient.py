@@ -50,7 +50,7 @@ from DexHandEnv.tasks.base.vec_task import VecTask
 from icecream import ic
 
 
-class DexHand(VecTask):
+class DexReorient(VecTask):
 
     def __init__(
         self,

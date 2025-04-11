@@ -73,7 +73,7 @@ finger_joint_names = [
 ]
 
 
-class DexCube(VecTask):
+class DexGrasp(VecTask):
 
     def __init__(
         self,
