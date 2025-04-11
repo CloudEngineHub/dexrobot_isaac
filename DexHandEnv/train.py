@@ -49,7 +49,12 @@ def preprocess_train_config(cfg, config_dict):
     train_cfg["population_based_training"] = cfg.pbt.enabled
     train_cfg["pbt_idx"] = cfg.pbt.policy_idx if cfg.pbt.enabled else None
 
-    train_cfg["full_experiment_name"] = cfg.get("full_experiment_name")
+    # Make sure we don't accidentally overwrite the experiment name with None
+    if train_cfg.get("full_experiment_name"):
+        print(f"Preserving full_experiment_name: {train_cfg['full_experiment_name']}")
+    else:
+        # As a fallback, if it wasn't set earlier
+        print("Warning: full_experiment_name was not set properly before preprocessing")
 
     print(f"Using rl_device: {cfg.rl_device}")
     print(f"Using sim_device: {cfg.sim_device}")
@@ -75,7 +80,12 @@ def preprocess_train_config(cfg, config_dict):
 @hydra.main(version_base="1.1", config_name="config", config_path="./cfg")
 def launch_rlg_hydra(cfg: DictConfig):
     import os
+    import subprocess
     from datetime import datetime
+
+    # Generate a centralized timestamp for all parts of the code
+    # This ensures consistency across all places that use the timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
     # noinspection PyUnresolvedReferences
     import isaacgym
@@ -106,8 +116,8 @@ def launch_rlg_hydra(cfg: DictConfig):
     from DexHandEnv.learning import amp_network_builder
     import DexHandEnv
 
-    time_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    run_name = f"{cfg.wandb_name}_{time_str}"
+    # Use the centralized timestamp
+    run_name = f"{cfg.wandb_name}_{timestamp}"
 
     # ensure checkpoints can be specified as relative paths
     if cfg.checkpoint:
@@ -200,6 +210,15 @@ def launch_rlg_hydra(cfg: DictConfig):
         )
 
     rlg_config_dict = omegaconf_to_dict(cfg.train)
+
+    # Set the full_experiment_name directly in the config dict
+    experiment_name = cfg.train.params.config.name + f"_{timestamp}"
+    rlg_config_dict["params"]["config"]["full_experiment_name"] = experiment_name
+
+    # Print confirmation that we've set the experiment name
+    print(f"Setting full_experiment_name to: {experiment_name}")
+    print(f"Config full_experiment_name: {rlg_config_dict['params']['config']['full_experiment_name']}")
+
     rlg_config_dict = preprocess_train_config(cfg, rlg_config_dict)
 
     observers = [RLGPUAlgoObserver()]
@@ -217,6 +236,10 @@ def launch_rlg_hydra(cfg: DictConfig):
 
     # register new AMP network builder and agent
     def build_runner(algo_observer):
+        # Make timestamp available to agent initialization
+        from DexHandEnv.learning.common_agent import set_global_timestamp
+        set_global_timestamp(timestamp)
+
         runner = Runner(algo_observer)
         runner.algo_factory.register_builder(
             "amp_continuous", lambda **kwargs: amp_continuous.AMPAgent(**kwargs)
@@ -244,13 +267,25 @@ def launch_rlg_hydra(cfg: DictConfig):
     if not cfg.test:
         experiment_dir = os.path.join(
             "runs",
-            cfg.train.params.config.name
-            + "_{date:%d-%H-%M-%S}".format(date=datetime.now()),
+            f"{cfg.train.params.config.name}_{timestamp}"
         )
 
         os.makedirs(experiment_dir, exist_ok=True)
         with open(os.path.join(experiment_dir, "config.yaml"), "w") as f:
             f.write(OmegaConf.to_yaml(cfg))
+
+        # Save git commit hash
+        try:
+            git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii").strip()
+            with open(os.path.join(experiment_dir, "git_hash.txt"), "w") as f:
+                f.write(git_hash)
+
+            # Save git diff
+            git_diff = subprocess.check_output(["git", "diff"]).decode("ascii")
+            with open(os.path.join(experiment_dir, "git_diff.patch"), "w") as f:
+                f.write(git_diff)
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            print(f"Warning: Could not save git information: {e}")
 
     runner.run(
         {

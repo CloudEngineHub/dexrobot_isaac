@@ -152,8 +152,9 @@ class Env(ABC):
         self.last_frame_time: float = 0.0
 
         self.record_frames: bool = False
+        from DexHandEnv.learning.common_agent import get_global_timestamp
         self.record_frames_dir = join(
-            "recorded_frames", datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            "recorded_frames", get_global_timestamp()
         )
 
     @abc.abstractmethod

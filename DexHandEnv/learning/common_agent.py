@@ -37,6 +37,21 @@ from rl_games.algos_torch import a2c_continuous, torch_ext, central_value
 
 from . import amp_datasets
 
+# Global timestamp for consistent naming
+_GLOBAL_TIMESTAMP = None
+
+def set_global_timestamp(timestamp):
+    """Set a global timestamp for consistent naming across the codebase."""
+    global _GLOBAL_TIMESTAMP
+    _GLOBAL_TIMESTAMP = timestamp
+
+def get_global_timestamp():
+    """Get the global timestamp, or generate a new one if not set."""
+    global _GLOBAL_TIMESTAMP
+    if _GLOBAL_TIMESTAMP is None:
+        _GLOBAL_TIMESTAMP = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    return _GLOBAL_TIMESTAMP
+
 
 class CommonAgent(a2c_continuous.A2CAgent):
 
@@ -125,7 +140,7 @@ class CommonAgent(a2c_continuous.A2CAgent):
 
         self.model_output_file = os.path.join(
             self.network_path,
-            self.config["name"] + "_{date:%d-%H-%M-%S}".format(date=datetime.now()),
+            self.config["name"] + f"_{get_global_timestamp()}",
         )
 
         self._init_train()
