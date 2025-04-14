@@ -39,8 +39,7 @@ python DexHandEnv/train.py task=DexGrasp num_envs=4096 headless=True
 To test a trained model:
 
 ```bash
-python DexHandEnv/train.py task=DexGrasp test=True num_envs=2 checkpoint=runs/DexGrasp_*/nn/DexGrasp.pth
-python DexHandEnv/train.py task=DexGrasp test=True num_envs=2 checkpoint=runs/DexGrasp_2023-04-11-14-42-29/nn/DexGrasp.pth
+python DexHandEnv/train.py task=DexGrasp test=True num_envs=2 checkpoint=runs/[experiment_name]/nn/DexGrasp.pth
 ```
 
 ### Configuration

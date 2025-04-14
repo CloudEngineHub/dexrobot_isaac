@@ -221,7 +221,7 @@ class DexReorient(VecTask):
         self.dex_hand_dof_state = self.dof_state.view(self.num_envs, -1, 2)[
             :, : self.num_dex_hand_dofs
         ]
-        ic(self.dof_state.view(self.num_envs, -1, 2).shape)
+        # ic(self.dof_state.view(self.num_envs, -1, 2).shape)
         self.dex_hand_dof_pos = self.dex_hand_dof_state[..., 0]
         self.dex_hand_dof_vel = self.dex_hand_dof_state[..., 1]
 
@@ -432,7 +432,7 @@ class DexReorient(VecTask):
             if i not in self.actuated_dof_indices
         ]
 
-        ic(self.actuated_dof_indices, actuated_dof_names)
+        # ic(self.actuated_dof_indices, actuated_dof_names)
 
         # get dex_hand dof properties, loaded by Isaac Gym from the MJCF file
         dex_hand_dof_props = self.gym.get_asset_dof_properties(dex_hand_asset)
@@ -441,8 +441,8 @@ class DexReorient(VecTask):
         dex_hand_dof_props[self.actuated_dof_indices][1]["velocity"] = 1.0
         # dex_hand_dof_props[self.unactuated_dof_indices][:]["velocity"] = 0.0
 
-        ic(dex_hand_dof_props)
-        ic(dex_hand_dof_props["lower"].shape)
+        # ic(dex_hand_dof_props)
+        # ic(dex_hand_dof_props["lower"].shape)
 
         self.dex_hand_dof_lower_limits = []
         self.dex_hand_dof_upper_limits = []
@@ -506,10 +506,10 @@ class DexReorient(VecTask):
         self.num_object_dofs = self.gym.get_asset_dof_count(object_asset)
         self.num_object_actuators = self.gym.get_asset_actuator_count(object_asset)
         object_dof_props = self.gym.get_asset_dof_properties(object_asset)
-        ic(object_dof_props)
-        for i in range(self.num_object_dofs):
-            ic(object_dof_props["lower"][i])
-            ic(object_dof_props["upper"][i])
+        # ic(object_dof_props)
+        # for i in range(self.num_object_dofs):
+        #     ic(object_dof_props["lower"][i])
+        #     ic(object_dof_props["upper"][i])
 
         goal_object_dof_props = copy.deepcopy(object_dof_props)
         goal_object_dof_props[0]["damping"] = 0
@@ -730,7 +730,7 @@ class DexReorient(VecTask):
 
         # TODO: contact indices
         body_names = self.gym.get_asset_rigid_body_names(dex_hand_asset)
-        ic(body_names)
+        # ic(body_names)
         penalized_contact_names = ["test_link2"]
         self.penalised_contact_indices = torch.zeros(
             len(penalized_contact_names),
@@ -742,7 +742,7 @@ class DexReorient(VecTask):
             self.penalised_contact_indices[i] = self.gym.find_actor_rigid_body_handle(
                 self.envs[0], self.dex_hands[0], penalized_contact_names[i]
             )
-        ic(self.penalised_contact_indices)
+        # ic(self.penalised_contact_indices)
 
     def compute_reward(self, actions):
         (
@@ -1233,7 +1233,7 @@ class DexReorient(VecTask):
                 self.dex_hand_dof_lower_limits[self.actuated_dof_indices],
                 self.dex_hand_dof_upper_limits[self.actuated_dof_indices],
             )
-            ic(self.cur_targets[0, self.actuated_dof_indices], self.actions[0, :])
+            # ic(self.cur_targets[0, self.actuated_dof_indices], self.actions[0, :])
 
         self.prev_targets[:, self.actuated_dof_indices] = self.cur_targets[
             :, self.actuated_dof_indices

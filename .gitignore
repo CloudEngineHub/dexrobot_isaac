@@ -32,3 +32,6 @@ runs/
 outputs/
 *.hydra*
 /DexHandEnv/wandb
+CLAUDE.md
+.unison.*
+~
