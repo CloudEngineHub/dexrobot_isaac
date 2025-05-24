@@ -2065,7 +2065,7 @@ class DexHandBase(VecTask):
                     for env_idx in range(min(1, self.num_envs)):  # Just check first env
                         print(f"Verifying target values from simulator for env {env_idx}:")
                         for dof_idx in range(min(6, self.num_dof)):  # Just check base DOFs
-                            target_pos = self.gym.get_dof_target(self.envs[env_idx], dof_idx)
+                            target_pos = self.gym.get_dof_target_position(self.envs[env_idx], dof_idx)
                             print(f"  DOF {dof_idx}: {target_pos:.4f} (expected {self.current_targets[env_idx, dof_idx]:.4f})")
                 except Exception as e:
                     print(f"Error verifying target positions: {e}")
@@ -2079,7 +2079,7 @@ class DexHandBase(VecTask):
                     for env_idx in range(self.num_envs):
                         for dof_idx in range(min(6, targets.shape[1])):  # Just check base DOFs
                             # Get the target position for this DOF
-                            target_pos = self.gym.get_dof_target(self.envs[env_idx], dof_idx)
+                            target_pos = self.gym.get_dof_target_position(self.envs[env_idx], dof_idx)
                             target_positions[env_idx, dof_idx] = target_pos
                     
                     # Print the retrieved targets for verification
