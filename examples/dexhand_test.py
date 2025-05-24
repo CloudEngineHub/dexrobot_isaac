@@ -153,6 +153,20 @@ def main():
     actions = torch.zeros((env.num_envs, env.num_actions), device=env.device)
     
     print("Starting simulation loop...")
+    print(f"DEBUG: Action space: {env.num_actions}, Observation space: {env.num_observations}")
+    print(f"DEBUG: DOF state shape: {env.dof_state.shape if hasattr(env, 'dof_state') else 'Not available'}")
+    print(f"DEBUG: Root state tensor shape: {env.root_state_tensor.shape if hasattr(env, 'root_state_tensor') else 'Not available'}")
+    print(f"DEBUG: Action tensor device: {env.device}, DOF state device: {env.dof_state.device if hasattr(env, 'dof_state') else 'Not available'}")
+    
+    # Test small initial movement
+    print("DEBUG: Testing initial movement with all actions = 0.01")
+    test_actions = torch.ones((env.num_envs, env.num_actions), device=env.device) * 0.01
+    obs, rew, done, info = env.step(test_actions)
+    print(f"DEBUG: Initial step complete, rewards: {rew.mean().item():.4f}")
+    
+    # Reset actions to zero
+    actions = torch.zeros((env.num_envs, env.num_actions), device=env.device)
+    
     for i in range(args.steps):
         if args.debug:
             print(f"Step {i} - setting up actions")
@@ -187,6 +201,9 @@ def main():
         # Step the environment
         try:
             obs, rewards, dones, info = env.step(actions)
+            
+            # Render the environment
+            env.render()
             
             if args.debug:
                 print(f"  Step complete, rewards: {rewards.mean().item():.4f}")

@@ -110,12 +110,15 @@ class BaseTask(DexTask):
         """
         pass
     
-    def get_task_observations(self) -> Optional[Dict[str, torch.Tensor]]:
+    def get_task_observations(self, obs_dict: Dict[str, torch.Tensor]) -> Optional[Dict[str, torch.Tensor]]:
         """
         Get task-specific observations.
         
         The base task doesn't provide any task-specific observations.
         
+        Args:
+            obs_dict: Dictionary of current observations
+            
         Returns:
             None, indicating no task-specific observations
         """

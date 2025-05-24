@@ -104,7 +104,7 @@ class PhysicsManager:
             traceback.print_exc()
             return False
     
-    def apply_tensor_states(self, gym, sim, env_ids, dof_state, root_state_tensor):
+    def apply_tensor_states(self, gym, sim, env_ids, dof_state, root_state_tensor, hand_indices=None):
         """
         Apply tensor states to the physics simulation.
         
@@ -114,32 +114,67 @@ class PhysicsManager:
             env_ids: Tensor of environment IDs
             dof_state: Tensor of DOF states
             root_state_tensor: Tensor of root states
+            hand_indices: Optional indices of hand actors for each environment
             
         Returns:
             Boolean indicating success
         """
         try:
+            # For DOF state, we use env_ids directly
+            env_ids_int32 = env_ids.to(torch.int32)
+            
             # Apply DOF state
             self.gym.set_dof_state_tensor_indexed(
                 self.sim,
                 gymtorch.unwrap_tensor(dof_state),
-                gymtorch.unwrap_tensor(env_ids.to(torch.int32)),
+                gymtorch.unwrap_tensor(env_ids_int32),
                 len(env_ids)
             )
             
-            # Apply root state
-            self.gym.set_actor_root_state_tensor_indexed(
-                self.sim,
-                gymtorch.unwrap_tensor(root_state_tensor),
-                gymtorch.unwrap_tensor(env_ids.to(torch.int32)),
-                len(env_ids)
-            )
+            # Apply root state - use the right approach based on what we have
+            if hand_indices is not None:
+                # Convert environment indices to actor indices
+                # Create actor indices tensor with the same length as env_ids
+                actor_indices = torch.zeros(len(env_ids), dtype=torch.int32, device=self.device)
+                for i, env_id in enumerate(env_ids):
+                    if env_id < len(hand_indices):
+                        actor_indices[i] = hand_indices[env_id]
+                    else:
+                        print(f"WARNING: Environment ID {env_id} out of range for hand_indices")
+                
+                # Need to extract the specific actor states from the tensor
+                # The root_state_tensor has shape [num_envs, num_bodies, 13]
+                # We need to create a tensor with shape [num_bodies, 13] containing just the actors we want to update
+                actor_states = torch.zeros((len(env_ids), 13), device=self.device)
+                
+                # For each env_id, copy the root state for its corresponding actor
+                for i, env_id in enumerate(env_ids):
+                    if env_id < root_state_tensor.shape[0] and i < len(actor_indices):
+                        actor_idx = actor_indices[i]
+                        if actor_idx < root_state_tensor.shape[1]:
+                            actor_states[i] = root_state_tensor[env_id, actor_idx]
+                
+                # Set actor root state tensor indexed
+                self.gym.set_actor_root_state_tensor_indexed(
+                    self.sim,
+                    gymtorch.unwrap_tensor(actor_states),
+                    gymtorch.unwrap_tensor(actor_indices),
+                    len(env_ids)
+                )
+            else:
+                # Just try to set the entire root state tensor
+                try:
+                    self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(root_state_tensor))
+                except Exception as e:
+                    print(f"WARNING: Could not set actor root state tensor: {e}")
+                    # Continue anyway, as DOF state is more important
             
             # Step physics to settle objects
             # This may require multiple physics steps for stability
-            return self.step_physics()
+            success = self.step_physics()
+            return success
         except Exception as e:
-            print(f"Error in apply_tensor_states: {e}")
+            print(f"CRITICAL ERROR in physics_manager.apply_tensor_states: {e}")
             import traceback
             traceback.print_exc()
             return False

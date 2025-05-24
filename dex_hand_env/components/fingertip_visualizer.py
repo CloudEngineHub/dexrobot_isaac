@@ -44,6 +44,20 @@ class FingertipVisualizer:
         # Check if handles are valid
         self.handles_valid = len(self.fingerpad_handles) > 0 and len(self.envs) > 0
         
+    def update_fingertip_visualization(self, contact_forces):
+        """
+        Update fingertip visualization based on contact forces.
+        
+        Alias for update_colors to maintain compatibility with DexHandBase.
+        
+        Args:
+            contact_forces: Tensor of contact forces for each fingerpad
+            
+        Returns:
+            Boolean indicating whether colors were updated
+        """
+        return self.update_colors(contact_forces)
+        
     def update_colors(self, contact_forces):
         """
         Update fingertip colors based on contact forces.

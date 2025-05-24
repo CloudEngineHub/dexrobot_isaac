@@ -197,8 +197,11 @@ class DexHandBase(VecTask):
         self._init_components()
         
         # Verify tensors were properly initialized
-        if not hasattr(self, 'tensor_manager') or not self.tensor_manager.tensors_initialized:
-            raise ValueError("Tensors were not properly initialized. The simulation initialization has failed.")
+        if not hasattr(self, 'tensor_manager'):
+            raise RuntimeError("TensorManager component was not created. The simulation initialization has failed.")
+        
+        if not self.tensor_manager.tensors_initialized:
+            raise RuntimeError("Tensors were not properly initialized. The simulation initialization has failed.")
         
         # Initialize observation dict
         self.obs_dict = {}
@@ -218,17 +221,6 @@ class DexHandBase(VecTask):
         if not hasattr(self, 'sim') or self.sim is None:
             print("Simulation not created by parent class, creating now...")
             self.sim = self.create_sim()
-        
-        # Create tensor manager first (needed by other components)
-        self.tensor_manager = TensorManager(
-            gym=self.gym,
-            sim=self.sim,
-            num_envs=self.num_envs,
-            device=self.device
-        )
-        
-        # Acquire tensor handles
-        self.tensor_manager.acquire_tensor_handles()
         
         # Create hand initializer
         self.hand_initializer = HandInitializer(
@@ -261,12 +253,35 @@ class DexHandBase(VecTask):
         # Create the environments
         self._create_envs()
         
-        # Now set up the rest of the tensors after environment creation
+        # Create hands in the environments
         handles = self.hand_initializer.create_hands(self.envs, self.hand_asset)
         self.hand_handles = handles["hand_handles"]
         self.fingertip_body_handles = handles["fingertip_body_handles"]
         self.hand_indices = handles["hand_indices"]
         self.fingertip_indices = handles["fingertip_indices"]
+        
+        # Set up viewer
+        if not self.headless:
+            print("Creating viewer...")
+            self.set_viewer()
+            print("Viewer created")
+        
+        # Step physics to ensure all objects are properly created
+        print("Stepping physics after environment creation...")
+        for _ in range(5):  # Multiple steps to ensure everything is settled
+            self.gym.simulate(self.sim)
+            self.gym.fetch_results(self.sim, True)
+        
+        # Create tensor manager after environment setup
+        self.tensor_manager = TensorManager(
+            gym=self.gym,
+            sim=self.sim,
+            num_envs=self.num_envs,
+            device=self.device
+        )
+        
+        # Acquire tensor handles AFTER environment and actors are created
+        self.tensor_manager.acquire_tensor_handles()
         
         # Set up tensors
         tensors = self.tensor_manager.setup_tensors(self.fingertip_indices)
@@ -296,7 +311,8 @@ class DexHandBase(VecTask):
             sim=self.sim,
             num_envs=self.num_envs,
             device=self.device,
-            dof_props=self.dof_props
+            dof_props=self.dof_props,
+            hand_asset=self.hand_asset
         )
         
         # Configure action processor
@@ -341,7 +357,8 @@ class DexHandBase(VecTask):
             gym=self.gym,
             sim=self.sim,
             num_envs=self.num_envs,
-            device=self.device
+            device=self.device,
+            hand_asset=self.hand_asset
         )
         
         # Configure observation encoder
@@ -391,30 +408,36 @@ class DexHandBase(VecTask):
         # Create fingertip visualizer
         self.fingertip_visualizer = FingertipVisualizer(
             gym=self.gym,
-            sim=self.sim,
             envs=self.envs,
-            num_envs=self.num_envs,
-            device=self.device,
-            num_fingertips=len(self.fingertip_body_names),
-            fingertip_body_handles=self.fingertip_body_handles
+            hand_indices=self.hand_indices,
+            fingerpad_handles=self.fingertip_body_handles,
+            device=self.device
         )
         
         # Create success/failure tracker
         self.success_tracker = SuccessFailureTracker(
             num_envs=self.num_envs,
             device=self.device,
-            success_threshold=self.cfg["env"].get("successThreshold", 0.5),
-            max_consecutive_successes=self.cfg["env"].get("maxConsecutiveSuccesses", 10)
+            cfg=self.cfg
         )
         
         # Create reward calculator
         self.reward_calculator = RewardCalculator(
             num_envs=self.num_envs,
-            device=self.device
+            device=self.device,
+            cfg=self.cfg
         )
         
         # Mark tensors as initialized
         self._tensors_initialized = True
+        
+        # Add control mode and other properties as direct attributes for easy access
+        self.action_control_mode = self.action_processor.action_control_mode
+        self.control_hand_base = self.action_processor.control_hand_base
+        self.control_fingers = self.action_processor.control_fingers
+        
+        # Set observation space dimensions needed by VecTask
+        self.num_observations = self.observation_encoder.num_observations
     
     def _create_envs(self):
         """
@@ -510,137 +533,244 @@ class DexHandBase(VecTask):
 
     def reset_idx(self, env_ids):
         """Reset environments at specified indices."""
-        if len(env_ids) == 0:
-            return
+        try:
+            if len(env_ids) == 0:
+                return
             
-        # Use reset manager to reset environments
-        self.reset_manager.reset_idx(
-            env_ids=env_ids,
-            physics_manager=self.physics_manager,
-            dof_state=self.dof_state,
-            root_state_tensor=self.root_state_tensor,
-            hand_indices=self.hand_indices,
-            task_reset_func=lambda env_ids: self.task.reset_task(env_ids) if hasattr(self.task, 'reset_task') else None
-        )
+            # Reset progress buffer for the reset environments
+            self.progress_buf[env_ids] = 0
+            
+            # Create default DOF positions/velocities
+            if not hasattr(self, 'default_dof_pos'):
+                self.default_dof_pos = torch.zeros(self.num_dof, device=self.device)
+                # Set default hand position to half a meter above ground
+                if hasattr(self, 'hand_asset_file') and 'floating' in self.hand_asset_file:
+                    # Find translational DOFs and set height
+                    for i, name in enumerate(self.base_joint_names):
+                        if name == 'ARTz': # Z-translation DOF
+                            self.default_dof_pos[i] = 0.5
+            
+            # We need to handle both [num_envs*num_dofs, 2] and [num_envs, num_dofs, 2] shapes
+            if len(self.dof_state.shape) == 2:
+                # Flat array format [num_envs*num_dofs, 2]
+                # We need to compute the start/end indices for each env
+                for env_id in env_ids:
+                    start_idx = env_id * self.num_dof
+                    end_idx = start_idx + self.num_dof
+                    
+                    # Set positions and velocities
+                    self.dof_state[start_idx:end_idx, 0] = self.default_dof_pos  # Positions
+                    self.dof_state[start_idx:end_idx, 1] = 0.0  # Velocities
+            else:
+                # Already in [num_envs, num_dofs, 2] format
+                for env_id in env_ids:
+                    # Set DOF positions and velocities
+                    self.dof_state[env_id, :, 0] = self.default_dof_pos  # Positions
+                    self.dof_state[env_id, :, 1] = 0.0  # Velocities
+            
+            # Reset hand pose in root state tensor
+            for env_id in env_ids:
+                if env_id < len(self.hand_indices):
+                    hand_idx = self.hand_indices[env_id]
+                    
+                    # Set position (at default height)
+                    self.root_state_tensor[env_id, hand_idx, 0:3] = torch.tensor([0.0, 0.0, 0.5], device=self.device)
+                    
+                    # Set rotation (identity quaternion)
+                    self.root_state_tensor[env_id, hand_idx, 3:7] = torch.tensor([0.0, 0.0, 0.0, 1.0], device=self.device)
+                    
+                    # Zero velocities
+                    self.root_state_tensor[env_id, hand_idx, 7:13] = torch.zeros(6, device=self.device)
+            
+            # Call task-specific reset if available
+            if hasattr(self.task, 'reset_task'):
+                self.task.reset_task(env_ids)
+            
+            # Apply the updated tensor states to the simulation
+            self.physics_manager.apply_tensor_states(
+                gym=self.gym,
+                sim=self.sim,
+                env_ids=env_ids,
+                dof_state=self.dof_state,
+                root_state_tensor=self.root_state_tensor,
+                hand_indices=self.hand_indices
+            )
+        except Exception as e:
+            print(f"CRITICAL ERROR in reset_idx: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def pre_physics_step(self, actions):
         """Process actions before physics simulation step."""
         # Check for keyboard events if camera controller exists
         if self.camera_controller is not None:
-            # Pass the reset callback to allow keyboard-triggered resets
-            self.camera_controller.check_keyboard_events(
-                reset_callback=lambda env_ids: self.reset_idx(env_ids)
-            )
+            try:
+                self.camera_controller.check_keyboard_events(
+                    reset_callback=lambda env_ids: self.reset_idx(env_ids)
+                )
+            except Exception as e:
+                print(f"ERROR in check_keyboard_events: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
         
         # Store actions
         self.actions = actions.clone()
         
         # Process actions using action processor
-        self.action_processor.process_actions(
-            actions=self.actions,
-            dof_pos=self.dof_pos,
-            joint_to_control=self.hand_initializer.joint_to_control,
-            active_joint_names=self.hand_initializer.active_joint_names,
-            task_targets=self.task.get_task_dof_targets() if hasattr(self.task, 'get_task_dof_targets') else None
-        )
+        try:
+            task_targets = None
+            if hasattr(self.task, 'get_task_dof_targets'):
+                task_targets = self.task.get_task_dof_targets(
+                    num_envs=self.num_envs,
+                    device=self.device,
+                    base_controlled=self.control_hand_base,
+                    fingers_controlled=self.control_fingers
+                )
+            
+            self.action_processor.process_actions(
+                actions=self.actions,
+                dof_pos=self.dof_pos,
+                joint_to_control=self.hand_initializer.joint_to_control,
+                active_joint_names=self.hand_initializer.active_joint_names,
+                task_targets=task_targets
+            )
+        except Exception as e:
+            print(f"ERROR in action_processor.process_actions: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Update action in observation encoder for next frame
-        self.observation_encoder.update_prev_actions(self.actions)
+        try:
+            self.observation_encoder.update_prev_actions(self.actions)
+        except Exception as e:
+            print(f"ERROR in update_prev_actions: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+
 
     def post_physics_step(self):
         """Process state after physics simulation step."""
-        # Refresh tensors from simulation
-        self.tensor_manager.refresh_tensors(self.fingertip_indices)
-        
-        # Update cached tensors in observation encoder
-        self.observation_encoder.update_cached_tensors(
-            dof_pos=self.dof_pos,
-            dof_vel=self.dof_vel,
-            root_state_tensor=self.root_state_tensor
-        )
-        
-        # Update contact forces
-        self.observation_encoder.update_contact_forces(self.contact_forces)
-        
-        # Compute observations
-        self.obs_buf, self.obs_dict = self.observation_encoder.compute_observations(
-            hand_indices=self.hand_indices,
-            fingertip_indices=self.fingertip_indices,
-            joint_to_control=self.hand_initializer.joint_to_control,
-            active_joint_names=self.hand_initializer.active_joint_names
-        )
-        
-        # Add task-specific observations
-        if hasattr(self.task, 'get_task_observations'):
-            task_obs = self.task.get_task_observations(self.obs_dict)
-            if task_obs:
-                self.observation_encoder.add_task_observations(task_obs)
-        
-        # Get task rewards
-        if hasattr(self.task, 'compute_task_rewards'):
-            self.rew_buf[:], task_rewards = self.task.compute_task_rewards(self.obs_dict)
+        try:
+            # Refresh tensors from simulation
+            self.tensor_manager.refresh_tensors(self.fingertip_indices)
             
-            # Track successes
-            if 'success' in task_rewards:
-                self.success_tracker.update(task_rewards['success'])
-        else:
-            self.rew_buf[:] = 0
-        
-        # Update episode progress
-        self.reset_manager.increment_progress()
-        
-        # Check for episode termination
-        if hasattr(self.task, 'check_task_reset'):
-            task_reset = self.task.check_task_reset()
-            self.reset_buf = self.reset_manager.check_termination(task_reset)
-        else:
-            self.reset_buf = self.reset_manager.check_termination()
-        
-        # Update fingertip visualization
-        if self.fingertip_visualizer is not None:
-            self.fingertip_visualizer.update_fingertip_visualization(self.contact_forces)
-        
-        # Update camera position if following robot
-        if self.camera_controller is not None:
-            # Get hand positions for camera following
-            hand_positions = None
-            if self.root_state_tensor is not None and self.hand_indices:
-                hand_positions = torch.zeros((self.num_envs, 3), device=self.device)
-                for i, hand_idx in enumerate(self.hand_indices):
-                    if i >= self.num_envs:
-                        break
-                    hand_root_idx = hand_idx * 13
-                    hand_positions[i] = self.root_state_tensor[i, hand_root_idx:hand_root_idx + 3]
+            # Update cached tensors in observation encoder
+            self.observation_encoder.update_cached_tensors(
+                dof_pos=self.dof_pos,
+                dof_vel=self.dof_vel,
+                root_state_tensor=self.root_state_tensor
+            )
+            
+            # Update contact forces
+            self.observation_encoder.update_contact_forces(self.contact_forces)
+            
+            # Compute observations
+            self.obs_buf, self.obs_dict = self.observation_encoder.compute_observations(
+                hand_indices=self.hand_indices,
+                fingertip_indices=self.fingertip_indices,
+                joint_to_control=self.hand_initializer.joint_to_control,
+                active_joint_names=self.hand_initializer.active_joint_names
+            )
+            
+            # Add task-specific observations
+            if hasattr(self.task, 'get_task_observations'):
+                task_obs = self.task.get_task_observations(self.obs_dict)
+                if task_obs:
+                    self.observation_encoder.add_task_observations(task_obs)
+            
+            # Get task rewards
+            if hasattr(self.task, 'compute_task_rewards'):
+                self.rew_buf[:], task_rewards = self.task.compute_task_rewards(self.obs_dict)
                 
-            self.camera_controller.update_camera_position(hand_positions)
-        
-        # Reset environments that completed episodes
-        if torch.any(self.reset_buf):
-            self.reset_idx(torch.nonzero(self.reset_buf).flatten())
-        
-        # Physics step count tracking for auto-detecting steps per control
-        self.physics_manager.mark_control_step()
-        
-        # Update extras
-        self.extras = {
-            "consecutive_successes": self.success_tracker.consecutive_successes if hasattr(self, 'success_tracker') else 0
-        }
-        
-        return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
+                # Track successes
+                if 'success' in task_rewards:
+                    self.success_tracker.update(task_rewards['success'])
+            else:
+                self.rew_buf[:] = 0
+            
+            # Update episode progress
+            self.reset_manager.increment_progress()
+            
+            # Check for episode termination
+            if hasattr(self.task, 'check_task_reset'):
+                task_reset = self.task.check_task_reset()
+                self.reset_buf = self.reset_manager.check_termination(task_reset)
+            else:
+                self.reset_buf = self.reset_manager.check_termination()
+            
+            # Update fingertip visualization
+            if self.fingertip_visualizer is not None:
+                self.fingertip_visualizer.update_fingertip_visualization(self.contact_forces)
+            
+            # Update camera position if following robot
+            if self.camera_controller is not None:
+                # Get hand positions for camera following
+                hand_positions = None
+                if self.root_state_tensor is not None and self.hand_indices:
+                    hand_positions = torch.zeros((self.num_envs, 3), device=self.device)
+                    for i, hand_idx in enumerate(self.hand_indices):
+                        if i >= self.num_envs:
+                            break
+                        # Get position using the correct tensor indexing (root_state_tensor shape is [num_envs, num_bodies, 13])
+                        hand_positions[i] = self.root_state_tensor[i, hand_idx, :3]
+                
+                self.camera_controller.update_camera_position(hand_positions)
+            
+            # Reset environments that completed episodes
+            if torch.any(self.reset_buf):
+                self.reset_idx(torch.nonzero(self.reset_buf).flatten())
+            
+            # Physics step count tracking for auto-detecting steps per control
+            self.physics_manager.mark_control_step()
+            
+            # Update extras
+            self.extras = {
+                "consecutive_successes": self.success_tracker.consecutive_successes if hasattr(self, 'success_tracker') else 0
+            }
+            
+            return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
+            
+        except Exception as e:
+            print(f"CRITICAL ERROR in post_physics_step: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def step(self, actions):
         """
         Apply actions, simulate physics, and return observations, rewards, resets, and info.
         """
         # Pre-physics: process actions
-        self.pre_physics_step(actions)
+        try:
+            self.pre_physics_step(actions)
+        except Exception as e:
+            print(f"ERROR in pre_physics_step: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Step physics simulation
-        for _ in range(self.physics_manager.physics_steps_per_control_step):
-            self.physics_manager.step_physics()
+        try:
+            for _ in range(self.physics_manager.physics_steps_per_control_step):
+                self.physics_manager.step_physics()
+        except Exception as e:
+            print(f"ERROR in physics step: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         # Post-physics: compute observations and rewards
-        obs, rew, done, info = self.post_physics_step()
+        try:
+            obs, rew, done, info = self.post_physics_step()
+        except Exception as e:
+            print(f"ERROR in post_physics_step: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
         
         return obs, rew, done, info
 

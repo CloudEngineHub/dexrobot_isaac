@@ -49,6 +49,10 @@ class SuccessFailureTracker:
         # Success and failure rewards
         self.success_reward = cfg["env"].get("successReward", 10.0)
         self.failure_penalty = cfg["env"].get("failurePenalty", 5.0)
+        
+        # Track consecutive successes for curriculum learning
+        self.consecutive_successes = 0
+        self.max_consecutive_successes = cfg["env"].get("maxConsecutiveSuccesses", 50)
     
     def evaluate(self, progress_buf, builtin_success, task_success, builtin_failure, task_failure):
         """
@@ -190,6 +194,22 @@ class SuccessFailureTracker:
         
         return rewards
     
+    def update(self, success_tensor):
+        """
+        Update success tracking.
+        
+        Args:
+            success_tensor: Boolean tensor indicating success for each environment
+        """
+        # If at least one environment had a success
+        if torch.any(success_tensor):
+            self.consecutive_successes += 1
+        else:
+            self.consecutive_successes = 0
+            
+        # Cap at max value
+        self.consecutive_successes = min(self.consecutive_successes, self.max_consecutive_successes)
+        
     def reset(self, env_ids):
         """
         Reset success/failure tracking for specified environments.
@@ -207,3 +227,5 @@ class SuccessFailureTracker:
             
         for name in self.failure_reasons:
             self.failure_reasons[name][env_ids] = False
+            
+        # Note: We don't reset consecutive_successes here as it tracks across episodes

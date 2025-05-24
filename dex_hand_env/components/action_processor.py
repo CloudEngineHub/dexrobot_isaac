@@ -24,7 +24,7 @@ class ActionProcessor:
     - Manage PD control targets
     """
     
-    def __init__(self, gym, sim, num_envs, device, dof_props=None):
+    def __init__(self, gym, sim, num_envs, device, dof_props=None, hand_asset=None):
         """
         Initialize the action processor.
         
@@ -34,11 +34,19 @@ class ActionProcessor:
             num_envs: Number of environments
             device: PyTorch device
             dof_props: DOF properties tensor (optional)
+            hand_asset: Hand asset for getting DOF names (optional)
         """
         self.gym = gym
         self.sim = sim
         self.num_envs = num_envs
         self.device = device
+        self.hand_asset = hand_asset
+        
+        # Store DOF names if asset is provided
+        self.dof_names = []
+        if hand_asset is not None:
+            self.dof_names = self.gym.get_asset_dof_names(hand_asset)
+            print(f"ActionProcessor initialized with {len(self.dof_names)} DOF names from asset")
         
         # Control settings
         self.action_control_mode = "position"  # position or position_delta
@@ -101,9 +109,23 @@ class ActionProcessor:
         # Initialize DOF limits
         if dof_props is not None:
             self.dof_props = dof_props
-            # Extract DOF limits
-            self.dof_lower_limits = torch.tensor(dof_props['lower'], dtype=torch.float, device=self.device)
-            self.dof_upper_limits = torch.tensor(dof_props['upper'], dtype=torch.float, device=self.device)
+            
+            # Check if it's a tensor (from TensorManager) or a dictionary
+            if isinstance(dof_props, torch.Tensor):
+                print(f"DOF props is a tensor with shape: {dof_props.shape}")
+                # Format is [stiffness, damping, friction, armature, min, max]
+                # Extract limits from the tensor (indices 4 and 5 are min and max)
+                self.dof_lower_limits = dof_props[:, 4].clone().to(device=self.device)
+                self.dof_upper_limits = dof_props[:, 5].clone().to(device=self.device)
+            elif isinstance(dof_props, dict) and 'lower' in dof_props and 'upper' in dof_props:
+                # Extract DOF limits from dictionary
+                self.dof_lower_limits = torch.tensor(dof_props['lower'], dtype=torch.float, device=self.device)
+                self.dof_upper_limits = torch.tensor(dof_props['upper'], dtype=torch.float, device=self.device)
+            else:
+                print("Warning: DOF properties format not recognized, using default limits")
+                # Default limits
+                self.dof_lower_limits = torch.full((self.num_dof,), -1.0, device=self.device)
+                self.dof_upper_limits = torch.full((self.num_dof,), 1.0, device=self.device)
         else:
             # Default limits
             self.dof_lower_limits = torch.full((self.num_dof,), -1.0, device=self.device)
@@ -286,7 +308,7 @@ class ActionProcessor:
                     # Apply targets to the finger DOFs (with safety checks)
                     if finger_pos_targets is not None and finger_pos_targets.shape[1] > 0:
                         # Map active finger DOFs to full finger DOF space
-                        for i, name in enumerate(self.gym.get_actor_dof_names(self.sim)[self.NUM_BASE_DOFS:]):
+                        for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
                             # Skip if not in joint_to_control mapping
                             if name not in joint_to_control:
                                 continue
@@ -306,7 +328,7 @@ class ActionProcessor:
                 else:
                     # Get targets from task or use defaults
                     if task_targets is not None and 'finger_targets' in task_targets:
-                        for i, name in enumerate(self.gym.get_actor_dof_names(self.sim)[self.NUM_BASE_DOFS:]):
+                        for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
                             # Skip if not in joint_to_control mapping
                             if name not in joint_to_control:
                                 continue
@@ -324,7 +346,12 @@ class ActionProcessor:
                             except KeyError:
                                 print(f"Warning: Joint {name} not found in joint_to_control mapping")
                     else:
-                        for i, name in enumerate(self.gym.get_actor_dof_names(self.sim)[self.NUM_BASE_DOFS:]):
+                        # Use stored DOF names if available
+                        if not self.dof_names:
+                            print("Warning: DOF names not available from asset. Cannot set default finger targets.")
+                            return False
+                            
+                        for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
                             # Skip if not in joint_to_control mapping
                             if name not in joint_to_control:
                                 continue
@@ -366,7 +393,12 @@ class ActionProcessor:
                 # Copy finger targets from original targets tensor
                 if self.control_fingers:
                     for env_idx in range(self.num_envs):
-                        for i, name in enumerate(self.gym.get_actor_dof_names(self.sim)[self.NUM_BASE_DOFS:]):
+                        # Use stored DOF names if available
+                        if not self.dof_names:
+                            print("Warning: DOF names not available from asset. Cannot set finger targets.")
+                            return False
+                            
+                        for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
                             dof_idx = i + self.NUM_BASE_DOFS
                             if dof_idx < direct_targets.shape[1]:
                                 # Start with 0.0 for all finger DOFs

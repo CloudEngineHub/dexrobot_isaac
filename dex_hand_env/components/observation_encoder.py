@@ -24,7 +24,7 @@ class ObservationEncoder:
     - Normalize and format observations for the policy
     """
     
-    def __init__(self, gym, sim, num_envs, device):
+    def __init__(self, gym, sim, num_envs, device, hand_asset=None):
         """
         Initialize the observation encoder.
         
@@ -33,11 +33,24 @@ class ObservationEncoder:
             sim: The isaacgym simulation instance
             num_envs: Number of environments
             device: PyTorch device
+            hand_asset: Hand asset for getting DOF names (optional)
         """
         self.gym = gym
         self.sim = sim
         self.num_envs = num_envs
         self.device = device
+        self.hand_asset = hand_asset
+        
+        # Store DOF names if asset is provided
+        self.dof_names = []
+        if hand_asset is not None:
+            self.dof_names = self.gym.get_asset_dof_names(hand_asset)
+            print(f"ObservationEncoder initialized with {len(self.dof_names)} DOF names from asset")
+        
+        # Constants for observation dimensions
+        self.NUM_BASE_DOFS = 6
+        self.NUM_ACTIVE_FINGER_DOFS = 12
+        self.NUM_FINGERS = 5
         
         # Configuration flags
         self.include_dof_pos = True
@@ -46,10 +59,9 @@ class ObservationEncoder:
         self.include_contact_forces = True
         self.include_actions = False
         
-        # Constants for observation dimensions
-        self.NUM_BASE_DOFS = 6
-        self.NUM_ACTIVE_FINGER_DOFS = 12
-        self.NUM_FINGERS = 5
+        # Initialize observation dimension
+        self._calculate_obs_dim()
+        print(f"ObservationEncoder initialized with observation dimension: {self.num_observations}")
         
         # Initialize observation buffers
         self.obs_buf = None
@@ -241,7 +253,12 @@ class ObservationEncoder:
             
             # Map finger DOF positions to active DOFs
             if joint_to_control is not None and active_joint_names is not None:
-                for i, name in enumerate(self.gym.get_actor_dof_names(self.sim)[self.NUM_BASE_DOFS:]):
+                # Use stored DOF names if available, otherwise log a warning
+                if not self.dof_names:
+                    print("Warning: DOF names not available from asset. Some observations may be incorrect.")
+                    return self.obs_buf, self.obs_dict
+                
+                for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
                     # Skip if not in joint_to_control mapping
                     if name not in joint_to_control:
                         continue
@@ -285,7 +302,8 @@ class ObservationEncoder:
             
             # Map finger DOF velocities to active DOFs
             if joint_to_control is not None and active_joint_names is not None:
-                for i, name in enumerate(self.gym.get_actor_dof_names(self.sim)[self.NUM_BASE_DOFS:]):
+                # Use stored DOF names if available (already checked above)
+                for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
                     # Skip if not in joint_to_control mapping
                     if name not in joint_to_control:
                         continue
@@ -326,12 +344,17 @@ class ObservationEncoder:
                     if i >= self.num_envs:
                         break
                         
-                    # Get actor index in the root state tensor
-                    hand_root_idx = hand_idx * 13
-                    
-                    if hand_root_idx + 7 <= self.root_state_tensor.shape[1]:
-                        # Position (3) and orientation (4)
-                        hand_poses[i, :7] = self.root_state_tensor[i, hand_root_idx:hand_root_idx + 7]
+                    # The root_state_tensor has shape [num_envs, num_bodies, 13]
+                    # For each env, we need to extract the position (3) and orientation (4) for the hand actor
+                    if i >= self.root_state_tensor.shape[0]:
+                        raise RuntimeError(f"Environment index {i} exceeds root_state_tensor shape {self.root_state_tensor.shape}")
+                        
+                    if hand_idx >= self.root_state_tensor.shape[1]:
+                        raise RuntimeError(f"Hand index {hand_idx} exceeds root_state_tensor bodies dimension {self.root_state_tensor.shape[1]}")
+                        
+                    # Position (3) and orientation (4)
+                    hand_poses[i, :3] = self.root_state_tensor[i, hand_idx, :3]  # Position
+                    hand_poses[i, 3:7] = self.root_state_tensor[i, hand_idx, 3:7]  # Orientation
                 
                 # Store in observation buffer
                 self.obs_buf[:, obs_idx:obs_idx + 7] = hand_poses

@@ -85,10 +85,13 @@ class DexTask(ABC):
         """
         pass
     
-    def get_task_observations(self) -> Optional[Dict[str, torch.Tensor]]:
+    def get_task_observations(self, obs_dict: Dict[str, torch.Tensor]) -> Optional[Dict[str, torch.Tensor]]:
         """
         Get task-specific observations.
         
+        Args:
+            obs_dict: Dictionary of current observations
+            
         Returns:
             Dictionary of task-specific observations, or None if there are no
             task-specific observations.

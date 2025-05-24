@@ -23,10 +23,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Tensors: Always make assertions on shape when defining new tensors to catch shape issues early
 
 ## Development Philosophy
-- This is research codebase, not production-environment code, so always prefer failing fast over suppressing the error and using a fallback.
-
-## Interpreter Notes
-- Do not need to run the python scripts because your interpreter has some issue gathering the output. Tell me to run the test when you're ready and I'll return you the outputs.
+- IMPORTANT: This is research codebase, not production-environment code, so always prefer failing fast over suppressing the error and using a fallback.
+- NEVER add fallback logic or default values that hide errors. Always expose errors immediately with clear error messages.
+- When tensor operations fail, ALWAYS raise an exception rather than continuing with empty tensors.
+- Let the environment crash with informative error messages instead of hiding issues.
+- NEVER mark issues as fixed or completed (with checkmarks or otherwise) unless explicitly confirmed by the user.
+- NEVER claim that something is working correctly if there are still errors occurring.
+- DO NOT proceed to the next issue unless the current issue is fully resolved and the user explicitly confirms.
+- Always be precise about the current state - segmentation faults are NEVER acceptable, even if some steps seem to run.
 
 ## Isaac Gym Version
 - No need to handle different isaac gym versions. Refer to the docs of the current isaac gym version in @reference/isaacgym when necessary.
@@ -73,50 +77,59 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## DexRobot Project Roadmap
 
-### Phase 1: Critical Fixes & Core Functionality
-1. **Fix GPU Pipeline Issues**
-   - Investigate and fix CUDA memory access errors
-   - Test with both `--no-gpu-pipeline` and `--use-gpu-pipeline` modes
-   - Identify specific components that cause GPU pipeline failures
-
-2. **Verify DOF Control & Naming**
-   - Test the correct correspondence between DoFs and names
-   - Verify all 25 DOFs are properly accessible and controllable
-   - Fix "Error verifying target positions" issue with get_dof_target
-   - Create mapping documentation between DOF indices and names
-
-3. **Test Action Modes**
-   - Verify position control mode works correctly
-   - Verify position_delta control mode works correctly
-   - Test with different control frequencies
-   - Ensure action=0 maintains position properly
-
-4. **Verify Observation System**
-   - Check that observation tensors have correct shape and content
-   - Verify all required state information is included
-   - Test observation dictionary keys and values
-   - Add validation assertions for observation components
-
-5. **Fix Reset & Initialization Logic**
-   - Ensure correct physics steps per control step calculation
-   - Verify initial pose is set correctly on environment creation
-   - Test reset_idx functionality with different environment indices
-   - Ensure tensor dimensions are consistent after reset
-
-### Phase 2: Refactoring & Architecture
-6. **Naming Consistency**
-   - Decide on consistent naming (dex_hand vs dexhand)
-   - Standardize class and file names
-   - Update import statements and references
-   - Document naming conventions in CLAUDE.md
-
-7. **Refactor DexHandBase to Component Architecture**
+### Current Focus
+1. **Refactor DexHandBase to Component Architecture** (✅ DONE)
    - Extract initialization logic to separate component
    - Create observation encoder component
    - Create action decoder component
    - Create reset handler component
    - Move physics step management to dedicated component
    - Split large methods into smaller, focused functions
+   - Fix issues in refactored version to get it running properly
+   - Ensure observation space dimensions are correctly initialized
+   - Fix tensor initialization order issues
+   - Correct root state tensor indexing for hand position
+   - Add safety checks for tensor dimensions
+   - Ensure physics stepping works correctly with components
+
+### Phase 1: Critical Fixes & Core Functionality
+2. **Fix GPU Pipeline Issues**
+   - Investigate and fix CUDA memory access errors
+   - Test with both `--no-gpu-pipeline` and `--use-gpu-pipeline` modes
+   - Identify specific components that cause GPU pipeline failures
+   - Fix segmentation faults when running with visualization
+   - Temporary workaround: Use `--no-gpu-pipeline --headless` for testing
+
+3. **Verify DOF Control & Naming**
+   - Test the correct correspondence between DoFs and names
+   - Verify all 25 DOFs are properly accessible and controllable
+   - Fix "Error verifying target positions" issue with get_dof_target
+   - Create mapping documentation between DOF indices and names
+
+4. **Test Action Modes**
+   - Verify position control mode works correctly
+   - Verify position_delta control mode works correctly
+   - Test with different control frequencies
+   - Ensure action=0 maintains position properly
+
+5. **Verify Observation System**
+   - Check that observation tensors have correct shape and content
+   - Verify all required state information is included
+   - Test observation dictionary keys and values
+   - Add validation assertions for observation components
+
+6. **Fix Reset & Initialization Logic**
+   - Ensure correct physics steps per control step calculation
+   - Verify initial pose is set correctly on environment creation
+   - Test reset_idx functionality with different environment indices
+   - Ensure tensor dimensions are consistent after reset
+
+### Phase 2: Refactoring & Architecture
+7. **Naming Consistency**
+   - Decide on consistent naming (dex_hand vs dexhand)
+   - Standardize class and file names
+   - Update import statements and references
+   - Document naming conventions in CLAUDE.md
 
 8. **Clean up Logging & Debugging**
    - Remove excessive debug print statements
