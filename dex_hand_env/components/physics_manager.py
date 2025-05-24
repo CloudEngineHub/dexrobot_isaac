@@ -80,7 +80,9 @@ class PhysicsManager:
             self.gym.simulate(self.sim)
             
             # Fetch results - with GPU pipeline, we only need to fetch on CPU
-            if self.device.type == 'cpu' or not self.use_gpu_pipeline:
+            if (isinstance(self.device, str) and self.device == 'cpu') or \
+               (hasattr(self.device, 'type') and self.device.type == 'cpu') or \
+               not self.use_gpu_pipeline:
                 self.gym.fetch_results(self.sim, True)
             
             # When using GPU pipeline, we need to explicitly refresh the tensors
