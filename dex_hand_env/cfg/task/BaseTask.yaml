@@ -39,12 +39,20 @@ env:
 
 sim:
   dt: 0.01                        # Physics simulation timestep
+  substeps: 2                     # Number of physics substeps per step
   physx:
     solver_type: 1                # 0: PCG, 1: TGS
-    num_position_iterations: 4    # Number of solver iterations for position
-    num_velocity_iterations: 1    # Number of solver iterations for velocity
-    contact_offset: 0.01          # Distance at which contacts begin to be generated
-    rest_offset: 0.0              # Distance at which contacts generate maximum response
+    num_position_iterations: 8    # Number of solver iterations for position (increased for GPU stability)
+    num_velocity_iterations: 0    # Set to 0 based on NVIDIA recommendations
+    contact_offset: 0.002         # Reduced from 0.02 to prevent excessive contacts
+    rest_offset: 0.0              # Reduced from 0.001 based on recommendations
+    contact_collection: 1         # 1: CC_LAST_SUBSTEP (critical for GPU pipeline)
+    default_buffer_size_multiplier: 5.0  # Increased from 1.0 to prevent buffer overflow
+    max_gpu_contact_pairs: 1024   # Reduced from 16384 to save memory
+    always_use_articulations: true  # Always use articulations for stability
+    bounce_threshold_velocity: 0.2  # Added for stability
+    max_depenetration_velocity: 1000.0  # Added for stability
+    num_threads: 4                # Added to optimize CPU usage
   use_gpu_pipeline: true          # Whether to use GPU pipeline
 
 # These parameters are passed to training algorithms

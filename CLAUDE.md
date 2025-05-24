@@ -48,6 +48,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - The ARRx/y/z DOFs control rotation around the x/y/z axes
 - When action=0 is applied, these DOFs should maintain their current position
 
+### Physics Stepping Architecture
+- **Multiple Physics Steps for Reliable Resets**: The environment requires multiple physics steps for reliable object reset and stabilization. This is crucial for:
+  1. Allowing reset objects to settle physically before control resumes
+  2. Ensuring consistent initial states across environments
+  3. Preventing unstable behavior when objects are first spawned or repositioned
+
+- **Physics vs. Control Timesteps**:
+  1. `physics_dt`: The fundamental timestep for the physics simulation (typically 0.01s)
+  2. `control_dt`: The timestep at which control actions are applied, equal to `physics_dt * physics_steps_per_control_step`
+  3. The environment may need multiple physics steps per control step for stability
+
+- **Automatic Step Counter**:
+  1. The environment automatically detects how many physics steps are needed per control step
+  2. This is implemented through the `_step_physics()` wrapper that tracks physics step counts
+  3. When more physics steps than expected occur (e.g., during resets), the system adjusts `physics_steps_per_control_step` accordingly
+  4. This adaptive approach ensures stable physics regardless of reset complexity
+
+- **Physics Stepping Best Practices**:
+  1. Always use the `_step_physics()` wrapper instead of calling `self.gym.simulate()` directly
+  2. This ensures proper tracking of physics steps and automatic adjustment of control frequency
+  3. Both the main stepping function and reset operations should use this wrapper
+  4. The wrapper handles both simulation and result fetching in one call
+
 ## DexRobot Project Roadmap
 
 ### Phase 1: Critical Fixes & Core Functionality

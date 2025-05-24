@@ -31,6 +31,16 @@ SCREEN_CAPTURE_RESOLUTION = (1027, 768)
 
 def _create_sim_once(gym, *args, **kwargs):
     global EXISTING_SIM
+    
+    # Check if GPU pipeline is enabled - always create a new sim for GPU pipeline
+    if len(args) >= 4 and isinstance(args[3], gymapi.SimParams):
+        sim_params = args[3]
+        if hasattr(sim_params, 'use_gpu_pipeline') and sim_params.use_gpu_pipeline:
+            # With GPU pipeline, always create a new simulation
+            print("GPU pipeline enabled, creating new simulation instance")
+            return gym.create_sim(*args, **kwargs)
+    
+    # Without GPU pipeline, can reuse existing simulation
     if EXISTING_SIM is not None:
         return EXISTING_SIM
     else:
