@@ -259,6 +259,7 @@ class DexHandBase(VecTask):
         self.fingertip_body_handles = handles["fingertip_body_handles"]
         self.hand_indices = handles["hand_indices"]
         self.fingertip_indices = handles["fingertip_indices"]
+        self.dof_properties_from_asset = handles.get("dof_properties", None)
         
         # Set up viewer
         if not self.headless:
@@ -283,6 +284,10 @@ class DexHandBase(VecTask):
         # Acquire tensor handles AFTER environment and actors are created
         self.tensor_manager.acquire_tensor_handles()
         
+        # Pass DOF properties from asset to tensor manager if available
+        if self.dof_properties_from_asset is not None:
+            self.tensor_manager.set_dof_properties(self.dof_properties_from_asset)
+            
         # Set up tensors
         tensors = self.tensor_manager.setup_tensors(self.fingertip_indices)
         self.dof_state = tensors["dof_state"]

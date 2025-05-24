@@ -8,6 +8,7 @@ including tensor acquisition, setup, and synchronization.
 # Import standard libraries
 import torch
 import numpy as np
+from typing import Dict, List, Tuple, Union, Optional
 
 # Import IsaacGym
 from isaacgym import gymapi, gymtorch
@@ -37,7 +38,12 @@ class TensorManager:
         self.gym = gym
         self.sim = sim
         self.num_envs = num_envs
-        self.device = device
+        
+        # Ensure device is a torch.device object, not a string
+        if isinstance(device, str):
+            self.device = torch.device(device)
+        else:
+            self.device = device
         
         # Flag to track initialization state
         self.tensors_initialized = False
@@ -56,6 +62,9 @@ class TensorManager:
         self.dof_props = None
         self.rigid_body_states = None
         self.contact_forces = None
+        
+        # DOF properties from asset
+        self.dof_props_from_asset = None
     
     def acquire_tensor_handles(self):
         """
@@ -185,36 +194,26 @@ class TensorManager:
         # Get DOF properties
         print("Getting DOF properties...")
         
-        # We cannot use get_envs since it doesn't exist in the API
-        # Instead, we'll use the fact that environments are stored in an array in DexHandBase
-        # and passed to this component during initialization
-        
-        # Use simpler approach to get actor DOF properties
-        try:
-            # Verify we can get DOF properties directly using acquire_dof_attribute_tensor
-            dof_props_tensor_handle = self.gym.acquire_dof_attribute_tensor(self.sim, gymapi.DOMAIN_ENV, gymapi.ATTRIB_DOF_PROPERTIES)
-            if dof_props_tensor_handle is None:
-                raise RuntimeError("Failed to acquire DOF properties tensor handle")
-                
-            # Wrap the tensor handle
-            self.dof_props = gymtorch.wrap_tensor(dof_props_tensor_handle)
-            if self.dof_props is None or self.dof_props.numel() == 0:
-                raise RuntimeError("DOF properties tensor is empty or None after wrapping")
-                
-            print(f"DOF properties acquired with shape: {self.dof_props.shape}")
-        except Exception as e:
-            print(f"Error getting DOF properties: {e}")
-            # Fallback to a simpler approach
-            print("Using default DOF properties")
-            # Create properties tensor based on the dof_state shape
+        # Check if we have DOF properties from the asset
+        if self.dof_props_from_asset is not None:
+            print("Using DOF properties from asset")
+            self.dof_props = self.dof_props_from_asset
+        else:
+            # Following the pattern from reference implementations, create a default DOF properties tensor
             # DOF properties have 6 values: stiffness, damping, friction, armature, min, max
+            # We'll create this directly without trying to use acquire_dof_attribute_tensor
+            # which is not available in all Isaac Gym versions
+            
+            print("Creating default DOF properties tensor")
+            # Create properties tensor based on the dof_state shape
             self.dof_props = torch.zeros((self.num_dof, 6), device=self.device)
             # Set reasonable defaults
             self.dof_props[:, 0] = 100.0  # stiffness
             self.dof_props[:, 1] = 5.0    # damping
             self.dof_props[:, 4] = -1.0   # min
             self.dof_props[:, 5] = 1.0    # max
-            print(f"Created default DOF properties tensor with shape: {self.dof_props.shape}")
+        
+        print(f"DOF properties tensor shape: {self.dof_props.shape}")
         
         # Wrap rigid body state tensor
         print("Wrapping rigid body state tensor...")
@@ -384,3 +383,80 @@ class TensorManager:
         if tensor.device != device:
             return tensor.to(device)
         return tensor
+        
+    def set_dof_properties(self, dof_props):
+        """
+        Set DOF properties from an external source (like hand_initializer).
+        
+        Args:
+            dof_props: DOF properties dictionary or numpy array
+            
+        Returns:
+            None
+        """
+        try:
+            if isinstance(dof_props, dict):
+                # Convert dictionary to tensor format
+                # Assuming keys: stiffness, damping, friction, armature, lower, upper
+                props_tensor = torch.zeros((self.num_dof, 6), device=self.device)
+                
+                # Map dictionary keys to tensor columns
+                if "stiffness" in dof_props:
+                    props_tensor[:, 0] = torch.tensor(dof_props["stiffness"], device=self.device)
+                if "damping" in dof_props:
+                    props_tensor[:, 1] = torch.tensor(dof_props["damping"], device=self.device)
+                if "friction" in dof_props:
+                    props_tensor[:, 2] = torch.tensor(dof_props["friction"], device=self.device)
+                if "armature" in dof_props:
+                    props_tensor[:, 3] = torch.tensor(dof_props["armature"], device=self.device)
+                if "lower" in dof_props:
+                    props_tensor[:, 4] = torch.tensor(dof_props["lower"], device=self.device)
+                if "upper" in dof_props:
+                    props_tensor[:, 5] = torch.tensor(dof_props["upper"], device=self.device)
+                
+                self.dof_props_from_asset = props_tensor
+            elif isinstance(dof_props, np.ndarray):
+                # Handle structured arrays from Isaac Gym's get_asset_dof_properties
+                if dof_props.dtype.names is not None:
+                    # Structured array - extract relevant fields
+                    # This is a structured array with field names, we need to extract them
+                    num_dof = len(dof_props)
+                    props_tensor = torch.zeros((num_dof, 6), device=self.device)
+                    
+                    # Map field names to tensor columns
+                    field_mapping = {
+                        'stiffness': 0,
+                        'damping': 1,
+                        'friction': 2,
+                        'armature': 3,
+                        'lower': 4,
+                        'upper': 5
+                    }
+                    
+                    # Extract fields that exist in the array
+                    for field_name, col_idx in field_mapping.items():
+                        if field_name in dof_props.dtype.names:
+                            try:
+                                field_data = dof_props[field_name]
+                                # Convert to tensor safely
+                                field_tensor = torch.tensor(field_data.astype(np.float32), device=self.device)
+                                props_tensor[:, col_idx] = field_tensor
+                            except Exception as e:
+                                print(f"Error converting field {field_name}: {e}")
+                    
+                    self.dof_props_from_asset = props_tensor
+                else:
+                    # Regular numpy array - convert directly
+                    self.dof_props_from_asset = torch.tensor(dof_props, device=self.device)
+            elif isinstance(dof_props, torch.Tensor):
+                # Already a tensor, just move to device if needed
+                self.dof_props_from_asset = self.to_device(dof_props)
+            else:
+                print(f"Unsupported DOF properties type: {type(dof_props)}")
+                return
+                
+            print(f"DOF properties set from external source with shape: {self.dof_props_from_asset.shape}")
+        except Exception as e:
+            print(f"Error setting DOF properties: {e}")
+            import traceback
+            traceback.print_exc()

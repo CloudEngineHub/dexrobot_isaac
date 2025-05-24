@@ -212,6 +212,9 @@ class HandInitializer:
         # Get DOF properties
         hand_dof_props = self.gym.get_asset_dof_properties(hand_asset)
         
+        # Save a copy of the original DOF properties for tensor manager
+        self.original_dof_props = hand_dof_props.copy()
+        
         # Configure DOF properties for PD control
         for i, name in enumerate(self.gym.get_asset_dof_names(hand_asset)):
             # Base joints (translational and rotational)
@@ -276,7 +279,8 @@ class HandInitializer:
             "fingertip_body_handles": self.fingertip_body_handles,
             "fingerpad_body_handles": self.fingerpad_body_handles,
             "hand_indices": self.hand_indices,
-            "fingertip_indices": self.fingertip_indices
+            "fingertip_indices": self.fingertip_indices,
+            "dof_properties": self.original_dof_props  # Add DOF properties to return value
         }
     
     def get_dof_mapping(self):
