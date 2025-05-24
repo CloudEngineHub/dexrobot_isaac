@@ -97,12 +97,16 @@ class DexHandBase(VecTask):
         print(f"Headless Mode: {headless}")
         print(f"Force Render: {force_render}")
 
+        # Store GPU pipeline flag for use in step() and other methods
+        self.use_gpu_pipeline = cfg["sim"].get("use_gpu_pipeline", False)
+        
         # Ensure we're using a GPU device if GPU pipeline is enabled
-        if cfg["sim"].get("use_gpu_pipeline", False) and sim_device == 'cpu':
+        if self.use_gpu_pipeline and sim_device == 'cpu':
             print("WARNING: GPU Pipeline is enabled but using CPU device. This may cause errors. Disabling GPU pipeline.")
             cfg["sim"]["use_gpu_pipeline"] = False
+            self.use_gpu_pipeline = False
 
-        print(f"GPU Pipeline: {'enabled' if cfg['sim'].get('use_gpu_pipeline', False) else 'disabled'}")
+        print(f"GPU Pipeline: {'enabled' if self.use_gpu_pipeline else 'disabled'}")
         print("=============================================\n")
         
         # Core initialization variables
@@ -304,7 +308,7 @@ class DexHandBase(VecTask):
             gym=self.gym,
             sim=self.sim,
             device=self.device,
-            use_gpu_pipeline=self.cfg["sim"].get("use_gpu_pipeline", False)
+            use_gpu_pipeline=self.use_gpu_pipeline
         )
         
         # Set physics timestep
@@ -760,8 +764,13 @@ class DexHandBase(VecTask):
         
         # Step physics simulation
         try:
-            for _ in range(self.physics_manager.physics_steps_per_control_step):
-                self.physics_manager.step_physics()
+            # Step physics and ensure tensors are refreshed if using GPU pipeline
+            self.physics_manager.step_physics()
+            
+            # When using GPU pipeline, we need an additional explicit refresh
+            # to ensure all tensors are up-to-date
+            if self.use_gpu_pipeline:
+                self.physics_manager.refresh_tensors()
         except Exception as e:
             print(f"ERROR in physics step: {e}")
             import traceback

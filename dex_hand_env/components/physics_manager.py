@@ -58,13 +58,16 @@ class PhysicsManager:
         self.physics_dt = physics_dt
         self.control_dt = self.physics_dt * self.physics_steps_per_control_step
     
-    def step_physics(self):
+    def step_physics(self, refresh_tensors=True):
         """
         Physics stepping wrapper function.
         
         This function handles physics stepping and auto-detection of how many
         physics steps are needed per control step for stable resets.
         It is used by both the main stepping function and reset_idx.
+        
+        Args:
+            refresh_tensors: Whether to refresh tensor data after stepping
         
         Returns:
             Boolean indicating whether physics was successfully stepped
@@ -76,10 +79,20 @@ class PhysicsManager:
             # Simulate physics
             self.gym.simulate(self.sim)
             
-            # Fetch results
-            # With GPU pipeline, only fetch on CPU (matching IsaacGymEnvs pattern)
-            if self.device == 'cpu' or not self.use_gpu_pipeline:
+            # Fetch results - with GPU pipeline, we only need to fetch on CPU
+            if self.device.type == 'cpu' or not self.use_gpu_pipeline:
                 self.gym.fetch_results(self.sim, True)
+            
+            # When using GPU pipeline, we need to explicitly refresh the tensors
+            if refresh_tensors and self.use_gpu_pipeline:
+                # Refresh all the simulation tensors to ensure GPU data is current
+                try:
+                    self.gym.refresh_dof_state_tensor(self.sim)
+                    self.gym.refresh_actor_root_state_tensor(self.sim) 
+                    self.gym.refresh_rigid_body_state_tensor(self.sim)
+                    self.gym.refresh_net_contact_force_tensor(self.sim)
+                except Exception as refresh_err:
+                    print(f"WARNING: Error refreshing tensors: {refresh_err}")
             
             # Auto-detect physics_steps_per_control_step
             if not self.auto_detected_physics_steps:
@@ -186,3 +199,26 @@ class PhysicsManager:
         This helps track physics vs control steps for auto-detection.
         """
         self.last_control_step_count = self.physics_step_count
+        
+    def refresh_tensors(self):
+        """
+        Refresh all tensor data from the simulation.
+        
+        This ensures that the tensor data is up-to-date with the current state
+        of the physics simulation. This is especially important when using the GPU pipeline.
+        
+        Returns:
+            Boolean indicating success
+        """
+        try:
+            # These calls ensure the tensor data is updated from the physics simulation
+            self.gym.refresh_dof_state_tensor(self.sim)
+            self.gym.refresh_actor_root_state_tensor(self.sim)
+            self.gym.refresh_rigid_body_state_tensor(self.sim)
+            self.gym.refresh_net_contact_force_tensor(self.sim)
+            return True
+        except Exception as e:
+            print(f"Error refreshing tensors: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
