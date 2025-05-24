@@ -1,4 +1,4 @@
-"""Installation script for the 'DexHandEnv' python package."""
+"""Installation script for the 'dex_hand' python package."""
 
 from __future__ import absolute_import
 from __future__ import print_function
@@ -31,11 +31,11 @@ INSTALL_REQUIRES = [
 
 # Installation operation
 setup(
-    name="DexHandEnv",
-    author="NVIDIA",
-    version="1.5.1",
-    description="Benchmark environments for high-speed robot learning in NVIDIA IsaacGym.",
-    keywords=["robotics", "rl"],
+    name="dex_hand_env",
+    author="DexRobot Inc.",
+    version="0.1.0",
+    description="Reinforcement learning environment for dexterous manipulation with robotic hands",
+    keywords=["robotics", "rl", "dexterous", "manipulation"],
     include_package_data=True,
     python_requires=">=3.6",
     install_requires=INSTALL_REQUIRES,

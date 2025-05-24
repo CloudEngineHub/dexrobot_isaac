@@ -1,0 +1,52 @@
+# Base Task Configuration File
+
+env:
+  # Task parameters
+  episodeLength: 300              # Maximum number of steps per episode
+  
+  # Action space configuration
+  controlMode: "position_delta"   # position or position_delta
+  controlHandBase: true           # Whether the policy controls the hand base (6 DOFs)
+  controlFingers: true            # Whether the policy controls the finger joints (12 DOFs)
+  
+  # Default targets for uncontrolled DOFs (fallback if task doesn't provide them)
+  # These are used only if the task's get_task_dof_targets method doesn't return targets
+  defaultBaseTargets: [0.0, 0.0, 0.5, 0.0, 0.0, 0.0]  # Default base targets [x, y, z, rx, ry, rz]
+  defaultFingerTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets
+  
+  # Motion limits
+  maxFingerVelocity: 2.0          # Maximum finger joint velocity (rad/s)
+  maxBaseLinearVelocity: 1.0      # Maximum base linear velocity (m/s)
+  maxBaseAngularVelocity: 1.5     # Maximum base angular velocity (rad/s)
+  
+  # Controller parameters
+  baseStiffness: 400.0            # PD controller stiffness for base
+  baseDamping: 40.0               # PD controller damping for base
+  fingerStiffness: 100.0          # PD controller stiffness for fingers
+  fingerDamping: 10.0             # PD controller damping for fingers
+  
+  # Initial pose
+  initialHandPos: [0.0, 0.0, 0.5] # Initial hand position
+  initialHandRot: [0.0, 0.0, 0.0, 1.0]  # Initial hand rotation (quaternion)
+  
+  # Reward parameters
+  rewardScales:
+    pose: 1.0                     # Scale for pose matching reward
+    action: 0.1                   # Scale for action smoothness reward
+    energy: 0.1                   # Scale for energy efficiency reward
+    contact: 0.5                  # Scale for contact reward
+    success: 10.0                 # Scale for task success reward
+
+sim:
+  dt: 0.01                        # Physics simulation timestep
+  physx:
+    solver_type: 1                # 0: PCG, 1: TGS
+    num_position_iterations: 4    # Number of solver iterations for position
+    num_velocity_iterations: 1    # Number of solver iterations for velocity
+    contact_offset: 0.01          # Distance at which contacts begin to be generated
+    rest_offset: 0.0              # Distance at which contacts generate maximum response
+  use_gpu_pipeline: true          # Whether to use GPU pipeline
+
+# These parameters are passed to training algorithms
+task:
+  randomize: false                # Whether to use domain randomization

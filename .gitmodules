@@ -1,0 +1,3 @@
+[submodule "assets/dexrobot_mujoco"]
+	path = assets/dexrobot_mujoco
+	url = git@gitee.com:dexrobot/dexrobot_mujoco.git

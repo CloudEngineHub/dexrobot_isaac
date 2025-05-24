@@ -5,6 +5,17 @@ This repository provides a framework for training dexterous manipulation policie
 - **DexGrasp**: A task focused on grasping and lifting objects from a surface
 - **DexReorient**: A task focused on manipulating objects to match a target orientation
 
+## New Component-Based Architecture
+
+The codebase has been refactored to use a component-based architecture, offering:
+
+- Improved modularity and maintainability
+- Clear separation of concerns through specialized components
+- A standardized task interface for easier creation of new tasks
+- Better code organization and reusability
+
+The new architecture is available in the `dex_hand_env` package. For details, see [dex_hand_env/README.md](dex_hand_env/README.md).
+
 ### Installation
 
 1. Download and install [Isaac Gym Preview 4](https://developer.nvidia.com/isaac-gym) from NVIDIA's website
@@ -26,44 +37,51 @@ pip install -e .
 
 ## Running
 
-### Training
+### Using the New Architecture
+
+To run a simple test of the dexterous hand visualization:
 
 ```bash
-python DexHandEnv/train.py task=DexGrasp num_envs=4096 headless=True
+# Run the simple dexterous hand visualization
+python examples/simple_dexhand_test.py
 ```
-- `num_envs`: Number of parallel environments (default: 4096)
-- `headless`: Run without visualization for faster training
 
-### Testing
+For more options, see [examples/README_simple_dexhand_test.md](examples/README_simple_dexhand_test.md).
 
-To test a trained model:
+### Training with the New Architecture
 
-```bash
-python DexHandEnv/train.py task=DexGrasp test=True num_envs=2 checkpoint=runs/[experiment_name]/nn/DexGrasp.pth
-```
+Refer to the documentation in the [dex_hand_env](dex_hand_env/README.md) directory for instructions on training with the new component-based architecture.
+
+### Legacy Implementation
+
+The original implementation has been moved to the `legacy` directory and is kept for reference purposes only. We recommend using the new component-based architecture for all new development.
 
 ### Configuration
 
-The environment and training parameters can be customized through config files:
+The environment and training parameters can be customized through config files in the new architecture:
 
-- Environment configs: `DexHandEnv/cfg/task/DexGrasp.yaml` and `DexHandEnv/cfg/task/DexReorient.yaml`
-- Training configs: `DexHandEnv/cfg/train/DexGraspPPO.yaml` and `DexHandEnv/cfg/train/DexReorientPPO.yaml`
+- See the configuration files in the `dex_hand_env/cfg` directory
 
-### Video Recording
+### Video Recording and Multi-GPU Training
 
-To capture training videos:
+The new architecture supports video recording and multi-GPU training. Refer to the documentation in the [dex_hand_env](dex_hand_env/README.md) directory for details.
 
-```bash
-python DexHandEnv/train.py task=DexReorient capture_video=True capture_video_freq=1500 capture_video_len=100
-```
+## Code Structure
 
-### Multi-GPU Training
+The repository contains two implementations of the dexterous manipulation environment:
 
-For distributed training across multiple GPUs:
+1. **Legacy Implementation**: The original monolithic implementation
+   - Located in the `legacy/DexHandEnv_obsolete` directory
+   - Kept for reference purposes only
 
-```bash
-torchrun --standalone --nnodes=1 --nproc_per_node=2 DexHandEnv/train.py multi_gpu=True task=DexReorient
-```
+2. **Current Implementation (dex_hand_env)**: New component-based architecture
+   - Located in the `dex_hand_env` directory
+   - Features modular components and a standardized task interface
+   - Provides improved functionality with better code organization
+
+3. **Simple Visualization Example**:
+   - Located in the `examples` directory
+   - Provides a minimal example to visualize the dexterous hand
 
 ## License
 
@@ -71,4 +89,4 @@ This project is licensed under the Apache License.
 
 ## Acknowledgements
 
-This work builds upon the Isaac Gym framework developed by NVIDIA.
+This work builds upon the Isaac Gym framework developed by NVIDIA. The refactored architecture was developed by DexRobot Inc.
