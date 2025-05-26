@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 - Install: `pip install -e .`
 - Run simple test: `python examples/dexhand_test.py`
-- Run with options: `python examples/dexhand_test.py --episode-length 200 --debug --movement-speed 0.5 --no-gpu-pipeline`
+- Run with options: `python examples/dexhand_test.py --episode-length 200 --debug --movement-speed 0.5`
+- Test GPU pipeline: `python examples/dexhand_test.py --use-gpu-pipeline --steps 10`
 
 ## Note on Code Structure
 - The main implementation is in the `dex_hand_env` directory
@@ -93,12 +94,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - Ensure physics stepping works correctly with components
 
 ### Phase 1: Critical Fixes & Core Functionality
-2. **Fix GPU Pipeline Issues**
-   - Investigate and fix CUDA memory access errors
-   - Test with both `--no-gpu-pipeline` and `--use-gpu-pipeline` modes
-   - Identify specific components that cause GPU pipeline failures
-   - Fix segmentation faults when running with visualization
-   - Temporary workaround: Use `--no-gpu-pipeline --headless` for testing
+2. **Fix GPU Pipeline Issues** (✅ DONE)
+   - Fixed CUDA memory access errors by correcting tensor acquisition order
+   - Changed DOF properties handling from asset to actor-based queries for GPU compatibility
+   - Added critical PhysX parameters for GPU pipeline stability
+   - GPU pipeline now works correctly with `--use-gpu-pipeline` flag
+   - Both `--no-gpu-pipeline` and `--use-gpu-pipeline` modes are now functional
 
 3. **Verify DOF Control & Naming**
    - Test the correct correspondence between DoFs and names
@@ -169,8 +170,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     - Ensure compatibility with ROS2 visualization tools
 
 ### Implementation Notes
-- For CUDA/GPU pipeline issues, start debugging by isolating minimal reproducible examples
+- GPU pipeline issues have been resolved; both `--use-gpu-pipeline` and `--no-gpu-pipeline` modes work
 - When refactoring, maintain backward compatibility where possible
 - Add unit tests for each component during refactoring
-- Use the `--no-gpu-pipeline` option while developing until GPU pipeline issues are resolved
 - Keep the main branch stable and use feature branches for development
+
+### GPU Pipeline Notes
+- **Critical for GPU pipeline**: Call `gym.prepare_sim()` AFTER creating all actors but BEFORE acquiring tensors
+- **DOF Properties**: Use `gym.get_actor_dof_properties()` instead of `gym.get_asset_dof_properties()` for GPU compatibility
+- **PhysX Parameters**: GPU pipeline requires specific parameters like `contact_collection = CC_LAST_SUBSTEP` and `always_use_articulations = True`
