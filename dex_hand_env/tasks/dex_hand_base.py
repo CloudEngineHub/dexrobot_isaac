@@ -271,12 +271,6 @@ class DexHandBase(VecTask):
             self.set_viewer()
             print("Viewer created")
         
-        # Step physics to ensure all objects are properly created
-        print("Stepping physics after environment creation...")
-        for _ in range(5):  # Multiple steps to ensure everything is settled
-            self.gym.simulate(self.sim)
-            self.gym.fetch_results(self.sim, True)
-        
         # Create tensor manager after environment setup
         self.tensor_manager = TensorManager(
             gym=self.gym,
@@ -285,12 +279,18 @@ class DexHandBase(VecTask):
             device=self.device
         )
         
-        # Acquire tensor handles AFTER environment and actors are created
+        # Acquire tensor handles BEFORE prepare_sim (critical for GPU pipeline)
         self.tensor_manager.acquire_tensor_handles()
         
         # Pass DOF properties from asset to tensor manager if available
         if self.dof_properties_from_asset is not None:
             self.tensor_manager.set_dof_properties(self.dof_properties_from_asset)
+        
+        # CRITICAL for GPU pipeline: Call prepare_sim after all actors are created and tensors acquired
+        if self.use_gpu_pipeline:
+            print("Preparing simulation for GPU pipeline...")
+            self.gym.prepare_sim(self.sim)
+            print("Simulation prepared successfully")
             
         # Set up tensors
         tensors = self.tensor_manager.setup_tensors(self.fingertip_indices)

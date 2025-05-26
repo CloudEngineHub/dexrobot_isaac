@@ -81,10 +81,8 @@ class TensorManager:
         
         print("Acquiring tensor handles from simulation...")
         
-        # Step the simulation to ensure it's ready for tensor acquisition
-        print("Stepping simulation to prepare for tensor acquisition...")
-        self.gym.simulate(self.sim)
-        self.gym.fetch_results(self.sim, True)
+        # NOTE: We don't need to step simulation here when using GPU pipeline
+        # The simulation has already been prepared by gym.prepare_sim()
         
         # Get handle for DOF states
         print("Acquiring DOF state tensor handle...")
@@ -107,15 +105,18 @@ class TensorManager:
             raise RuntimeError("Failed to acquire contact force tensor handle. Cannot continue.")
         print("Successfully acquired contact force tensor handle")
         
-        # Step the simulation again to ensure tensor handles are valid
-        print("Stepping simulation to ensure tensor handles are valid...")
-        self.gym.simulate(self.sim)
-        self.gym.fetch_results(self.sim, True)
+        # Get handle for actor root state
+        print("Acquiring actor root state tensor handle...")
+        self._actor_root_state_tensor_handle = self.gym.acquire_actor_root_state_tensor(self.sim)
+        if self._actor_root_state_tensor_handle is None:
+            raise RuntimeError("Failed to acquire actor root state tensor handle. Cannot continue.")
+        print("Successfully acquired actor root state tensor handle")
         
         return {
             "dof_state": self._dof_state_tensor_handle,
             "rigid_body_state": self._rigid_body_state_tensor_handle,
-            "contact_force": self._contact_force_tensor_handle
+            "contact_force": self._contact_force_tensor_handle,
+            "actor_root_state": self._actor_root_state_tensor_handle
         }
     
     def setup_tensors(self, fingertip_indices=None):

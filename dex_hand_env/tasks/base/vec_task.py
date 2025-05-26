@@ -246,6 +246,18 @@ class VecTask(Env):
                         )
                     else:
                         setattr(sim_params.physx, opt, config_sim["physx"][opt])
+            
+            # Critical GPU pipeline parameters (as per troubleshooting guide)
+            if config_sim["use_gpu_pipeline"]:
+                # These parameters are essential for GPU pipeline stability
+                if not hasattr(sim_params.physx, "contact_collection"):
+                    sim_params.physx.contact_collection = gymapi.ContactCollection.CC_LAST_SUBSTEP
+                if not hasattr(sim_params.physx, "default_buffer_size_multiplier"):
+                    sim_params.physx.default_buffer_size_multiplier = 1.0
+                if not hasattr(sim_params.physx, "max_gpu_contact_pairs"):
+                    sim_params.physx.max_gpu_contact_pairs = 1024 * 16
+                if not hasattr(sim_params.physx, "always_use_articulations"):
+                    sim_params.physx.always_use_articulations = True
         elif physics_engine == "flex":
             # set the parameters
             if "flex" in config_sim:

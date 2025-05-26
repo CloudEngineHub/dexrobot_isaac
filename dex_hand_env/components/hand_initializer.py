@@ -209,25 +209,9 @@ class HandInitializer:
         self.hand_indices = []
         self.fingertip_indices = []
         
-        # Get DOF properties
-        hand_dof_props = self.gym.get_asset_dof_properties(hand_asset)
-        
-        # Save a copy of the original DOF properties for tensor manager
-        self.original_dof_props = hand_dof_props.copy()
-        
-        # Configure DOF properties for PD control
-        for i, name in enumerate(self.gym.get_asset_dof_names(hand_asset)):
-            # Base joints (translational and rotational)
-            if any(base_name in name for base_name in self.base_joint_names):
-                hand_dof_props["stiffness"][i] = self.base_stiffness
-                hand_dof_props["damping"][i] = self.base_damping
-            # Finger joints
-            elif any(finger_name in name for finger_name in self.finger_joint_names):
-                hand_dof_props["stiffness"][i] = self.finger_stiffness
-                hand_dof_props["damping"][i] = self.finger_damping
-        
-        # Set drive mode for PD control
-        hand_dof_props["driveMode"].fill(gymapi.DOF_MODE_POS)
+        # Note: We'll get DOF properties from the first actor after creation
+        # to avoid issues with GPU pipeline
+        self.original_dof_props = None
         
         # Initial pose
         hand_pose = gymapi.Transform()
@@ -240,6 +224,28 @@ class HandInitializer:
             hand_handle = self.gym.create_actor(
                 env, hand_asset, hand_pose, f"hand_{i}", i, 0
             )
+            
+            # Get DOF properties from actor (not asset) for GPU pipeline compatibility
+            hand_dof_props = self.gym.get_actor_dof_properties(env, hand_handle)
+            
+            # Save a copy of the original DOF properties for tensor manager (from first actor)
+            if i == 0:
+                self.original_dof_props = hand_dof_props.copy()
+            
+            # Configure DOF properties for PD control
+            dof_names = self.gym.get_actor_dof_names(env, hand_handle)
+            for j, name in enumerate(dof_names):
+                # Set drive mode
+                hand_dof_props["driveMode"][j] = gymapi.DOF_MODE_POS
+                
+                # Base joints (translational and rotational)
+                if any(base_name in name for base_name in self.base_joint_names):
+                    hand_dof_props["stiffness"][j] = self.base_stiffness
+                    hand_dof_props["damping"][j] = self.base_damping
+                # Finger joints
+                elif any(finger_name in name for finger_name in self.finger_joint_names):
+                    hand_dof_props["stiffness"][j] = self.finger_stiffness
+                    hand_dof_props["damping"][j] = self.finger_damping
             
             # Set DOF properties
             self.gym.set_actor_dof_properties(env, hand_handle, hand_dof_props)
