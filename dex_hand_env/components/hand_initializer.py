@@ -187,6 +187,15 @@ class HandInitializer:
             hand_asset = self.gym.load_asset(
                 self.sim, self.asset_root, self.hand_asset_file, asset_options
             )
+            
+            # Debug: Check DOF count in the asset
+            dof_count = self.gym.get_asset_dof_count(hand_asset)
+            print(f"Asset DOF count: {dof_count}")
+            
+            # Debug: Get asset DOF names to see what Isaac Gym sees in the asset
+            asset_dof_names = self.gym.get_asset_dof_names(hand_asset)
+            print(f"Asset DOF names ({len(asset_dof_names)}): {asset_dof_names}")
+            
             return hand_asset
         except Exception as e:
             print(f"Error loading hand asset: {e}")
@@ -234,6 +243,23 @@ class HandInitializer:
             
             # Configure DOF properties for PD control
             dof_names = self.gym.get_actor_dof_names(env, hand_handle)
+            
+            # Log DOF names for the first actor to verify all 25 DOFs
+            if i == 0:
+                print(f"\n===== DOF NAMES VERIFICATION =====")
+                print(f"Total DOFs found: {len(dof_names)}")
+                print("DOF Index -> Joint Name:")
+                for j, name in enumerate(dof_names):
+                    # Determine joint type for classification
+                    joint_type = "UNKNOWN"
+                    if any(base_name in name for base_name in self.base_joint_names):
+                        joint_type = "BASE"
+                    elif any(finger_name in name for finger_name in self.finger_joint_names):
+                        joint_type = "FINGER"
+                    
+                    print(f"  {j:2d}: {name:<20} ({joint_type})")
+                print("=====================================\n")
+            
             for j, name in enumerate(dof_names):
                 # Set drive mode
                 hand_dof_props["driveMode"][j] = gymapi.DOF_MODE_POS
