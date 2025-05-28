@@ -49,7 +49,7 @@ class ObservationEncoder:
         
         # Constants for observation dimensions
         self.NUM_BASE_DOFS = 6
-        self.NUM_ACTIVE_FINGER_DOFS = 12
+        self.NUM_ACTIVE_FINGER_DOFS = 12  # 12 finger controls mapping to 19 DOFs with coupling
         self.NUM_FINGERS = 5
         
         # Configuration flags

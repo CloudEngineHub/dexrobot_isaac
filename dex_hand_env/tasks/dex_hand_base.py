@@ -126,7 +126,7 @@ class DexHandBase(VecTask):
         
         # Define model constants for the hand
         self.NUM_BASE_DOFS = 6  # 3 translation, 3 rotation
-        self.NUM_ACTIVE_FINGER_DOFS = 12  # Active finger DOFs
+        self.NUM_ACTIVE_FINGER_DOFS = 12  # 12 finger controls mapping to 19 DOFs with coupling
         
         # Define joint names
         self.base_joint_names = [
@@ -523,7 +523,7 @@ class DexHandBase(VecTask):
                 self.num_actions += self.action_processor.NUM_ACTIVE_FINGER_DOFS
         else:
             # Fallback
-            self.num_actions = 18  # 6 base DOFs + 12 active finger DOFs
+            self.num_actions = 12  # 12 finger controls only (no base control)
         
         # Create the action space
         self.actions = torch.zeros(

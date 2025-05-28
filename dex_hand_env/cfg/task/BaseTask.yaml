@@ -6,13 +6,13 @@ env:
 
   # Action space configuration
   controlMode: "position_delta"   # position or position_delta
-  controlHandBase: true           # Whether the policy controls the hand base (6 DOFs)
-  controlFingers: true            # Whether the policy controls the finger joints (12 DOFs)
+  controlHandBase: false          # Whether the policy controls the hand base (6 DOFs)
+  controlFingers: true            # Whether the policy controls the finger joints (12 controls)
 
   # Default targets for uncontrolled DOFs (fallback if task doesn't provide them)
   # These are used only if the task's get_task_dof_targets method doesn't return targets
   defaultBaseTargets: [0.0, 0.0, 0.5, 0.0, 0.0, 0.0]  # Default base targets [x, y, z, rx, ry, rz]
-  defaultFingerTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets
+  defaultFingerTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets (15 controls)
 
   # Motion limits
   maxFingerVelocity: 2.0          # Maximum finger joint velocity (rad/s)

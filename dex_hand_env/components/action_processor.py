@@ -55,7 +55,37 @@ class ActionProcessor:
         
         # Constants for action dimensions
         self.NUM_BASE_DOFS = 6
-        self.NUM_ACTIVE_FINGER_DOFS = 12
+        self.NUM_ACTIVE_FINGER_DOFS = 12  # 12 finger controls mapping to 19 DOFs with coupling
+        
+        # Finger DOF coupling mapping (12 actions -> 19 DOFs)
+        # Actions map to finger DOFs as follows:
+        # 0: r_f_joint1_1 (thumb spread)
+        # 1: r_f_joint1_2 (thumb MCP)
+        # 2: r_f_joint1_3, r_f_joint1_4 (thumb DIP - coupled)
+        # 3: r_f_joint2_1, r_f_joint4_1, r_f_joint5_1 (finger spread - coupled, 5_1 is 2x)
+        # 4: r_f_joint2_2 (index MCP)
+        # 5: r_f_joint2_3, r_f_joint2_4 (index DIP - coupled)
+        # 6: r_f_joint3_2 (middle MCP)
+        # 7: r_f_joint3_3, r_f_joint3_4 (middle DIP - coupled)
+        # 8: r_f_joint4_2 (ring MCP)
+        # 9: r_f_joint4_3, r_f_joint4_4 (ring DIP - coupled)
+        # 10: r_f_joint5_2 (pinky MCP)
+        # 11: r_f_joint5_3, r_f_joint5_4 (pinky DIP - coupled)
+        # Note: r_f_joint3_1 is fixed at 0 (not controlled)
+        self.finger_coupling_map = {
+            0: ["r_f_joint1_1"],  # thumb spread
+            1: ["r_f_joint1_2"],  # thumb MCP
+            2: ["r_f_joint1_3", "r_f_joint1_4"],  # thumb DIP (coupled)
+            3: [("r_f_joint2_1", 1.0), ("r_f_joint4_1", 1.0), ("r_f_joint5_1", 2.0)],  # finger spread (5_1 is 2x)
+            4: ["r_f_joint2_2"],  # index MCP
+            5: ["r_f_joint2_3", "r_f_joint2_4"],  # index DIP (coupled)
+            6: ["r_f_joint3_2"],  # middle MCP
+            7: ["r_f_joint3_3", "r_f_joint3_4"],  # middle DIP (coupled)
+            8: ["r_f_joint4_2"],  # ring MCP
+            9: ["r_f_joint4_3", "r_f_joint4_4"],  # ring DIP (coupled)
+            10: ["r_f_joint5_2"],  # pinky MCP
+            11: ["r_f_joint5_3", "r_f_joint5_4"]  # pinky DIP (coupled)
+        }
         
         # DOF limits
         self.dof_props = dof_props
@@ -305,23 +335,41 @@ class ActionProcessor:
                     else:
                         print(f"Unknown control mode: {self.action_control_mode}")
                     
-                    # Apply targets to the finger DOFs (with safety checks)
-                    if finger_pos_targets is not None and finger_pos_targets.shape[1] > 0:
-                        # Map active finger DOFs to full finger DOF space
-                        for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
-                            # Skip if not in joint_to_control mapping
-                            if name not in joint_to_control:
+                    # Apply targets to the finger DOFs using coupling logic
+                    if finger_pos_targets is not None and finger_pos_targets.shape[1] >= 12:
+                        # Create DOF name to index mapping
+                        dof_name_to_idx = {}
+                        for i, name in enumerate(self.dof_names):
+                            dof_name_to_idx[name] = i
+                        
+                        # Apply coupling mapping
+                        for action_idx, joint_mapping in self.finger_coupling_map.items():
+                            if action_idx >= finger_pos_targets.shape[1]:
                                 continue
                                 
-                            # Get the control name and index
-                            control_name = joint_to_control[name]
-                            try:
-                                control_idx = active_joint_names.index(control_name)
-                                if control_idx < finger_pos_targets.shape[1]:
-                                    finger_dof_idx = i + self.NUM_BASE_DOFS
-                                    targets[:, finger_dof_idx] = finger_pos_targets[:, control_idx]
-                            except ValueError:
-                                print(f"Warning: control name {control_name} not found in active_joint_names")
+                            action_value = finger_pos_targets[:, action_idx]
+                            
+                            # Handle different mapping types
+                            for joint_spec in joint_mapping:
+                                if isinstance(joint_spec, str):
+                                    # Simple 1:1 mapping
+                                    joint_name = joint_spec
+                                    scale = 1.0
+                                elif isinstance(joint_spec, tuple):
+                                    # Joint with scaling factor
+                                    joint_name, scale = joint_spec
+                                else:
+                                    continue
+                                
+                                # Apply to target if joint exists
+                                if joint_name in dof_name_to_idx:
+                                    dof_idx = dof_name_to_idx[joint_name]
+                                    targets[:, dof_idx] = action_value * scale
+                        
+                        # Fix r_f_joint3_1 to 0 (middle finger spread)
+                        if "r_f_joint3_1" in dof_name_to_idx:
+                            dof_idx = dof_name_to_idx["r_f_joint3_1"]
+                            targets[:, dof_idx] = 0.0
                         
                         # Update previous targets
                         self.prev_active_targets[:, self.NUM_BASE_DOFS:] = finger_pos_targets
@@ -390,30 +438,50 @@ class ActionProcessor:
                                 # Just copy directly from prev_active_targets which is known good
                                 direct_targets[env_idx, dof_idx] = self.prev_active_targets[env_idx, dof_idx]
                 
-                # Copy finger targets from original targets tensor
+                # Copy finger targets using coupling logic
                 if self.control_fingers:
-                    for env_idx in range(self.num_envs):
-                        # Use stored DOF names if available
-                        if not self.dof_names:
-                            print("Warning: DOF names not available from asset. Cannot set finger targets.")
-                            return False
+                    # Create DOF name to index mapping
+                    dof_name_to_idx = {}
+                    for i, name in enumerate(self.dof_names):
+                        dof_name_to_idx[name] = i
+                    
+                    # Initialize all finger DOFs to 0
+                    for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
+                        dof_idx = i + self.NUM_BASE_DOFS
+                        if dof_idx < direct_targets.shape[1]:
+                            direct_targets[:, dof_idx] = 0.0
+                    
+                    # Apply coupling mapping from previous targets
+                    for action_idx, joint_mapping in self.finger_coupling_map.items():
+                        finger_pos_idx = self.NUM_BASE_DOFS + action_idx
+                        if finger_pos_idx >= self.prev_active_targets.shape[1]:
+                            continue
                             
-                        for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
-                            dof_idx = i + self.NUM_BASE_DOFS
-                            if dof_idx < direct_targets.shape[1]:
-                                # Start with 0.0 for all finger DOFs
-                                direct_targets[env_idx, dof_idx] = 0.0
-                                
-                                # If we have a control mapping, use it
-                                if joint_to_control and name in joint_to_control:
-                                    control_name = joint_to_control[name]
-                                    try:
-                                        control_idx = active_joint_names.index(control_name)
-                                        finger_pos_idx = self.NUM_BASE_DOFS + control_idx
-                                        if finger_pos_idx < self.prev_active_targets.shape[1]:
-                                            direct_targets[env_idx, dof_idx] = self.prev_active_targets[env_idx, finger_pos_idx]
-                                    except (ValueError, IndexError) as e:
-                                        pass  # Safely continue if mapping fails
+                        action_value = self.prev_active_targets[:, finger_pos_idx]
+                        
+                        # Handle different mapping types
+                        for joint_spec in joint_mapping:
+                            if isinstance(joint_spec, str):
+                                # Simple 1:1 mapping
+                                joint_name = joint_spec
+                                scale = 1.0
+                            elif isinstance(joint_spec, tuple):
+                                # Joint with scaling factor
+                                joint_name, scale = joint_spec
+                            else:
+                                continue
+                            
+                            # Apply to target if joint exists
+                            if joint_name in dof_name_to_idx:
+                                dof_idx = dof_name_to_idx[joint_name]
+                                if dof_idx < direct_targets.shape[1]:
+                                    direct_targets[:, dof_idx] = action_value * scale
+                    
+                    # Fix r_f_joint3_1 to 0 (middle finger spread)
+                    if "r_f_joint3_1" in dof_name_to_idx:
+                        dof_idx = dof_name_to_idx["r_f_joint3_1"]
+                        if dof_idx < direct_targets.shape[1]:
+                            direct_targets[:, dof_idx] = 0.0
                 
                 # Clamp targets to joint limits
                 direct_targets = torch.clamp(

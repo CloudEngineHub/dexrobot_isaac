@@ -63,10 +63,10 @@ def main():
     parser = argparse.ArgumentParser(description="Test DexHand environment")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML file")
     parser.add_argument("--num-envs", type=int, default=1, help="Number of environments")
-    parser.add_argument("--episode-length", type=int, default=300, help="Maximum episode length")
+    parser.add_argument("--episode-length", type=int, default=1200, help="Maximum episode length")
     parser.add_argument("--headless", action="store_true", help="Run without visualization")
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
-    parser.add_argument("--steps", type=int, default=300, help="Number of steps to run")
+    parser.add_argument("--steps", type=int, default=1200, help="Number of steps to run")
     parser.add_argument("--movement-speed", type=float, default=0.05, help="Speed of DOF movement")
     parser.add_argument("--sleep", type=float, default=0.01, help="Sleep time between steps")
     parser.add_argument("--use-gpu-pipeline", action="store_true", help="Enable GPU pipeline for PhysX")
@@ -148,8 +148,8 @@ def main():
     print(f"Control hand base: {env.control_hand_base}")
     print(f"Control fingers: {env.control_fingers}")
     
-    if env.num_actions != 18:
-        print(f"ERROR: Expected 18 actions (6 base + 12 finger), got {env.num_actions}")
+    if env.num_actions != 12:
+        print(f"ERROR: Expected 12 actions (12 finger controls), got {env.num_actions}")
         return
         
     if env.action_control_mode != "position":
@@ -159,28 +159,21 @@ def main():
     # Initialize actions tensor
     actions = torch.zeros((env.num_envs, env.num_actions), device=env.device)
     
-    # Define expected DOF mapping for 18 actions (6 base + 12 finger)
+    # Define expected action mapping for 12 finger controls with coupling
     action_to_dof_map = [
-        # Base DOFs (6)
-        ("ARTx", "Translation X"),
-        ("ARTy", "Translation Y"), 
-        ("ARTz", "Translation Z"),
-        ("ARRx", "Rotation X"),
-        ("ARRy", "Rotation Y"),
-        ("ARRz", "Rotation Z"),
-        # Finger DOFs (12) - first 3 joints of each of the 4 main fingers
-        ("r_f_joint1_1", "Thumb Joint 1"),
-        ("r_f_joint1_2", "Thumb Joint 2"),
-        ("r_f_joint1_3", "Thumb Joint 3"),
-        ("r_f_joint2_1", "Index Joint 1"),
-        ("r_f_joint2_2", "Index Joint 2"),
-        ("r_f_joint2_3", "Index Joint 3"),
-        ("r_f_joint3_1", "Middle Joint 1"),
-        ("r_f_joint3_2", "Middle Joint 2"),
-        ("r_f_joint3_3", "Middle Joint 3"),
-        ("r_f_joint4_1", "Ring Joint 1"),
-        ("r_f_joint4_2", "Ring Joint 2"),
-        ("r_f_joint4_3", "Ring Joint 3"),
+        # Finger Controls (12) with coupling logic:
+        ("thumb_spread", "Thumb Spread (→ r_f_joint1_1)"),
+        ("thumb_mcp", "Thumb MCP (→ r_f_joint1_2)"),
+        ("thumb_dip", "Thumb DIP (→ r_f_joint1_3+1_4 coupled)"),
+        ("finger_spread", "Finger Spread (→ r_f_joint2_1+4_1+5_1, 5_1=2x)"),
+        ("index_mcp", "Index MCP (→ r_f_joint2_2)"),
+        ("index_dip", "Index DIP (→ r_f_joint2_3+2_4 coupled)"),
+        ("middle_mcp", "Middle MCP (→ r_f_joint3_2)"),
+        ("middle_dip", "Middle DIP (→ r_f_joint3_3+3_4 coupled)"),
+        ("ring_mcp", "Ring MCP (→ r_f_joint4_2)"),
+        ("ring_dip", "Ring DIP (→ r_f_joint4_3+4_4 coupled)"),
+        ("pinky_mcp", "Pinky MCP (→ r_f_joint5_2)"),
+        ("pinky_dip", "Pinky DIP (→ r_f_joint5_3+5_4 coupled)"),
     ]
     
     print(f"\n===== ACTION TO DOF MAPPING VERIFICATION =====")
@@ -196,21 +189,21 @@ def main():
     
     print(f"\nStarting action-to-DOF verification test...")
     print(f"Movement magnitude: {args.movement_speed}")
-    print(f"Steps per action: 10")
-    print(f"Total test duration: {18 * 10} steps")
+    print(f"Steps per action: 100")
+    print(f"Total test duration: {12 * 100} steps")
     print("=" * 50)
     
-    # Test with all actions at 0 to verify hand stays still
-    print(f"\n>>> Testing with ALL ACTIONS = 0 (Hand should stay still)")
-    print("This verifies that the fixed base physics configuration is working correctly.")
+    # Sequential action testing: each action goes from -1 → 1 → -1 over 100 steps
+    print(f"\n>>> Testing Sequential Action Movement")
+    print("Each action will move from -1 → 1 → -1 over 100 steps")
+    print("Starting with all actions at -1, then testing each action individually")
     
     # Reset to initial state
     env.reset()
     
-    # Get initial DOF positions and hand position
+    # Get initial DOF positions for reference
     if hasattr(env, 'dof_pos'):
         initial_dof_pos = env.dof_pos[0].clone()
-        print(f"Initial DOF positions (first 6): {initial_dof_pos[:6].cpu().numpy()}")
         print(f"Initial finger DOF positions:")
         finger_dofs = ["r_f_joint1_1", "r_f_joint1_2", "r_f_joint1_3", "r_f_joint1_4",
                       "r_f_joint2_1", "r_f_joint2_2", "r_f_joint2_3", "r_f_joint2_4", 
@@ -220,79 +213,114 @@ def main():
         for i, name in enumerate(finger_dofs):
             dof_idx = 6 + i  # finger DOFs start at index 6
             print(f"  {name}: {initial_dof_pos[dof_idx].item():.6f}")
-            
-        # Check if we have DOF properties to see default/rest positions
-        if hasattr(env, 'action_processor') and hasattr(env.action_processor, 'dof_props'):
-            print(f"\nDOF Properties shape: {env.action_processor.dof_props.shape}")
-            print("DOF properties (stiffness, damping, friction, armature, min, max):")
-            for i in range(min(26, env.action_processor.dof_props.shape[0])):
-                props = env.action_processor.dof_props[i].cpu().numpy()
-                joint_names = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"] + [f"finger_{j}" for j in range(6, 26)]
-                print(f"  {joint_names[i]:>12}: stiff={props[0]:6.1f}, damp={props[1]:5.1f}, min={props[4]:+6.3f}, max={props[5]:+6.3f}")
-                
-        # Also check if original DOF properties were extracted correctly
-        if hasattr(env, 'dof_properties_from_asset'):
-            print(f"\nOriginal DOF properties from asset: {env.dof_properties_from_asset is not None}")
-            if env.dof_properties_from_asset is not None:
-                print(f"Shape: {env.dof_properties_from_asset.shape if hasattr(env.dof_properties_from_asset, 'shape') else 'N/A'}")
-                print(f"Type: {type(env.dof_properties_from_asset)}")
-        
-    if hasattr(env, 'hand_pos'):
-        initial_hand_pos = env.hand_pos[0].clone()
-        print(f"Initial hand position: {initial_hand_pos.cpu().numpy()}")
     
-    # Apply zero actions for 50 steps and monitor stability
-    for step in range(50):
-        actions[:] = 0.0  # All actions are zero
+    # Total steps: 12 actions × 100 steps each = 1200 steps
+    total_steps = 12 * 100
+    steps_per_action = 100
+    
+    print(f"\nStarting sequential action test:")
+    print(f"Total steps: {total_steps}")
+    print(f"Steps per action: {steps_per_action}")
+    print("=" * 60)
+    
+    for step in range(total_steps):
+        # Initialize all actions to -1
+        actions[:] = -1.0
         
+        # Determine which action to move
+        current_action_idx = step // steps_per_action
+        step_in_action = step % steps_per_action
+        
+        # Create a triangular wave: -1 → 1 → -1 over 100 steps
+        # Steps 0-49: -1 → 1 (linear increase)
+        # Steps 50-99: 1 → -1 (linear decrease)
+        if step_in_action < 50:
+            # -1 → 1 over first 50 steps
+            progress = step_in_action / 49.0  # 0 to 1
+            action_value = -1.0 + 2.0 * progress  # -1 to 1
+        else:
+            # 1 → -1 over last 50 steps
+            progress = (step_in_action - 50) / 49.0  # 0 to 1
+            action_value = 1.0 - 2.0 * progress  # 1 to -1
+        
+        # Apply the action value to the current action
+        if current_action_idx < 12:
+            actions[0, current_action_idx] = action_value
+        
+        # Step the simulation
         obs, rewards, dones, info = env.step(actions)
         env.render()
         
-        # Check every 10 steps
-        if step % 10 == 9 and hasattr(env, 'dof_pos'):
-            current_dof_pos = env.dof_pos[0]
-            dof_change = current_dof_pos - initial_dof_pos  # Keep signed changes
-            max_dof_change = torch.max(torch.abs(dof_change)).item()
+        # Print progress every 25 steps and at key transitions
+        if (step_in_action % 25 == 0 or step_in_action == 49 or step_in_action == 99):
+            action_name = action_to_dof_map[current_action_idx][0] if current_action_idx < 12 else "completed"
+            print(f"  Step {step+1:4d}: Action {current_action_idx} ({action_name:>13}) = {action_value:+6.3f} (substep {step_in_action+1:2d}/100)")
             
-            # Print detailed info about base DOFs (ARTx, ARTy, ARTz, ARRx, ARRy, ARRz)
-            print(f"  Step {step+1}:")
-            print(f"    ARTx: {current_dof_pos[0].item():.6f} (change: {dof_change[0].item():+.6f})")
-            print(f"    ARTy: {current_dof_pos[1].item():.6f} (change: {dof_change[1].item():+.6f})")
-            print(f"    ARTz: {current_dof_pos[2].item():.6f} (change: {dof_change[2].item():+.6f}) ← Z position")
-            print(f"    ARRx: {current_dof_pos[3].item():.6f} (change: {dof_change[3].item():+.6f})")
-            print(f"    ARRy: {current_dof_pos[4].item():.6f} (change: {dof_change[4].item():+.6f})")
-            print(f"    ARRz: {current_dof_pos[5].item():.6f} (change: {dof_change[5].item():+.6f})")
-            print(f"    Max DOF change = {max_dof_change:.6f}")
-            
-            # Check if hand is staying still (very small changes are acceptable due to numerical precision)
-            if max_dof_change < 1e-4:
-                print(f"    ✓ GOOD: Hand is staying still (max change < 1e-4)")
-            else:
-                print(f"    ⚠ WARNING: Hand is moving when it should be still (max change = {max_dof_change:.6f})")
-                # Find which DOF is changing the most
-                max_change_idx = torch.argmax(torch.abs(dof_change)).item()
+            # At transitions, show DOF changes for the current action
+            if hasattr(env, 'dof_pos') and (step_in_action == 0 or step_in_action == 49 or step_in_action == 99):
+                current_dof_pos = env.dof_pos[0]
+                dof_change = current_dof_pos - initial_dof_pos
                 
-                # Use actual DOF names from verification output
-                actual_dof_names = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz", 
-                                  "r_f_joint1_1", "r_f_joint1_2", "r_f_joint1_3", "r_f_joint1_4",
-                                  "r_f_joint2_1", "r_f_joint2_2", "r_f_joint2_3", "r_f_joint2_4", 
-                                  "r_f_joint3_1", "r_f_joint3_2", "r_f_joint3_3", "r_f_joint3_4",
-                                  "r_f_joint4_1", "r_f_joint4_2", "r_f_joint4_3", "r_f_joint4_4",
-                                  "r_f_joint5_1", "r_f_joint5_2", "r_f_joint5_3", "r_f_joint5_4"]
-                
-                print(f"    Most changing DOF: {actual_dof_names[max_change_idx]} (index {max_change_idx})")
-                print(f"    This DOF changed by: {dof_change[max_change_idx].item():+.6f}")
-                
-                # Print top 5 changing DOFs for better analysis
-                abs_changes = torch.abs(dof_change)
-                top_5_indices = torch.topk(abs_changes, k=min(5, len(abs_changes))).indices
-                print(f"    Top 5 changing DOFs:")
-                for i, idx in enumerate(top_5_indices):
-                    print(f"      {i+1}. {actual_dof_names[idx]} (index {idx}): {dof_change[idx].item():+.6f}")
+                # Show changes for the joints controlled by this action
+                if current_action_idx < 12:
+                    action_name, description = action_to_dof_map[current_action_idx]
+                    print(f"    {description}")
+                    
+                    # Show finger DOF changes
+                    finger_changes = dof_change[6:]  # Skip base DOFs
+                    max_finger_change = torch.max(torch.abs(finger_changes)).item()
+                    
+                    # Find the most changed finger DOF
+                    if max_finger_change > 1e-6:
+                        max_finger_idx = torch.argmax(torch.abs(finger_changes)).item()
+                        finger_dof_name = finger_dofs[max_finger_idx]
+                        finger_change_value = finger_changes[max_finger_idx].item()
+                        print(f"    Max finger DOF change: {finger_dof_name} = {finger_change_value:+.6f}")
+                    
+                    # Show coupling verification for specific actions
+                    if current_action_idx == 2:  # thumb_dip (should affect joints 1_3 and 1_4)
+                        joint1_3_change = finger_changes[2].item()  # r_f_joint1_3 (index 8-6=2)
+                        joint1_4_change = finger_changes[3].item()  # r_f_joint1_4 (index 9-6=3)
+                        print(f"    Coupling check: r_f_joint1_3={joint1_3_change:+.6f}, r_f_joint1_4={joint1_4_change:+.6f}")
+                        if abs(joint1_3_change - joint1_4_change) < 1e-5:
+                            print(f"    ✓ Coupling verified: both joints move together")
+                        else:
+                            print(f"    ⚠ Coupling issue: joints should move together")
+                    
+                    elif current_action_idx == 3:  # finger_spread (should affect 2_1, 4_1, 5_1 with 5_1=2x)
+                        joint2_1_change = finger_changes[4].item()   # r_f_joint2_1 (index 10-6=4)
+                        joint4_1_change = finger_changes[12].item()  # r_f_joint4_1 (index 18-6=12)
+                        joint5_1_change = finger_changes[16].item()  # r_f_joint5_1 (index 22-6=16)
+                        joint3_1_change = finger_changes[8].item()   # r_f_joint3_1 (index 14-6=8, should stay 0)
+                        print(f"    Spread coupling: 2_1={joint2_1_change:+.6f}, 4_1={joint4_1_change:+.6f}, 5_1={joint5_1_change:+.6f}")
+                        print(f"    Fixed joint 3_1: {joint3_1_change:+.6f} (should be 0)")
+                        if abs(joint5_1_change - 2.0 * joint2_1_change) < 1e-5 and abs(joint4_1_change - joint2_1_change) < 1e-5:
+                            print(f"    ✓ Spread coupling verified: 5_1 ≈ 2×(2_1,4_1)")
+                        else:
+                            print(f"    ⚠ Spread coupling issue")
         
         time.sleep(args.sleep)
     
-    print(f"\nPhysics stability test completed. The hand should have remained stationary.")
+    print(f"\nSequential action test completed!")
+    print(f"All 12 actions have been tested with the -1 → 1 → -1 pattern.")
+    
+    # Final DOF state summary
+    if hasattr(env, 'dof_pos'):
+        final_dof_pos = env.dof_pos[0]
+        final_dof_change = final_dof_pos - initial_dof_pos
+        final_finger_changes = final_dof_change[6:]
+        max_final_change = torch.max(torch.abs(final_finger_changes)).item()
+        
+        print(f"\nFinal finger DOF changes from initial state:")
+        for i, name in enumerate(finger_dofs):
+            change = final_finger_changes[i].item()
+            print(f"  {name}: {change:+.6f}")
+        
+        print(f"Maximum final change: {max_final_change:.6f}")
+        if max_final_change < 0.1:
+            print("✓ Hand returned close to initial position (good)")
+        else:
+            print("⚠ Hand position significantly changed from initial")
 
     print("Test completed")
 

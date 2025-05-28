@@ -91,7 +91,7 @@ class HandInitializer:
             for joint in joints:
                 self.joint_to_control[joint] = control
         
-        # Active joint names (12 DoFs that can be controlled directly)
+        # Active joint names (15 controls mapping to 20 DOFs - 5 fingers × 3 controls each)
         self.active_joint_names = list(self.active_joint_mapping.keys())
         
         # Body names for fingertips and fingerpads in the MJCF model
