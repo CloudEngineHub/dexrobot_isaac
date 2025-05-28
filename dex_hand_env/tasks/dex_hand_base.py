@@ -235,14 +235,7 @@ class DexHandBase(VecTask):
             asset_root=self.asset_root
         )
         
-        # Set hand properties from config
-        if "baseStiffness" in self.cfg["env"]:
-            self.hand_initializer.set_joint_properties(
-                base_stiffness=self.cfg["env"]["baseStiffness"],
-                base_damping=self.cfg["env"]["baseDamping"],
-                finger_stiffness=self.cfg["env"]["fingerStiffness"],
-                finger_damping=self.cfg["env"]["fingerDamping"]
-            )
+        # Joint properties (stiffness/damping) now loaded from MJCF model
         
         # Set initial pose from config
         if "initialHandPos" in self.cfg["env"]:
@@ -552,12 +545,9 @@ class DexHandBase(VecTask):
             # Create default DOF positions/velocities
             if not hasattr(self, 'default_dof_pos'):
                 self.default_dof_pos = torch.zeros(self.num_dof, device=self.device)
-                # Set default hand position to half a meter above ground
-                if hasattr(self, 'hand_asset_file') and 'floating' in self.hand_asset_file:
-                    # Find translational DOFs and set height
-                    for i, name in enumerate(self.base_joint_names):
-                        if name == 'ARTz': # Z-translation DOF
-                            self.default_dof_pos[i] = 0.5
+                # All DOFs start at 0.0 (no offset from initial placement)
+                # The hand actor itself is placed at Z=0.5m in world coordinates
+                # but the ARTz DOF represents delta/offset from that initial position
             
             # We need to handle both [num_envs*num_dofs, 2] and [num_envs, num_dofs, 2] shapes
             if len(self.dof_state.shape) == 2:
@@ -609,6 +599,16 @@ class DexHandBase(VecTask):
             import traceback
             traceback.print_exc()
             raise
+
+    def reset(self):
+        """Reset all environments and return initial observations."""
+        # Reset all environments
+        env_ids = torch.arange(self.num_envs, device=self.device)
+        self.reset_idx(env_ids)
+        
+        # Call post_physics_step to compute initial observations
+        obs, rew, done, info = self.post_physics_step()
+        return obs
 
     def pre_physics_step(self, actions):
         """Process actions before physics simulation step."""

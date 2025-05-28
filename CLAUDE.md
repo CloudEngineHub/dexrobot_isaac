@@ -40,6 +40,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Official API docs are in @reference/isaacgym/docs/
 
 ## Simulation Architecture Notes
+
+### ⚠️ CRITICAL: Read Design Caveats First
+**Before modifying physics or model configuration, read:**
+- `docs/IMPORTANT_DESIGN_DECISIONS.md` - Quick reference of critical caveats
+- `docs/physics_caveats.md` - Detailed explanations and troubleshooting
+
 ### Hand Base Configuration
 - The hand model uses a fixed base link (`asset_options.fix_base_link = True`) to anchor the hand to the world
 - This is an important design choice because:
@@ -48,10 +54,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   3. The base DOFs still exist and can be controlled, allowing for controlled movement of the hand base
   4. This approach ensures consistent and stable hand positioning during simulation
 
-### DOF Control
-- The ARTx/y/z DOFs control translation along the x/y/z axes
-- The ARRx/y/z DOFs control rotation around the x/y/z axes
-- When action=0 is applied, these DOFs should maintain their current position
+### DOF Control  
+- The ARTx/y/z DOFs control **RELATIVE** translation from initial position
+- The ARRx/y/z DOFs control **RELATIVE** rotation from initial orientation
+- **IMPORTANT**: ARTz=0.0 means "stay at initial Z" (spawn point), NOT "go to world Z=0"
+- When action=0 is applied, these DOFs should maintain their initial position
+
+### Isaac Gym Model Requirements
+- **CRITICAL**: Isaac Gym requires `limited="true"` in MJCF for joint limits to work
+- Our model generation scripts automatically add this attribute
+- Joint properties (stiffness/damping) come directly from MJCF, no code overrides
 
 ### Physics Stepping Architecture
 - **Multiple Physics Steps for Reliable Resets**: The environment requires multiple physics steps for reliable object reset and stabilization. This is crucial for:

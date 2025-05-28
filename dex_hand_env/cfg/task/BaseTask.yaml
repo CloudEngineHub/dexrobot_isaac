@@ -19,11 +19,7 @@ env:
   maxBaseLinearVelocity: 1.0      # Maximum base linear velocity (m/s)
   maxBaseAngularVelocity: 1.5     # Maximum base angular velocity (rad/s)
   
-  # Controller parameters
-  baseStiffness: 400.0            # PD controller stiffness for base
-  baseDamping: 40.0               # PD controller damping for base
-  fingerStiffness: 100.0          # PD controller stiffness for fingers
-  fingerDamping: 10.0             # PD controller damping for fingers
+  # Controller parameters now loaded from MJCF model
   
   # Initial pose
   initialHandPos: [0.0, 0.0, 0.5] # Initial hand position

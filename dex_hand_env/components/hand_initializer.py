@@ -116,11 +116,7 @@ class HandInitializer:
         self.initial_hand_pos = [0.0, 0.0, 0.5]
         self.initial_hand_rot = [0.0, 0.0, 0.0, 1.0]
         
-        # Joint control settings
-        self.base_stiffness = 400.0
-        self.base_damping = 40.0
-        self.finger_stiffness = 100.0
-        self.finger_damping = 10.0
+        # Joint control settings removed - now using MJCF values directly
     
     def set_initial_pose(self, pos, rot=None):
         """
@@ -134,25 +130,6 @@ class HandInitializer:
         if rot is not None:
             self.initial_hand_rot = rot
     
-    def set_joint_properties(self, base_stiffness=None, base_damping=None, 
-                           finger_stiffness=None, finger_damping=None):
-        """
-        Set joint control properties for the hand.
-        
-        Args:
-            base_stiffness: Stiffness for base joints
-            base_damping: Damping for base joints
-            finger_stiffness: Stiffness for finger joints
-            finger_damping: Damping for finger joints
-        """
-        if base_stiffness is not None:
-            self.base_stiffness = base_stiffness
-        if base_damping is not None:
-            self.base_damping = base_damping
-        if finger_stiffness is not None:
-            self.finger_stiffness = finger_stiffness
-        if finger_damping is not None:
-            self.finger_damping = finger_damping
     
     def load_hand_asset(self, asset_file=None):
         """
@@ -174,7 +151,7 @@ class HandInitializer:
         
         # Set asset options
         asset_options = gymapi.AssetOptions()
-        asset_options.fix_base_link = False
+        asset_options.fix_base_link = True
         asset_options.flip_visual_attachments = False
         asset_options.collapse_fixed_joints = False
         asset_options.disable_gravity = False
@@ -261,17 +238,9 @@ class HandInitializer:
                 print("=====================================\n")
             
             for j, name in enumerate(dof_names):
-                # Set drive mode
+                # Set drive mode (keep using position control)
                 hand_dof_props["driveMode"][j] = gymapi.DOF_MODE_POS
-                
-                # Base joints (translational and rotational)
-                if any(base_name in name for base_name in self.base_joint_names):
-                    hand_dof_props["stiffness"][j] = self.base_stiffness
-                    hand_dof_props["damping"][j] = self.base_damping
-                # Finger joints
-                elif any(finger_name in name for finger_name in self.finger_joint_names):
-                    hand_dof_props["stiffness"][j] = self.finger_stiffness
-                    hand_dof_props["damping"][j] = self.finger_damping
+                # Note: stiffness and damping now come directly from MJCF model
             
             # Set DOF properties
             self.gym.set_actor_dof_properties(env, hand_handle, hand_dof_props)

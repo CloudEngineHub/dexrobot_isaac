@@ -417,10 +417,10 @@ class TensorManager:
                 
                 self.dof_props_from_asset = props_tensor
             elif isinstance(dof_props, np.ndarray):
-                # Handle structured arrays from Isaac Gym's get_asset_dof_properties
+                # Handle structured arrays from Isaac Gym's get_asset_dof_properties or get_actor_dof_properties
                 if dof_props.dtype.names is not None:
                     # Structured array - extract relevant fields
-                    # This is a structured array with field names, we need to extract them
+                    print(f"Processing structured array with fields: {dof_props.dtype.names}")
                     num_dof = len(dof_props)
                     props_tensor = torch.zeros((num_dof, 6), device=self.device)
                     
@@ -435,6 +435,7 @@ class TensorManager:
                     }
                     
                     # Extract fields that exist in the array
+                    print(f"Extracting DOF properties fields:")
                     for field_name, col_idx in field_mapping.items():
                         if field_name in dof_props.dtype.names:
                             try:
@@ -442,8 +443,18 @@ class TensorManager:
                                 # Convert to tensor safely
                                 field_tensor = torch.tensor(field_data.astype(np.float32), device=self.device)
                                 props_tensor[:, col_idx] = field_tensor
+                                print(f"  {field_name}: min={field_tensor.min():.3f}, max={field_tensor.max():.3f}")
                             except Exception as e:
                                 print(f"Error converting field {field_name}: {e}")
+                        else:
+                            print(f"  {field_name}: MISSING from structured array")
+                    
+                    # Also check hasLimits field to debug why limits are 0
+                    if 'hasLimits' in dof_props.dtype.names:
+                        has_limits = dof_props['hasLimits']
+                        print(f"  hasLimits field: {has_limits} (shape: {has_limits.shape})")
+                        print(f"  Number of joints with hasLimits=True: {np.sum(has_limits)}")
+                        print(f"  Joints without limits: {np.where(~has_limits)[0]}")
                     
                     self.dof_props_from_asset = props_tensor
                 else:
