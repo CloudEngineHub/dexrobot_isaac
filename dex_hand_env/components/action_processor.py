@@ -302,7 +302,12 @@ class ActionProcessor:
                     if task_targets is not None and 'base_targets' in task_targets:
                         targets[:, :self.NUM_BASE_DOFS] = task_targets['base_targets']
                     else:
-                        targets[:, :self.NUM_BASE_DOFS] = self.default_base_targets
+                        # Expand default_base_targets to match batch dimension
+                        if len(self.default_base_targets.shape) == 1:
+                            expanded_targets = self.default_base_targets.unsqueeze(0).expand(self.num_envs, -1)
+                        else:
+                            expanded_targets = self.default_base_targets
+                        targets[:, :self.NUM_BASE_DOFS] = expanded_targets
             else:
                 # Hand base not controlled by policy - use task targets or defaults
                 if task_targets is not None and 'base_targets' in task_targets:
@@ -311,8 +316,14 @@ class ActionProcessor:
                     else:
                         print(f"Error: Cannot assign task_targets['base_targets'] to targets[:, :self.NUM_BASE_DOFS]")
                 else:
-                    if targets[:, :self.NUM_BASE_DOFS].shape == self.default_base_targets.shape:
-                        targets[:, :self.NUM_BASE_DOFS] = self.default_base_targets
+                    # Expand default_base_targets to match batch dimension
+                    if len(self.default_base_targets.shape) == 1:
+                        expanded_targets = self.default_base_targets.unsqueeze(0).expand(self.num_envs, -1)
+                    else:
+                        expanded_targets = self.default_base_targets
+                    
+                    if targets[:, :self.NUM_BASE_DOFS].shape == expanded_targets.shape:
+                        targets[:, :self.NUM_BASE_DOFS] = expanded_targets
                     else:
                         print(f"Error: Cannot assign default_base_targets to targets[:, :self.NUM_BASE_DOFS]")
             
