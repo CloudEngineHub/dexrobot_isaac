@@ -3,28 +3,28 @@
 env:
   # Task parameters
   episodeLength: 300              # Maximum number of steps per episode
-  
+
   # Action space configuration
   controlMode: "position_delta"   # position or position_delta
   controlHandBase: true           # Whether the policy controls the hand base (6 DOFs)
   controlFingers: true            # Whether the policy controls the finger joints (12 DOFs)
-  
+
   # Default targets for uncontrolled DOFs (fallback if task doesn't provide them)
   # These are used only if the task's get_task_dof_targets method doesn't return targets
   defaultBaseTargets: [0.0, 0.0, 0.5, 0.0, 0.0, 0.0]  # Default base targets [x, y, z, rx, ry, rz]
   defaultFingerTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets
-  
+
   # Motion limits
   maxFingerVelocity: 2.0          # Maximum finger joint velocity (rad/s)
   maxBaseLinearVelocity: 1.0      # Maximum base linear velocity (m/s)
   maxBaseAngularVelocity: 1.5     # Maximum base angular velocity (rad/s)
-  
+
   # Controller parameters now loaded from MJCF model
-  
+
   # Initial pose
   initialHandPos: [0.0, 0.0, 0.5] # Initial hand position
   initialHandRot: [0.0, 0.0, 0.0, 1.0]  # Initial hand rotation (quaternion)
-  
+
   # Reward parameters
   rewardScales:
     pose: 1.0                     # Scale for pose matching reward
@@ -34,21 +34,21 @@ env:
     success: 10.0                 # Scale for task success reward
 
 sim:
-  dt: 0.01                        # Physics simulation timestep
-  substeps: 2                     # Number of physics substeps per step
+  dt: 0.0083                      # Reduced timestep for rendering mode stability (120 Hz)
+  substeps: 4                     # Increased substeps for better convergence with rendering
   physx:
     solver_type: 1                # 0: PCG, 1: TGS
-    num_position_iterations: 8    # Number of solver iterations for position (increased for GPU stability)
-    num_velocity_iterations: 0    # Set to 0 based on NVIDIA recommendations
-    contact_offset: 0.002         # Reduced from 0.02 to prevent excessive contacts
-    rest_offset: 0.0              # Reduced from 0.001 based on recommendations
+    num_position_iterations: 32   # Significantly increased for rendering mode stability
+    num_velocity_iterations: 0    # Set to 0 based on NVIDIA recommendations (doc: negatively impacts convergence)
+    contact_offset: 0.005         # Balanced value between stability and performance
+    rest_offset: 0.002            # Increased rest offset for better contact stability
     contact_collection: 1         # 1: CC_LAST_SUBSTEP (critical for GPU pipeline)
-    default_buffer_size_multiplier: 5.0  # Increased from 1.0 to prevent buffer overflow
-    max_gpu_contact_pairs: 1024   # Reduced from 16384 to save memory
+    default_buffer_size_multiplier: 8.0  # Increased rest offset for better contact stability
+    max_gpu_contact_pairs: 3145728   # 1024*1024*3
     always_use_articulations: true  # Always use articulations for stability
-    bounce_threshold_velocity: 0.2  # Added for stability
-    max_depenetration_velocity: 1000.0  # Added for stability
-    num_threads: 4                # Added to optimize CPU usage
+    bounce_threshold_velocity: 0.1  # Reduced for more stable contact behavior
+    max_depenetration_velocity: 5.0  # Further reduced to minimize aggressive corrections
+    num_threads: 4                # Standard CPU threads
   use_gpu_pipeline: true          # Whether to use GPU pipeline
 
 # These parameters are passed to training algorithms
