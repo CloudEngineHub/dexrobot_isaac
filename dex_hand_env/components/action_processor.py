@@ -355,10 +355,11 @@ class ActionProcessor:
                         
                         # Apply coupling mapping
                         for action_idx, joint_mapping in self.finger_coupling_map.items():
-                            if action_idx >= finger_pos_targets.shape[1]:
+                            if action_idx >= finger_actions.shape[1]:
                                 continue
                                 
-                            action_value = finger_pos_targets[:, action_idx]
+                            # Use the original action value for scaling, not accumulated targets
+                            raw_action_value = finger_actions[:, action_idx]
                             
                             # Handle different mapping types
                             for joint_spec in joint_mapping:
@@ -375,7 +376,30 @@ class ActionProcessor:
                                 # Apply to target if joint exists
                                 if joint_name in dof_name_to_idx:
                                     dof_idx = dof_name_to_idx[joint_name]
-                                    targets[:, dof_idx] = action_value * scale
+                                    
+                                    # Scale action from [-1, +1] to [DOF_min, DOF_max]
+                                    if self.dof_lower_limits is not None and self.dof_upper_limits is not None:
+                                        dof_min = self.dof_lower_limits[dof_idx]
+                                        dof_max = self.dof_upper_limits[dof_idx]
+                                        
+                                        # Map action from [-1, +1] to [dof_min, dof_max]
+                                        # action = -1 -> dof_min, action = +1 -> dof_max
+                                        scaled_action = (raw_action_value + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
+                                        final_target = scaled_action * scale
+                                        
+                                        if self.action_control_mode == "position":
+                                            # Direct position control
+                                            targets[:, dof_idx] = final_target
+                                        elif self.action_control_mode == "position_delta":
+                                            # Delta control: add to current position
+                                            targets[:, dof_idx] = self.dof_pos[:, dof_idx] + final_target
+                                        
+                                        # Debug output for spread joints
+                                        if joint_name in ['r_f_joint2_1', 'r_f_joint4_1', 'r_f_joint5_1']:
+                                            print(f"DEBUG scaling for {joint_name}: action={raw_action_value.item():.3f}, dof_min={dof_min:.3f}, dof_max={dof_max:.3f}, scaled={scaled_action.item():.6f}, scale={scale:.3f}, final={final_target.item():.6f}")
+                                    else:
+                                        # Fallback: use raw action value
+                                        targets[:, dof_idx] = raw_action_value * scale
                         
                         # Fix r_f_joint3_1 to 0 (middle finger spread)
                         if "r_f_joint3_1" in dof_name_to_idx:

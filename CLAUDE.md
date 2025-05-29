@@ -60,6 +60,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **IMPORTANT**: ARTz=0.0 means "stay at initial Z" (spawn point), NOT "go to world Z=0"
 - When action=0 is applied, these DOFs should maintain their initial position
 
+### Action Scaling and Mapping
+The environment implements proper action scaling from the normalized action space [-1, +1] to actual DOF limit ranges:
+
+#### Finger Coupling Logic
+- **12 actions** are mapped to **19 finger DOFs** using a coupling system
+- Coupling map in `ActionProcessor` handles the relationship between action indices and joint names
+- Each action can control multiple joints with different scaling factors
+
+#### Action Scaling Formula
+```python
+# Map action from [-1, +1] to [dof_min, dof_max]
+scaled_action = (action_value + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
+final_target = scaled_action * coupling_scale
+```
+
+#### DOF Limit Verification
+- **Spread joints (2_1, 4_1)**: [0.0, 0.3] radians
+- **Spread joint (5_1)**: [0.0, 0.6] radians (with 2x coupling scale)
+- **Bend joints**: [0.0, 1.57] radians (π/2)
+
+#### Action Mapping Examples
+- `action = -1.0` → DOF minimum limit (e.g., 0.0 rad for spread joints)
+- `action = +1.0` → DOF maximum limit (e.g., 0.3 rad for joints 2_1/4_1)
+- `action = 0.0` → DOF middle range (e.g., 0.15 rad for joints 2_1/4_1)
+
+#### Implementation Location
+- Primary logic: `dex_hand_env/components/action_processor.py:380-400`
+- DOF limits extracted from MJCF models in `TensorManager`
+- Handles both `position` and `position_delta` control modes correctly
+
 ### Isaac Gym Model Requirements
 - **CRITICAL**: Isaac Gym requires `limited="true"` in MJCF for joint limits to work
 - Our model generation scripts automatically add this attribute
