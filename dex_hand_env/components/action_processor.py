@@ -394,9 +394,9 @@ class ActionProcessor:
                                             # Delta control: add to current position
                                             targets[:, dof_idx] = self.dof_pos[:, dof_idx] + final_target
                                         
-                                        # Debug output for spread joints
-                                        if joint_name in ['r_f_joint2_1', 'r_f_joint4_1', 'r_f_joint5_1']:
-                                            print(f"DEBUG scaling for {joint_name}: action={raw_action_value.item():.3f}, dof_min={dof_min:.3f}, dof_max={dof_max:.3f}, scaled={scaled_action.item():.6f}, scale={scale:.3f}, final={final_target.item():.6f}")
+                                        # Debug output for spread joints (disabled for now)
+                                        # if joint_name in ['r_f_joint2_1', 'r_f_joint4_1', 'r_f_joint5_1']:
+                                        #     print(f"DEBUG scaling for {joint_name}: action={raw_action_value.item():.3f}, dof_min={dof_min:.3f}, dof_max={dof_max:.3f}, scaled={scaled_action.item():.6f}, scale={scale:.3f}, final={final_target.item():.6f}")
                                     else:
                                         # Fallback: use raw action value
                                         targets[:, dof_idx] = raw_action_value * scale
@@ -461,8 +461,9 @@ class ActionProcessor:
                     self.dof_lower_limits = torch.full((self.num_dof,), -1.0, device=self.device)
                     self.dof_upper_limits = torch.full((self.num_dof,), 1.0, device=self.device)
                 
-                # Create a completely new targets tensor to avoid any issues
-                direct_targets = torch.zeros((self.num_envs, self.num_dof), device=self.device)
+                # Use the correctly processed targets from the finger coupling logic above
+                # instead of creating a new tensor that overwrites the scaled values
+                direct_targets = targets.clone()
                 
                 # CRITICAL: Directly set the base DOF targets from prev_active_targets
                 # This skips all the target tensor transformations that might zero things out
@@ -473,50 +474,8 @@ class ActionProcessor:
                                 # Just copy directly from prev_active_targets which is known good
                                 direct_targets[env_idx, dof_idx] = self.prev_active_targets[env_idx, dof_idx]
                 
-                # Copy finger targets using coupling logic
-                if self.control_fingers:
-                    # Create DOF name to index mapping
-                    dof_name_to_idx = {}
-                    for i, name in enumerate(self.dof_names):
-                        dof_name_to_idx[name] = i
-                    
-                    # Initialize all finger DOFs to 0
-                    for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
-                        dof_idx = i + self.NUM_BASE_DOFS
-                        if dof_idx < direct_targets.shape[1]:
-                            direct_targets[:, dof_idx] = 0.0
-                    
-                    # Apply coupling mapping from previous targets
-                    for action_idx, joint_mapping in self.finger_coupling_map.items():
-                        finger_pos_idx = self.NUM_BASE_DOFS + action_idx
-                        if finger_pos_idx >= self.prev_active_targets.shape[1]:
-                            continue
-                            
-                        action_value = self.prev_active_targets[:, finger_pos_idx]
-                        
-                        # Handle different mapping types
-                        for joint_spec in joint_mapping:
-                            if isinstance(joint_spec, str):
-                                # Simple 1:1 mapping
-                                joint_name = joint_spec
-                                scale = 1.0
-                            elif isinstance(joint_spec, tuple):
-                                # Joint with scaling factor
-                                joint_name, scale = joint_spec
-                            else:
-                                continue
-                            
-                            # Apply to target if joint exists
-                            if joint_name in dof_name_to_idx:
-                                dof_idx = dof_name_to_idx[joint_name]
-                                if dof_idx < direct_targets.shape[1]:
-                                    direct_targets[:, dof_idx] = action_value * scale
-                    
-                    # Fix r_f_joint3_1 to 0 (middle finger spread)
-                    if "r_f_joint3_1" in dof_name_to_idx:
-                        dof_idx = dof_name_to_idx["r_f_joint3_1"]
-                        if dof_idx < direct_targets.shape[1]:
-                            direct_targets[:, dof_idx] = 0.0
+                # Note: Finger targets are already correctly processed above with action scaling
+                # No need to reprocess them here as that would overwrite the scaled values
                 
                 # Clamp targets to joint limits
                 direct_targets = torch.clamp(
@@ -533,6 +492,18 @@ class ActionProcessor:
                     self.sim,
                     gymtorch.unwrap_tensor(self.current_targets)
                 )
+                
+                # Debug: Check if any targets are non-zero
+                non_zero_targets = torch.nonzero(self.current_targets[0])
+                if len(non_zero_targets) > 0:
+                    print(f"DEBUG: Setting {len(non_zero_targets)} non-zero targets:")
+                    for idx in non_zero_targets[:5]:  # Show first 5
+                        dof_idx = idx.item()
+                        target_val = self.current_targets[0, dof_idx].item()
+                        joint_name = self.dof_names[dof_idx] if dof_idx < len(self.dof_names) else f"DOF_{dof_idx}"
+                        print(f"  {joint_name} (DOF {dof_idx}): target = {target_val:.6f}")
+                else:
+                    print("DEBUG: All targets are zero")
                 
                 return True
                 

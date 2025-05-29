@@ -79,11 +79,12 @@ class PhysicsManager:
             # Simulate physics
             self.gym.simulate(self.sim)
             
-            # Fetch results - with GPU pipeline, we only need to fetch on CPU
-            if (isinstance(self.device, str) and self.device == 'cpu') or \
-               (hasattr(self.device, 'type') and self.device.type == 'cpu') or \
-               not self.use_gpu_pipeline:
-                self.gym.fetch_results(self.sim, True)
+            # Step graphics - required for proper physics simulation even in headless mode
+            self.gym.step_graphics(self.sim)
+            
+            # Fetch results - ALWAYS call this to update tensor data
+            # This is crucial for headless mode to work properly
+            self.gym.fetch_results(self.sim, True)
             
             # When using GPU pipeline, we need to explicitly refresh the tensors
             if refresh_tensors and self.use_gpu_pipeline:
