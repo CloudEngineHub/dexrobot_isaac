@@ -160,7 +160,7 @@ class VecTask(Env):
         self.force_render = force_render
 
         self.sim_params = self._parse_sim_params(
-            self.cfg["physics_engine"], self.cfg["sim"]
+            self.cfg["physics_engine"], self.cfg["sim"], self.num_envs
         )
         if self.cfg["physics_engine"] == "physx":
             self.physics_engine = gymapi.SIM_PHYSX
@@ -201,12 +201,13 @@ class VecTask(Env):
         self.last_frame_time = time.time()
         self.render_fps = -1
 
-    def _parse_sim_params(self, physics_engine: str, config_sim: Dict[str, Any]) -> gymapi.SimParams:
+    def _parse_sim_params(self, physics_engine: str, config_sim: Dict[str, Any], num_envs: int) -> gymapi.SimParams:
         """Parse the sim configuration.
 
         Args:
             physics_engine: which physics engine to use.
             config_sim: sim configuration dictionary.
+            num_envs: number of parallel environments.
         Returns:
             SimParams object.
         """
@@ -244,6 +245,12 @@ class VecTask(Env):
                             opt,
                             gymapi.ContactCollection(config_sim["physx"][opt]),
                         )
+                    elif opt == "gpu_contact_pairs_per_env":
+                        # Calculate max_gpu_contact_pairs automatically
+                        pairs_per_env = config_sim["physx"][opt]
+                        total_pairs = pairs_per_env * num_envs
+                        setattr(sim_params.physx, "max_gpu_contact_pairs", total_pairs)
+                        print(f"Auto-calculated max_gpu_contact_pairs: {pairs_per_env} per env * {num_envs} envs = {total_pairs}")
                     else:
                         setattr(sim_params.physx, opt, config_sim["physx"][opt])
             
@@ -255,7 +262,7 @@ class VecTask(Env):
                 if not hasattr(sim_params.physx, "default_buffer_size_multiplier"):
                     sim_params.physx.default_buffer_size_multiplier = 1.0
                 if not hasattr(sim_params.physx, "max_gpu_contact_pairs"):
-                    sim_params.physx.max_gpu_contact_pairs = 1024 * 16
+                    raise ValueError("max_gpu_contact_pairs not set. Please specify 'gpu_contact_pairs_per_env' in the physx config.")
                 if not hasattr(sim_params.physx, "always_use_articulations"):
                     sim_params.physx.always_use_articulations = True
         elif physics_engine == "flex":
