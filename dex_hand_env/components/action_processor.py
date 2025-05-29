@@ -493,15 +493,16 @@ class ActionProcessor:
                     gymtorch.unwrap_tensor(self.current_targets)
                 )
                 
-                # Debug: Check if any targets are non-zero
+                # Debug: Check if any targets are non-zero AND print actual DOF positions
                 non_zero_targets = torch.nonzero(self.current_targets[0])
                 if len(non_zero_targets) > 0:
                     print(f"DEBUG: Setting {len(non_zero_targets)} non-zero targets:")
-                    for idx in non_zero_targets[:5]:  # Show first 5
+                    for idx in non_zero_targets[:3]:  # Show first 3
                         dof_idx = idx.item()
                         target_val = self.current_targets[0, dof_idx].item()
+                        actual_pos = self.dof_pos[0, dof_idx].item()
                         joint_name = self.dof_names[dof_idx] if dof_idx < len(self.dof_names) else f"DOF_{dof_idx}"
-                        print(f"  {joint_name} (DOF {dof_idx}): target = {target_val:.6f}")
+                        print(f"  {joint_name} (DOF {dof_idx}): target = {target_val:.6f}, actual = {actual_pos:.6f}")
                 else:
                     print("DEBUG: All targets are zero")
                 

@@ -259,10 +259,10 @@ class DexHandBase(VecTask):
         self.dof_properties_from_asset = handles.get("dof_properties", None)
         
         # Set up viewer
-        if not self.headless:
-            print("Creating viewer...")
-            self.set_viewer()
-            print("Viewer created")
+        # CRITICAL: Create viewer even in headless mode for proper DOF control
+        print("Creating viewer...")
+        self.set_viewer()
+        print("Viewer created")
         
         # Create tensor manager after environment setup
         self.tensor_manager = TensorManager(
@@ -279,11 +279,11 @@ class DexHandBase(VecTask):
         if self.dof_properties_from_asset is not None:
             self.tensor_manager.set_dof_properties(self.dof_properties_from_asset)
         
-        # CRITICAL for GPU pipeline: Call prepare_sim after all actors are created and tensors acquired
-        if self.use_gpu_pipeline:
-            print("Preparing simulation for GPU pipeline...")
-            self.gym.prepare_sim(self.sim)
-            print("Simulation prepared successfully")
+        # CRITICAL: Call prepare_sim after all actors are created and tensors acquired
+        # This is needed for both GPU pipeline and proper DOF control in headless mode
+        print("Preparing simulation...")
+        self.gym.prepare_sim(self.sim)
+        print("Simulation prepared successfully")
             
         # Set up tensors
         tensors = self.tensor_manager.setup_tensors(self.fingertip_indices)
@@ -764,8 +764,9 @@ class DexHandBase(VecTask):
         
         # Step physics simulation
         try:
-            # Step physics and ensure tensors are refreshed if using GPU pipeline
-            self.physics_manager.step_physics()
+            # Step physics and ensure tensors are refreshed
+            # Pass refresh_tensors=True to ensure tensor data is updated
+            self.physics_manager.step_physics(refresh_tensors=True)
             
             # When using GPU pipeline, we need an additional explicit refresh
             # to ensure all tensors are up-to-date

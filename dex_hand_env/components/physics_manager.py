@@ -86,9 +86,10 @@ class PhysicsManager:
             # This is crucial for headless mode to work properly
             self.gym.fetch_results(self.sim, True)
             
-            # When using GPU pipeline, we need to explicitly refresh the tensors
-            if refresh_tensors and self.use_gpu_pipeline:
-                # Refresh all the simulation tensors to ensure GPU data is current
+            # Always refresh tensors after physics step to ensure data is current
+            # This is especially important for headless mode
+            if refresh_tensors:
+                # Refresh all the simulation tensors to ensure data is current
                 try:
                     self.gym.refresh_dof_state_tensor(self.sim)
                     self.gym.refresh_actor_root_state_tensor(self.sim) 
