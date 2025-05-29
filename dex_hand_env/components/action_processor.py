@@ -274,26 +274,35 @@ class ActionProcessor:
                     # Base targets from actions (position control)
                     base_pos_targets = None
                     
+                    # Scale base actions from [-1, +1] to [DOF_min, DOF_max] like finger actions
+                    scaled_base_actions = torch.zeros_like(base_actions)
+                    for i in range(min(self.NUM_BASE_DOFS, base_actions.shape[1])):
+                        dof_min = self.dof_lower_limits[i]
+                        dof_max = self.dof_upper_limits[i]
+                        
+                        
+                        # Map action from [-1, +1] to [dof_min, dof_max]
+                        # action = -1 -> dof_min, action = +1 -> dof_max
+                        scaled_base_actions[:, i] = (base_actions[:, i] + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
+                    
                     if self.action_control_mode == "position":
                         # Direct position targets
-                        base_pos_targets = base_actions
+                        base_pos_targets = scaled_base_actions
                     elif self.action_control_mode == "position_delta":
                         # Incremental position changes
-                        base_pos_targets = self.prev_active_targets[:, :self.NUM_BASE_DOFS] + base_actions
+                        base_pos_targets = self.prev_active_targets[:, :self.NUM_BASE_DOFS] + scaled_base_actions
                     else:
-                        print(f"Unknown control mode: {self.action_control_mode}")
+                        raise ValueError(f"Unknown control mode: {self.action_control_mode}")
                     
-                    # Apply targets to the base DOFs (with safety limits)
-                    if base_pos_targets is not None:
-                        # Verify tensor shapes before assignment
-                        if targets[:, :self.NUM_BASE_DOFS].shape == base_pos_targets.shape:
-                            # Assign to targets tensor
-                            targets[:, :self.NUM_BASE_DOFS] = base_pos_targets
-                            
-                            # Update previous targets
-                            self.prev_active_targets[:, :self.NUM_BASE_DOFS] = base_pos_targets
-                        else:
-                            print(f"Error: Cannot assign base_pos_targets {base_pos_targets.shape} to targets[:, :self.NUM_BASE_DOFS] with shape {targets[:, :self.NUM_BASE_DOFS].shape}")
+                    # Apply targets to the base DOFs
+                    if targets[:, :self.NUM_BASE_DOFS].shape == base_pos_targets.shape:
+                        # Assign to targets tensor
+                        targets[:, :self.NUM_BASE_DOFS] = base_pos_targets
+                        
+                        # Update previous targets
+                        self.prev_active_targets[:, :self.NUM_BASE_DOFS] = base_pos_targets
+                    else:
+                        raise RuntimeError(f"Cannot assign base_pos_targets {base_pos_targets.shape} to targets[:, :self.NUM_BASE_DOFS] with shape {targets[:, :self.NUM_BASE_DOFS].shape}")
                     
                     # Update action index
                     action_idx += self.NUM_BASE_DOFS
@@ -519,3 +528,53 @@ class ActionProcessor:
             import traceback
             traceback.print_exc()
             return False
+    
+    def _apply_raw_finger_targets(self, finger_targets, dof_pos):
+        """
+        Apply raw finger targets (physically meaningful values) with proper coupling.
+        
+        Args:
+            finger_targets: torch.Tensor of shape (num_envs, NUM_ACTIVE_FINGER_DOFS) with raw joint targets in radians
+            dof_pos: current DOF positions tensor
+        """
+        if finger_targets.shape[1] != self.NUM_ACTIVE_FINGER_DOFS:
+            print(f"Warning: Expected {self.NUM_ACTIVE_FINGER_DOFS} finger targets, got {finger_targets.shape[1]}")
+            return
+            
+        # Create DOF name to index mapping
+        dof_name_to_idx = {}
+        for i, name in enumerate(self.dof_names):
+            dof_name_to_idx[name] = i
+        
+        # Apply coupling mapping with raw values (no scaling needed)
+        for action_idx, joint_mapping in self.finger_coupling_map.items():
+            if action_idx >= finger_targets.shape[1]:
+                continue
+                
+            # Use the raw finger target value
+            raw_target_value = finger_targets[:, action_idx]
+            
+            # Handle different mapping types
+            for joint_spec in joint_mapping:
+                if isinstance(joint_spec, str):
+                    # Simple 1:1 mapping
+                    joint_name = joint_spec
+                    scale = 1.0
+                elif isinstance(joint_spec, tuple):
+                    # Joint with scaling factor
+                    joint_name, scale = joint_spec
+                else:
+                    continue
+                
+                # Apply to target if joint exists
+                if joint_name in dof_name_to_idx:
+                    dof_idx = dof_name_to_idx[joint_name]
+                    
+                    # Apply raw target with scaling factor
+                    final_target = raw_target_value * scale
+                    self.current_targets[:, dof_idx] = final_target
+        
+        # Fix r_f_joint3_1 to 0 (middle finger spread)
+        if "r_f_joint3_1" in dof_name_to_idx:
+            dof_idx = dof_name_to_idx["r_f_joint3_1"]
+            self.current_targets[:, dof_idx] = 0.0

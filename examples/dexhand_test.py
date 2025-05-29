@@ -23,6 +23,7 @@ import torch
 
 # Import factory
 from dex_hand_env.factory import create_dex_env
+import math
 
 def load_config(config_path=None):
     """Load config from YAML file or use default path."""
@@ -31,15 +32,15 @@ def load_config(config_path=None):
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "dex_hand_env/cfg/task/BaseTask.yaml"
         )
-    
+
     print(f"Loading config from {config_path}")
-    
+
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
-    
+
     with open(config_path, 'r') as f:
         cfg_yaml = yaml.safe_load(f)
-    
+
     # Convert to the expected structure
     cfg = {
         "env": cfg_yaml.get("env", {}),
@@ -47,15 +48,127 @@ def load_config(config_path=None):
         "task": cfg_yaml.get("task", {}),
         "physics_engine": "physx"
     }
-    
+
     # Add required sim parameters that are not in YAML
     if "gravity" not in cfg["sim"]:
         cfg["sim"]["gravity"] = [0.0, 0.0, -9.81]
-    
+
     if "up_axis" not in cfg["sim"]:
         cfg["sim"]["up_axis"] = "z"
-    
+
     return cfg
+
+def create_rule_based_base_controller():
+    """
+    Create a rule-based controller function for hand base.
+    Returns a function that takes env and returns base targets.
+    """
+    def base_controller(env):
+        """
+        Generate rule-based control for hand base (6 DOFs: x, y, z, rx, ry, rz).
+        Returns raw DOF targets in physically meaningful units (meters, radians).
+        """
+        base_targets = torch.zeros((env.num_envs, 6), device=env.device)
+
+        # Get actual simulation time from environment
+        # progress_buf counts control steps, not physics steps
+        # control_dt = physics_dt * physics_steps_per_control_step
+        control_dt = env.physics_manager.control_dt
+
+        # Get simulation time in seconds
+        sim_time = env.progress_buf[0].item() * control_dt
+
+        # Use 2π for 1 second period for circular motion
+        t = sim_time * 2.0 * math.pi  # 1 Hz base frequency
+
+        # Circular motion (relative displacement in meters)
+        base_targets[:, 0] = 0.1 * math.sin(t)      # ARTx (±10cm)
+        base_targets[:, 1] = 0.1 * math.cos(t)      # ARTy (±10cm)
+        base_targets[:, 2] = 0.1 * math.sin(t * 0.5)  # ARTz (±10cm, slower)
+
+        # Rotation oscillations (30 degrees = 0.5236 radians)
+        base_targets[:, 3] = 0.5236 * math.sin(t * 0.7)   # ARRx (±30 degrees)
+        base_targets[:, 4] = 0.5236 * math.cos(t * 0.8)   # ARRy (±30 degrees)
+        base_targets[:, 5] = 0.5236 * math.sin(t * 1.2)   # ARRz (±30 degrees)
+
+        return base_targets
+
+    return base_controller
+
+def create_rule_based_finger_controller():
+    """
+    Create a rule-based controller function for fingers.
+    Returns a function that takes env and returns finger targets.
+    """
+    # Create a mutable object to track state
+    state = {'call_count': 0, 'start_time': None}
+
+    def finger_controller(env):
+        """
+        Generate rule-based control for fingers (12 finger controls).
+        Returns raw finger targets in physically meaningful units (radians).
+        """
+        finger_targets = torch.zeros((env.num_envs, 12), device=env.device)
+
+        # Get actual simulation time from environment
+        control_dt = env.physics_manager.control_dt
+
+        # Calculate time based on progress_buf (control steps)
+        sim_time = env.progress_buf[0].item() * control_dt
+
+        # Use 2π for 0.5 second period for grasping (2 Hz)
+        t = sim_time * 2.0 * math.pi * 2.0  # 2 Hz for faster finger motion
+
+        # Debug: Print time info when progress_buf changes or first few calls
+        last_progress = getattr(finger_controller, 'last_progress', -1)
+        current_progress = env.progress_buf[0].item()
+
+        if state['call_count'] < 5 or current_progress != last_progress:
+            print(f"[Finger Controller] Call #{state['call_count']}, progress_buf: {current_progress}, sim_time: {sim_time:.6f}, t: {t:.6f}, sin(t): {math.sin(t):.6f}")
+
+        finger_controller.last_progress = current_progress
+        state['call_count'] += 1
+
+        # Coordinated finger motion - simulate grasping
+        grasp_wave = 0.5 * (1 + math.sin(t))  # 0 to 1 wave
+
+        # Check if we have contact (can use env state)
+        if hasattr(env, 'contact_forces'):
+            # Sum contact forces across fingertips
+            total_contact = env.contact_forces.sum(dim=(1, 2))  # Sum over fingers and force dims
+            # If we have significant contact, increase grasp strength
+            contact_detected = total_contact > 0.1
+            grasp_scale = torch.where(contact_detected, 1.2, 1.0).unsqueeze(1)
+        else:
+            grasp_scale = 1.0
+
+        # Thumb motion (actions 0-2) - physical joint ranges
+        finger_targets[:, 0] = 0.2 * grasp_wave        # thumb_spread (0-0.2 rad)
+        finger_targets[:, 1] = 1.0 * grasp_wave * grasp_scale.squeeze()  # thumb_mcp (0-1.0 rad)
+        finger_targets[:, 2] = 1.2 * grasp_wave * grasp_scale.squeeze()  # thumb_dip (0-1.2 rad)
+
+        # Finger spread (action 3) - physical range for spread joints
+        finger_targets[:, 3] = 0.1 * grasp_wave        # finger_spread (0-0.1 rad)
+
+        # Index finger (actions 4-5)
+        finger_targets[:, 4] = 1.0 * grasp_wave * grasp_scale.squeeze()  # index_mcp (0-1.0 rad)
+        finger_targets[:, 5] = 1.3 * grasp_wave * grasp_scale.squeeze()  # index_dip (0-1.3 rad)
+
+        # Middle finger (actions 6-7)
+        finger_targets[:, 6] = 1.0 * grasp_wave * grasp_scale.squeeze()  # middle_mcp (0-1.0 rad)
+        finger_targets[:, 7] = 1.3 * grasp_wave * grasp_scale.squeeze()  # middle_dip (0-1.3 rad)
+
+        # Ring finger (actions 8-9)
+        finger_targets[:, 8] = 0.9 * grasp_wave * grasp_scale.squeeze()  # ring_mcp (0-0.9 rad)
+        finger_targets[:, 9] = 1.2 * grasp_wave * grasp_scale.squeeze()  # ring_dip (0-1.2 rad)
+
+        # Pinky finger (actions 10-11) - less motion
+        finger_targets[:, 10] = 0.8 * grasp_wave * grasp_scale.squeeze()  # pinky_mcp (0-0.8 rad)
+        finger_targets[:, 11] = 1.1 * grasp_wave * grasp_scale.squeeze()  # pinky_dip (0-1.1 rad)
+
+        return finger_targets
+
+    return finger_controller
 
 def main():
     """Main function to test the DexHand environment."""
@@ -72,20 +185,30 @@ def main():
     parser.add_argument("--use-gpu-pipeline", action="store_true", help="Enable GPU pipeline for PhysX")
     parser.add_argument("--no-gpu-pipeline", action="store_true", help="Disable GPU pipeline for PhysX")
     parser.add_argument("--device", type=str, default="cuda:0", help="Device to run simulation on (cuda:0 or cpu)")
+
+    # Action mode control arguments
+    parser.add_argument("--control-mode", type=str, choices=["position", "position_delta"], default="position",
+                       help="Control mode: position (absolute) or position_delta (incremental)")
+    parser.add_argument("--policy-controls-base", type=str, default="false", choices=["true", "false"],
+                       help="Include hand base in policy action space (default: false)")
+    parser.add_argument("--policy-controls-fingers", type=str, default="true", choices=["true", "false"],
+                       help="Include fingers in policy action space (default: true)")
     args = parser.parse_args()
 
     print("Starting DexHand test script...")
 
     # Load configuration
     cfg = load_config(args.config)
-    
+
     # Override with command line arguments
     cfg["env"]["numEnvs"] = args.num_envs
     cfg["env"]["episodeLength"] = args.episode_length
-    
-    # Force absolute position control mode for DOF verification
-    cfg["env"]["controlMode"] = "position"
-    
+
+    # Apply action mode configuration
+    cfg["env"]["controlMode"] = args.control_mode
+    cfg["env"]["controlHandBase"] = args.policy_controls_base.lower() == "true"
+    cfg["env"]["controlFingers"] = args.policy_controls_fingers.lower() == "true"
+
     # Handle GPU pipeline setting
     if args.use_gpu_pipeline and args.no_gpu_pipeline:
         print("Warning: Both --use-gpu-pipeline and --no-gpu-pipeline specified. Using GPU pipeline.")
@@ -96,32 +219,32 @@ def main():
     elif args.no_gpu_pipeline:
         print("Disabling GPU pipeline for PhysX")
         cfg["sim"]["use_gpu_pipeline"] = False
-    
+
     if args.debug:
         print("Configuration loaded:")
         print(yaml.dump(cfg))
 
     # Create the environment
     print("Creating environment...")
-    
+
     # Set simulation device based on command line arguments
     sim_device = args.device
     rl_device = args.device
-    
+
     # Use -1 for graphics_device_id if headless or using CPU
     graphics_device_id = -1 if args.headless or sim_device == "cpu" else 0
-    
+
     # Add debug information if requested
     if args.debug:
         print(f"Simulation device: {sim_device}")
         print(f"RL device: {rl_device}")
         print(f"Graphics device ID: {graphics_device_id}")
         print(f"GPU pipeline: {cfg['sim'].get('use_gpu_pipeline', 'not specified')}")
-        
+
         # Set physics debugging options
         if "physx" not in cfg["sim"]:
             cfg["sim"]["physx"] = {}
-    
+
     # Create environment
     try:
         env = create_dex_env(
@@ -147,18 +270,40 @@ def main():
     print(f"Control mode: {env.action_control_mode}")
     print(f"Control hand base: {env.control_hand_base}")
     print(f"Control fingers: {env.control_fingers}")
-    
-    if env.num_actions != 12:
-        print(f"ERROR: Expected 12 actions (12 finger controls), got {env.num_actions}")
+
+    # Calculate expected action space size
+    expected_actions = 0
+    if env.control_hand_base:
+        expected_actions += 6  # base DOFs
+    if env.control_fingers:
+        expected_actions += 12  # finger controls
+
+    if env.num_actions != expected_actions:
+        print(f"ERROR: Expected {expected_actions} actions, got {env.num_actions}")
         return
-        
-    if env.action_control_mode != "position":
-        print(f"ERROR: Expected position control mode, got {env.action_control_mode}")
+
+    if env.action_control_mode != args.control_mode:
+        print(f"ERROR: Expected {args.control_mode} control mode, got {env.action_control_mode}")
         return
+
+    # Set up rule-based controllers for uncontrolled DOFs
+    base_controller = None if env.control_hand_base else create_rule_based_base_controller()
+    finger_controller = None if env.control_fingers else create_rule_based_finger_controller()
+
+    if base_controller or finger_controller:
+        print("\nSetting up rule-based controllers:")
+        if base_controller:
+            print("- Base controller: Active (circular motion)")
+        if finger_controller:
+            print("- Finger controller: Active (adaptive grasping with 5x speed)")
+        env.set_rule_based_controllers(
+            base_controller=base_controller,
+            finger_controller=finger_controller
+        )
 
     # Initialize actions tensor
     actions = torch.zeros((env.num_envs, env.num_actions), device=env.device)
-    
+
     # Define expected action mapping for 12 finger controls with coupling
     action_to_dof_map = [
         # Finger Controls (12) with coupling logic:
@@ -175,108 +320,164 @@ def main():
         ("pinky_mcp", "Pinky MCP (→ r_f_joint5_2)"),
         ("pinky_dip", "Pinky DIP (→ r_f_joint5_3+5_4 coupled)"),
     ]
-    
-    print(f"\n===== ACTION TO DOF MAPPING VERIFICATION =====")
-    print(f"Testing {len(action_to_dof_map)} actions in absolute position control mode")
-    print("Each action will be applied individually with a small movement")
-    for i, (dof_name, description) in enumerate(action_to_dof_map):
-        print(f"  Action {i:2d}: {dof_name:<15} - {description}")
+
+    print(f"\n===== ACTION MODE VERIFICATION =====")
+    print(f"Control Mode: {env.action_control_mode}")
+    print(f"Policy controls base: {env.control_hand_base}")
+    print(f"Policy controls fingers: {env.control_fingers}")
+    print(f"Action space size: {env.num_actions}")
+
+    if not env.control_hand_base:
+        print("- Hand base will use RULE-BASED control (circular motion)")
+    if not env.control_fingers:
+        print("- Fingers will use RULE-BASED control (grasping motion)")
+
+    if env.control_fingers:
+        print(f"Testing {len(action_to_dof_map)} finger actions:")
+        for i, (dof_name, description) in enumerate(action_to_dof_map):
+            print(f"  Action {i:2d}: {dof_name:<15} - {description}")
     print("=" * 50)
-    
+
     # Get initial DOF positions for reference
     obs = env.reset()
     initial_dof_pos = env.dof_pos.clone() if hasattr(env, 'dof_pos') else None
-    
+
     print(f"\nStarting action-to-DOF verification test...")
     print(f"Movement magnitude: {args.movement_speed}")
     print(f"Steps per action: 100")
     print(f"Total test duration: {12 * 100} steps")
     print("=" * 50)
-    
+
     # Sequential action testing: each action goes from -1 → 1 → -1 over 100 steps
     print(f"\n>>> Testing Sequential Action Movement")
     print("Each action will move from -1 → 1 → -1 over 100 steps")
     print("Starting with all actions at -1, then testing each action individually")
-    
+
     # Reset to initial state
     env.reset()
-    
+
     # Get initial DOF positions for reference
     if hasattr(env, 'dof_pos'):
         initial_dof_pos = env.dof_pos[0].clone()
         print(f"Initial finger DOF positions:")
         finger_dofs = ["r_f_joint1_1", "r_f_joint1_2", "r_f_joint1_3", "r_f_joint1_4",
-                      "r_f_joint2_1", "r_f_joint2_2", "r_f_joint2_3", "r_f_joint2_4", 
+                      "r_f_joint2_1", "r_f_joint2_2", "r_f_joint2_3", "r_f_joint2_4",
                       "r_f_joint3_1", "r_f_joint3_2", "r_f_joint3_3", "r_f_joint3_4",
                       "r_f_joint4_1", "r_f_joint4_2", "r_f_joint4_3", "r_f_joint4_4",
                       "r_f_joint5_1", "r_f_joint5_2", "r_f_joint5_3", "r_f_joint5_4"]
         for i, name in enumerate(finger_dofs):
             dof_idx = 6 + i  # finger DOFs start at index 6
             print(f"  {name}: {initial_dof_pos[dof_idx].item():.6f}")
-    
+
     # Total steps: 12 actions × 100 steps each = 1200 steps
     total_steps = 12 * 100
     steps_per_action = 100
-    
+
     print(f"\nStarting sequential action test:")
     print(f"Total steps: {total_steps}")
     print(f"Steps per action: {steps_per_action}")
     print("=" * 60)
-    
+
     for step in range(total_steps):
-        # Initialize all actions to -1
-        actions[:] = -1.0
-        
-        # Determine which action to move
+        # Initialize policy actions
+        actions[:] = 0.0
+
+        # Initialize action tracking variables (needed for progress display)
+        finger_actions_count = env.action_processor.NUM_ACTIVE_FINGER_DOFS
+        base_actions_count = env.action_processor.NUM_BASE_DOFS
         current_action_idx = step // steps_per_action
         step_in_action = step % steps_per_action
-        
-        # Create a triangular wave: -1 → 1 → -1 over 100 steps
-        # Steps 0-49: -1 → 1 (linear increase)
-        # Steps 50-99: 1 → -1 (linear decrease)
-        if step_in_action < 50:
-            # -1 → 1 over first 50 steps
-            progress = step_in_action / 49.0  # 0 to 1
-            action_value = -1.0 + 2.0 * progress  # -1 to 1
+        action_value = 0.0  # Default for rule-based control
+
+        # For base joints: Create pattern 0 → -1 → 1 → 0 over 100 steps (base middle is default)
+        # For finger joints: Create pattern -1 → 1 → -1 over 100 steps (finger 0 is closed)
+        if env.control_hand_base and current_action_idx < base_actions_count:
+            # Base joints: 0 → -1 → 1 → 0 pattern
+            if step_in_action < 25:
+                # 0 → -1 (first quarter)
+                progress = step_in_action / 24.0
+                action_value = 0.0 - progress
+            elif step_in_action < 75:
+                # -1 → 1 (middle half)
+                progress = (step_in_action - 25) / 49.0
+                action_value = -1.0 + 2.0 * progress
+            else:
+                # 1 → 0 (last quarter)
+                progress = (step_in_action - 75) / 24.0
+                action_value = 1.0 - progress
         else:
-            # 1 → -1 over last 50 steps
-            progress = (step_in_action - 50) / 49.0  # 0 to 1
-            action_value = 1.0 - 2.0 * progress  # 1 to -1
-        
-        # Apply the action value to the current action
-        if current_action_idx < 12:
-            actions[0, current_action_idx] = action_value
-        
-        # Step the simulation
+            # Finger joints: -1 → 1 → -1 pattern
+            if step_in_action < 50:
+                progress = step_in_action / 49.0
+                action_value = -1.0 + 2.0 * progress
+            else:
+                progress = (step_in_action - 50) / 49.0
+                action_value = 1.0 - 2.0 * progress
+
+        # For policy-controlled base
+        if env.control_hand_base:
+            base_action_idx = current_action_idx
+
+            if base_action_idx < base_actions_count:
+                # Use range [-0.5, 0.5] for base joints to reduce fierce movements
+                scaled_base_action = action_value * 0.5
+                actions[0, base_action_idx] = scaled_base_action
+
+        # For policy-controlled fingers
+        if env.control_fingers:
+            # Apply to policy actions
+            action_start_idx = base_actions_count if env.control_hand_base else 0
+            finger_action_idx = current_action_idx
+
+            if finger_action_idx < finger_actions_count:
+                actions[0, action_start_idx + finger_action_idx] = action_value
+
+        # Step the simulation (rule-based control is applied automatically in pre_physics_step)
+        if step < 5:
+            print(f"[Test] Before step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}")
         obs, rewards, dones, info = env.step(actions)
+        if step < 5:
+            print(f"[Test] After step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}, done = {dones[0].item()}")
         env.render()
-        
+
         # Print progress every 25 steps and at key transitions
         if (step_in_action % 25 == 0 or step_in_action == 49 or step_in_action == 99):
-            action_name = action_to_dof_map[current_action_idx][0] if current_action_idx < 12 else "completed"
-            print(f"  Step {step+1:4d}: Action {current_action_idx} ({action_name:>13}) = {action_value:+6.3f} (substep {step_in_action+1:2d}/100)")
-            
+            if env.control_hand_base and current_action_idx < base_actions_count:
+                base_action_names = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"]
+                action_name = base_action_names[current_action_idx]
+                action_sent = actions[0, current_action_idx].item() if current_action_idx < actions.shape[1] else action_value
+                print(f"  Step {step+1:4d}: Base Action {current_action_idx} ({action_name:>13}) = {action_sent:+6.3f} (substep {step_in_action+1:2d}/100)")
+            elif env.control_fingers and current_action_idx < finger_actions_count:
+                action_name = action_to_dof_map[current_action_idx][0]
+                print(f"  Step {step+1:4d}: Finger Action {current_action_idx} ({action_name:>13}) = {action_value:+6.3f} (substep {step_in_action+1:2d}/100)")
+            elif not env.control_fingers:
+                print(f"  Step {step+1:4d}: RULE-BASED finger control (substep {step_in_action+1:2d}/100)")
+            elif not env.control_hand_base:
+                print(f"  Step {step+1:4d}: RULE-BASED base control (substep {step_in_action+1:2d}/100)")
+            else:
+                print(f"  Step {step+1:4d}: Test completed (substep {step_in_action+1:2d}/100)")
+
             # At transitions, show DOF changes for the current action
             if hasattr(env, 'dof_pos') and (step_in_action == 0 or step_in_action == 49 or step_in_action == 99):
                 current_dof_pos = env.dof_pos[0]
                 dof_change = current_dof_pos - initial_dof_pos
-                
+
                 # Show changes for the joints controlled by this action
                 if current_action_idx < 12:
                     action_name, description = action_to_dof_map[current_action_idx]
                     print(f"    {description}")
-                    
+
                     # Show finger DOF changes
                     finger_changes = dof_change[6:]  # Skip base DOFs
                     max_finger_change = torch.max(torch.abs(finger_changes)).item()
-                    
+
                     # Find the most changed finger DOF
                     if max_finger_change > 1e-6:
                         max_finger_idx = torch.argmax(torch.abs(finger_changes)).item()
                         finger_dof_name = finger_dofs[max_finger_idx]
                         finger_change_value = finger_changes[max_finger_idx].item()
                         print(f"    Max finger DOF change: {finger_dof_name} = {finger_change_value:+.6f}")
-                    
+
                     # Show coupling verification for specific actions
                     if current_action_idx == 2:  # thumb_dip (should affect joints 1_3 and 1_4)
                         joint1_3_change = finger_changes[2].item()  # r_f_joint1_3 (index 8-6=2)
@@ -286,7 +487,7 @@ def main():
                             print(f"    ✓ Coupling verified: both joints move together")
                         else:
                             print(f"    ⚠ Coupling issue: joints should move together")
-                    
+
                     elif current_action_idx == 3:  # finger_spread (should affect 2_1, 4_1, 5_1 with 5_1=2x)
                         joint2_1_change = finger_changes[4].item()   # r_f_joint2_1 (index 10-6=4)
                         joint4_1_change = finger_changes[12].item()  # r_f_joint4_1 (index 18-6=12)
@@ -298,24 +499,24 @@ def main():
                             print(f"    ✓ Spread coupling verified: 5_1 ≈ 2×(2_1,4_1)")
                         else:
                             print(f"    ⚠ Spread coupling issue")
-        
+
         time.sleep(args.sleep)
-    
+
     print(f"\nSequential action test completed!")
     print(f"All 12 actions have been tested with the -1 → 1 → -1 pattern.")
-    
+
     # Final DOF state summary
     if hasattr(env, 'dof_pos'):
         final_dof_pos = env.dof_pos[0]
         final_dof_change = final_dof_pos - initial_dof_pos
         final_finger_changes = final_dof_change[6:]
         max_final_change = torch.max(torch.abs(final_finger_changes)).item()
-        
+
         print(f"\nFinal finger DOF changes from initial state:")
         for i, name in enumerate(finger_dofs):
             change = final_finger_changes[i].item()
             print(f"  {name}: {change:+.6f}")
-        
+
         print(f"Maximum final change: {max_final_change:.6f}")
         if max_final_change < 0.1:
             print("✓ Hand returned close to initial position (good)")

@@ -214,12 +214,17 @@ class HandInitializer:
             # Get DOF properties from actor (not asset) for GPU pipeline compatibility
             hand_dof_props = self.gym.get_actor_dof_properties(env, hand_handle)
             
+            # Configure DOF properties for PD control
+            dof_names = self.gym.get_actor_dof_names(env, hand_handle)
+            
             # Save a copy of the original DOF properties for tensor manager (from first actor)
             if i == 0:
                 self.original_dof_props = hand_dof_props.copy()
-            
-            # Configure DOF properties for PD control
-            dof_names = self.gym.get_actor_dof_names(env, hand_handle)
+                # Debug: Print DOF limits for first 6 joints
+                print(f"\n===== BASE DOF LIMITS FROM ACTOR =====")
+                for j in range(min(6, len(dof_names))):
+                    print(f"DOF {j} ({dof_names[j]}): lower={hand_dof_props['lower'][j]:.6f}, upper={hand_dof_props['upper'][j]:.6f}")
+                print("=====================================\n")
             
             # Log DOF names for the first actor to verify all 25 DOFs
             if i == 0:

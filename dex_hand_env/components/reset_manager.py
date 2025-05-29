@@ -41,9 +41,9 @@ class ResetManager:
         self.device = device
         self.max_episode_length = max_episode_length
         
-        # Reset and progress buffers
-        self.reset_buf = torch.zeros(num_envs, device=device, dtype=torch.bool)
-        self.progress_buf = torch.zeros(num_envs, device=device, dtype=torch.long)
+        # Reset and progress buffers - will be set by set_buffers()
+        self.reset_buf = None
+        self.progress_buf = None
         
         # Random state for reproducibility
         self.rng_state = None
@@ -94,6 +94,17 @@ class ResetManager:
             self.orientation_randomization_range = orientation_range
         if dof_range is not None:
             self.dof_position_randomization_range = dof_range
+    
+    def set_buffers(self, reset_buf, progress_buf):
+        """
+        Set the shared reset and progress buffers.
+        
+        Args:
+            reset_buf: Shared reset buffer from main environment
+            progress_buf: Shared progress buffer from main environment
+        """
+        self.reset_buf = reset_buf
+        self.progress_buf = progress_buf
     
     def set_default_state(self, dof_pos=None, hand_pos=None, hand_rot=None):
         """
@@ -174,9 +185,9 @@ class ResetManager:
             Updated progress buffer
         """
         try:
-            # Ensure progress buffer is properly initialized
-            if not hasattr(self, 'progress_buf') or self.progress_buf is None:
-                self.progress_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
+            # Check if progress buffer is set
+            if self.progress_buf is None:
+                raise RuntimeError("Progress buffer not set. Call set_buffers() first.")
             
             # Increment progress
             self.progress_buf += 1
@@ -185,9 +196,7 @@ class ResetManager:
             print(f"ERROR in increment_progress: {e}")
             import traceback
             traceback.print_exc()
-            # Create a new progress buffer as a fallback
-            self.progress_buf = torch.zeros(self.num_envs, device=self.device, dtype=torch.long)
-            return self.progress_buf
+            raise
     
     def reset_idx(self, env_ids, physics_manager=None, dof_state=None, root_state_tensor=None,
                 hand_indices=None, task_reset_func=None):

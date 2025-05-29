@@ -27,6 +27,7 @@ CLAUDE.md
 # Directories to ignore
 legacy/
 reference/
+assets/dexrobot_urdf/
 
 # Python
 *.py[cod]

@@ -143,17 +143,20 @@ final_target = scaled_action * coupling_scale
    - GPU pipeline now works correctly with `--use-gpu-pipeline` flag
    - Both `--no-gpu-pipeline` and `--use-gpu-pipeline` modes are now functional
 
-3. **Verify DOF Control & Naming**
+3. **Verify DOF Control & Naming** (✅ DONE)
    - Test the correct correspondence between DoFs and names
-   - Verify all 25 DOFs are properly accessible and controllable
+   - Verify all 26 DOFs are properly accessible and controllable
    - Fix "Error verifying target positions" issue with get_dof_target
    - Create mapping documentation between DOF indices and names
+   - Fixed ARTz initialization to 0.0 (relative motion from spawn point)
 
-4. **Test Action Modes**
+4. **Test Action Modes** (✅ DONE)
    - Verify position control mode works correctly
-   - Verify position_delta control mode works correctly
+   - Verify position_delta control mode works correctly  
    - Test with different control frequencies
    - Ensure action=0 maintains position properly
+   - Added CLI flags for testing different control configurations
+   - Implemented rule-based control for non-policy controlled parts
 
 5. **Verify Observation System**
    - Check that observation tensors have correct shape and content

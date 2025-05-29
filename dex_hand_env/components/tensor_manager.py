@@ -444,6 +444,12 @@ class TensorManager:
                                 field_tensor = torch.tensor(field_data.astype(np.float32), device=self.device)
                                 props_tensor[:, col_idx] = field_tensor
                                 print(f"  {field_name}: min={field_tensor.min():.3f}, max={field_tensor.max():.3f}")
+                                
+                                # Debug: Print limits for base joints
+                                if field_name in ['lower', 'upper']:
+                                    print(f"    First 6 DOFs ({field_name}):")
+                                    for i in range(min(6, len(field_data))):
+                                        print(f"      DOF {i}: {field_data[i]:.6f}")
                             except Exception as e:
                                 print(f"Error converting field {field_name}: {e}")
                         else:

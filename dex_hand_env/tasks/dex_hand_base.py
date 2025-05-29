@@ -184,6 +184,10 @@ class DexHandBase(VecTask):
         # Flag to track initialization state
         self._tensors_initialized = False
         
+        # Initialize rule-based controller functions
+        self.rule_based_base_controller = None
+        self.rule_based_finger_controller = None
+        
         # Initialize the base class
         print("Initializing VecTask parent class...")
         super().__init__(
@@ -511,6 +515,10 @@ class DexHandBase(VecTask):
             (self.num_envs,), device=self.device, dtype=torch.long
         )
         
+        # Share buffers with reset manager
+        if hasattr(self, 'reset_manager'):
+            self.reset_manager.set_buffers(self.reset_buf, self.progress_buf)
+        
         # Set up action space
         if hasattr(self, 'action_processor'):
             # Calculate action space size
@@ -651,6 +659,15 @@ class DexHandBase(VecTask):
             traceback.print_exc()
             raise
         
+        # Apply rule-based control for uncontrolled DOFs
+        try:
+            self._apply_rule_based_control()
+        except Exception as e:
+            print(f"ERROR in _apply_rule_based_control: {e}")
+            import traceback
+            traceback.print_exc()
+            # Don't re-raise to avoid breaking the simulation
+        
         # Update action in observation encoder for next frame
         try:
             self.observation_encoder.update_prev_actions(self.actions)
@@ -788,6 +805,93 @@ class DexHandBase(VecTask):
             raise
         
         return obs, rew, done, info
+
+    def set_rule_based_controllers(self, base_controller=None, finger_controller=None):
+        """
+        Set rule-based control functions for hand parts not controlled by the policy.
+        
+        Control functions should have the signature:
+            def controller(env) -> torch.Tensor
+        
+        Where:
+            - env: The environment instance (self), providing access to all properties
+            - Returns: torch.Tensor of appropriate shape with target values in physical units
+        
+        Args:
+            base_controller: Callable that returns (num_envs, 6) tensor with base DOF targets
+                           in physical units (meters for translation, radians for rotation).
+                           Only used if control_hand_base is False.
+            finger_controller: Callable that returns (num_envs, 12) tensor with finger targets
+                             in physical units (radians).
+                             Only used if control_fingers is False.
+        
+        Example:
+            def my_base_controller(env):
+                t = env.progress_buf[0] * env.dt  # Get simulation time
+                targets = torch.zeros((env.num_envs, 6), device=env.device)
+                targets[:, 0] = 0.1 * torch.sin(t)  # Oscillate in X
+                return targets
+            
+            env.set_rule_based_controllers(base_controller=my_base_controller)
+        """
+        self.rule_based_base_controller = base_controller
+        self.rule_based_finger_controller = finger_controller
+        
+        # Validate controllers
+        if base_controller is not None and self.control_hand_base:
+            print("Warning: Base controller provided but control_hand_base=True. Controller will be ignored.")
+        if finger_controller is not None and self.control_fingers:
+            print("Warning: Finger controller provided but control_fingers=True. Controller will be ignored.")
+    
+    def _apply_rule_based_control(self):
+        """
+        Internal method to apply rule-based control using registered controller functions.
+        Called automatically during pre_physics_step.
+        """
+        if not hasattr(self, 'action_processor') or not hasattr(self, 'dof_pos'):
+            return
+            
+        # Apply base controller if available and base is not policy-controlled
+        if not self.control_hand_base and hasattr(self, 'rule_based_base_controller') and self.rule_based_base_controller is not None:
+            try:
+                base_targets = self.rule_based_base_controller(self)
+                if base_targets.shape == (self.num_envs, self.action_processor.NUM_BASE_DOFS):
+                    # Directly set base DOF targets (raw physical values)
+                    self.action_processor.current_targets[:, 0:self.action_processor.NUM_BASE_DOFS] = base_targets
+                else:
+                    print(f"Error: Base controller returned shape {base_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_BASE_DOFS})")
+            except Exception as e:
+                print(f"Error in base controller: {e}")
+                import traceback
+                traceback.print_exc()
+                
+        # Apply finger controller if available and fingers are not policy-controlled
+        if not self.control_fingers and hasattr(self, 'rule_based_finger_controller') and self.rule_based_finger_controller is not None:
+            try:
+                finger_targets = self.rule_based_finger_controller(self)
+                if finger_targets.shape == (self.num_envs, self.action_processor.NUM_ACTIVE_FINGER_DOFS):
+                    # Process finger targets through action processor to handle coupling
+                    self.action_processor._apply_raw_finger_targets(
+                        finger_targets=finger_targets,
+                        dof_pos=self.dof_pos
+                    )
+                else:
+                    print(f"Error: Finger controller returned shape {finger_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_ACTIVE_FINGER_DOFS})")
+            except Exception as e:
+                print(f"Error in finger controller: {e}")
+                import traceback
+                traceback.print_exc()
+                
+        # Always apply the current targets to the simulation after rule-based updates
+        try:
+            self.gym.set_dof_position_target_tensor(
+                self.sim,
+                gymtorch.unwrap_tensor(self.action_processor.current_targets)
+            )
+        except Exception as e:
+            print(f"Error setting DOF targets: {e}")
+            import traceback
+            traceback.print_exc()
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""
