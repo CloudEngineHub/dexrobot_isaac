@@ -125,10 +125,10 @@ class ActionProcessor:
         )
         
         # Initialize with default values
-        # Base position targets (important for gravity)
-        self.prev_active_targets[:, 0] = 0.0  # ARTx
-        self.prev_active_targets[:, 1] = 0.0  # ARTy
-        self.prev_active_targets[:, 2] = 0.5  # ARTz - most critical for gravity issues
+        # Base position targets (RELATIVE motion from spawn point)
+        self.prev_active_targets[:, 0] = 0.0  # ARTx - relative X displacement
+        self.prev_active_targets[:, 1] = 0.0  # ARTy - relative Y displacement
+        self.prev_active_targets[:, 2] = 0.0  # ARTz - relative Z displacement (0 = stay at spawn height)
         
         # Initialize rotation targets - default is identity quaternion (0,0,0 in axis-angle)
         self.prev_active_targets[:, 3:6] = 0.0  # ARRx, ARRy, ARRz

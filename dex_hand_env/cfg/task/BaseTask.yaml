@@ -11,8 +11,9 @@ env:
 
   # Default targets for uncontrolled DOFs (fallback if task doesn't provide them)
   # These are used only if the task's get_task_dof_targets method doesn't return targets
-  defaultBaseTargets: [0.0, 0.0, 0.5, 0.0, 0.0, 0.0]  # Default base targets [x, y, z, rx, ry, rz]
-  defaultFingerTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets (15 controls)
+  # NOTE: Base targets are RELATIVE displacements from spawn position (0 = stay at spawn point)
+  defaultBaseTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default base targets [x, y, z, rx, ry, rz]
+  defaultFingerTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets (12 controls)
 
   # Motion limits
   maxFingerVelocity: 2.0          # Maximum finger joint velocity (rad/s)
