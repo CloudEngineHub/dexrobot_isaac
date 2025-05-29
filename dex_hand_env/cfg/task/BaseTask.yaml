@@ -44,7 +44,7 @@ sim:
     rest_offset: 0.002            # Increased rest offset for better contact stability
     contact_collection: 1         # 1: CC_LAST_SUBSTEP (critical for GPU pipeline)
     default_buffer_size_multiplier: 8.0  # Increased rest offset for better contact stability
-    max_gpu_contact_pairs: 3145728   # 1024*1024*3
+    max_gpu_contact_pairs: 8192   # Reduced to prevent GPU memory issues
     always_use_articulations: true  # Always use articulations for stability
     bounce_threshold_velocity: 0.1  # Reduced for more stable contact behavior
     max_depenetration_velocity: 5.0  # Further reduced to minimize aggressive corrections
