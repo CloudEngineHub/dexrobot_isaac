@@ -882,16 +882,20 @@ class DexHandBase(VecTask):
                 import traceback
                 traceback.print_exc()
                 
-        # Always apply the current targets to the simulation after rule-based updates
-        try:
-            self.gym.set_dof_position_target_tensor(
-                self.sim,
-                gymtorch.unwrap_tensor(self.action_processor.current_targets)
-            )
-        except Exception as e:
-            print(f"Error setting DOF targets: {e}")
-            import traceback
-            traceback.print_exc()
+        # Only apply targets if we actually modified them via rule-based control
+        # If only policy controls both base and fingers, don't call set_dof_position_target_tensor
+        # as it was already called by process_actions()
+        if (not self.control_hand_base and hasattr(self, 'rule_based_base_controller') and self.rule_based_base_controller is not None) or \
+           (not self.control_fingers and hasattr(self, 'rule_based_finger_controller') and self.rule_based_finger_controller is not None):
+            try:
+                self.gym.set_dof_position_target_tensor(
+                    self.sim,
+                    gymtorch.unwrap_tensor(self.action_processor.current_targets)
+                )
+            except Exception as e:
+                print(f"Error setting DOF targets: {e}")
+                import traceback
+                traceback.print_exc()
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""

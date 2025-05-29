@@ -403,8 +403,8 @@ class ActionProcessor:
                                             # Delta control: add to current position
                                             targets[:, dof_idx] = self.dof_pos[:, dof_idx] + final_target
                                         
-                                        # Debug output for spread joints (disabled for now)
-                                        # if joint_name in ['r_f_joint2_1', 'r_f_joint4_1', 'r_f_joint5_1']:
+                                        # Debug output for specific joints (disabled)
+                                        # if joint_name in ['r_f_joint1_1', 'r_f_joint1_2', 'r_f_joint1_3']:
                                         #     print(f"DEBUG scaling for {joint_name}: action={raw_action_value.item():.3f}, dof_min={dof_min:.3f}, dof_max={dof_max:.3f}, scaled={scaled_action.item():.6f}, scale={scale:.3f}, final={final_target.item():.6f}")
                                     else:
                                         # Fallback: use raw action value

@@ -379,8 +379,17 @@ def main():
     print("=" * 60)
 
     for step in range(total_steps):
-        # Initialize policy actions
-        actions[:] = 0.0
+        # Initialize policy actions with proper defaults:
+        # - Base DOFs: 0.0 (middle of range, neutral position)
+        # - Finger DOFs: -1.0 (minimum of range, closed/contracted position)
+        actions[:] = 0.0  # Initialize all to 0 first
+        
+        # Set finger actions to -1.0 (closed position) as default
+        if env.control_fingers:
+            # Find where finger actions start in the action space
+            finger_start_idx = env.action_processor.NUM_BASE_DOFS if env.control_hand_base else 0
+            finger_end_idx = finger_start_idx + env.action_processor.NUM_ACTIVE_FINGER_DOFS
+            actions[:, finger_start_idx:finger_end_idx] = -1.0
 
         # Initialize action tracking variables (needed for progress display)
         finger_actions_count = env.action_processor.NUM_ACTIVE_FINGER_DOFS
