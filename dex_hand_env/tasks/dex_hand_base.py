@@ -335,10 +335,10 @@ class DexHandBase(VecTask):
             elif control_type == "relative":
                 self.action_processor.set_control_mode("position_delta")
         
-        # Set control options
+        # Set control options - determine which parts are controlled by policy vs rule-based control
         self.action_processor.set_control_options(
-            control_hand_base=self.cfg["env"].get("controlHandBase", True),
-            control_fingers=self.cfg["env"].get("controlFingers", True)
+            policy_controls_hand_base=self.cfg["env"]["policyControlsHandBase"],
+            policy_controls_fingers=self.cfg["env"]["policyControlsFingers"]
         )
         
         # Set default targets
@@ -351,11 +351,11 @@ class DexHandBase(VecTask):
                 finger_targets=self.cfg["env"]["defaultFingerTargets"]
             )
         
-        # Set velocity limits
+        # Set component-wise velocity limits for position_delta mode
         self.action_processor.set_velocity_limits(
-            finger_vel_limit=self.cfg["env"].get("maxFingerVelocity", 2.0),
-            base_lin_vel_limit=self.cfg["env"].get("maxBaseLinearVelocity", 1.0),
-            base_ang_vel_limit=self.cfg["env"].get("maxBaseAngularVelocity", 1.5)
+            finger_vel_limit=self.cfg["env"]["maxFingerJointVelocity"],
+            base_lin_vel_limit=self.cfg["env"]["maxBaseLinearVelocity"],
+            base_ang_vel_limit=self.cfg["env"]["maxBaseAngularVelocity"]
         )
         
         # Set initial control_dt (will be updated after reset when physics steps are auto-detected)
@@ -442,8 +442,8 @@ class DexHandBase(VecTask):
         
         # Add control mode and other properties as direct attributes for easy access
         self.action_control_mode = self.action_processor.action_control_mode
-        self.control_hand_base = self.action_processor.control_hand_base
-        self.control_fingers = self.action_processor.control_fingers
+        self.policy_controls_hand_base = self.action_processor.policy_controls_hand_base
+        self.policy_controls_fingers = self.action_processor.policy_controls_fingers
         
         # Set observation space dimensions needed by VecTask
         self.num_observations = self.observation_encoder.num_observations
@@ -525,12 +525,12 @@ class DexHandBase(VecTask):
         # Set up action space
         if hasattr(self, 'action_processor'):
             # Calculate action space size
-            if self.action_processor.control_hand_base:
+            if self.action_processor.policy_controls_hand_base:
                 self.num_actions = self.action_processor.NUM_BASE_DOFS
             else:
                 self.num_actions = 0
                 
-            if self.action_processor.control_fingers:
+            if self.action_processor.policy_controls_fingers:
                 self.num_actions += self.action_processor.NUM_ACTIVE_FINGER_DOFS
         else:
             # Fallback
@@ -645,8 +645,8 @@ class DexHandBase(VecTask):
                 task_targets = self.task.get_task_dof_targets(
                     num_envs=self.num_envs,
                     device=self.device,
-                    base_controlled=self.control_hand_base,
-                    fingers_controlled=self.control_fingers
+                    base_controlled=self.policy_controls_hand_base,
+                    fingers_controlled=self.policy_controls_fingers
                 )
             
             self.action_processor.process_actions(
@@ -845,10 +845,10 @@ class DexHandBase(VecTask):
         self.rule_based_finger_controller = finger_controller
         
         # Validate controllers
-        if base_controller is not None and self.control_hand_base:
-            print("Warning: Base controller provided but control_hand_base=True. Controller will be ignored.")
-        if finger_controller is not None and self.control_fingers:
-            print("Warning: Finger controller provided but control_fingers=True. Controller will be ignored.")
+        if base_controller is not None and self.policy_controls_hand_base:
+            print("Warning: Base controller provided but policy_controls_hand_base=True. Controller will be ignored.")
+        if finger_controller is not None and self.policy_controls_fingers:
+            print("Warning: Finger controller provided but policy_controls_fingers=True. Controller will be ignored.")
     
     def _apply_rule_based_control(self):
         """
@@ -859,7 +859,7 @@ class DexHandBase(VecTask):
             return
             
         # Apply base controller if available and base is not policy-controlled
-        if not self.control_hand_base and hasattr(self, 'rule_based_base_controller') and self.rule_based_base_controller is not None:
+        if not self.policy_controls_hand_base and hasattr(self, 'rule_based_base_controller') and self.rule_based_base_controller is not None:
             try:
                 base_targets = self.rule_based_base_controller(self)
                 if base_targets.shape == (self.num_envs, self.action_processor.NUM_BASE_DOFS):
@@ -873,7 +873,7 @@ class DexHandBase(VecTask):
                 traceback.print_exc()
                 
         # Apply finger controller if available and fingers are not policy-controlled
-        if not self.control_fingers and hasattr(self, 'rule_based_finger_controller') and self.rule_based_finger_controller is not None:
+        if not self.policy_controls_fingers and hasattr(self, 'rule_based_finger_controller') and self.rule_based_finger_controller is not None:
             try:
                 finger_targets = self.rule_based_finger_controller(self)
                 if finger_targets.shape == (self.num_envs, self.action_processor.NUM_ACTIVE_FINGER_DOFS):
@@ -892,8 +892,8 @@ class DexHandBase(VecTask):
         # Only apply targets if we actually modified them via rule-based control
         # If only policy controls both base and fingers, don't call set_dof_position_target_tensor
         # as it was already called by process_actions()
-        if (not self.control_hand_base and hasattr(self, 'rule_based_base_controller') and self.rule_based_base_controller is not None) or \
-           (not self.control_fingers and hasattr(self, 'rule_based_finger_controller') and self.rule_based_finger_controller is not None):
+        if (not self.policy_controls_hand_base and hasattr(self, 'rule_based_base_controller') and self.rule_based_base_controller is not None) or \
+           (not self.policy_controls_fingers and hasattr(self, 'rule_based_finger_controller') and self.rule_based_finger_controller is not None):
             try:
                 self.gym.set_dof_position_target_tensor(
                     self.sim,

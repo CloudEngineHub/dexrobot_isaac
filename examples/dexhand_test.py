@@ -206,8 +206,8 @@ def main():
 
     # Apply action mode configuration
     cfg["env"]["controlMode"] = args.control_mode
-    cfg["env"]["controlHandBase"] = args.policy_controls_base.lower() == "true"
-    cfg["env"]["controlFingers"] = args.policy_controls_fingers.lower() == "true"
+    cfg["env"]["policyControlsHandBase"] = args.policy_controls_base.lower() == "true"
+    cfg["env"]["policyControlsFingers"] = args.policy_controls_fingers.lower() == "true"
 
     # Handle GPU pipeline setting
     if args.use_gpu_pipeline and args.no_gpu_pipeline:
@@ -268,14 +268,14 @@ def main():
     print(f"Observation space: {env.num_observations}")
     print(f"Action space: {env.num_actions}")
     print(f"Control mode: {env.action_control_mode}")
-    print(f"Control hand base: {env.control_hand_base}")
-    print(f"Control fingers: {env.control_fingers}")
+    print(f"Policy controls hand base: {env.policy_controls_hand_base}")
+    print(f"Policy controls fingers: {env.policy_controls_fingers}")
 
     # Calculate expected action space size
     expected_actions = 0
-    if env.control_hand_base:
+    if env.policy_controls_hand_base:
         expected_actions += 6  # base DOFs
-    if env.control_fingers:
+    if env.policy_controls_fingers:
         expected_actions += 12  # finger controls
 
     if env.num_actions != expected_actions:
@@ -287,8 +287,8 @@ def main():
         return
 
     # Set up rule-based controllers for uncontrolled DOFs
-    base_controller = None if env.control_hand_base else create_rule_based_base_controller()
-    finger_controller = None if env.control_fingers else create_rule_based_finger_controller()
+    base_controller = None if env.policy_controls_hand_base else create_rule_based_base_controller()
+    finger_controller = None if env.policy_controls_fingers else create_rule_based_finger_controller()
 
     if base_controller or finger_controller:
         print("\nSetting up rule-based controllers:")
@@ -323,16 +323,16 @@ def main():
 
     print(f"\n===== ACTION MODE VERIFICATION =====")
     print(f"Control Mode: {env.action_control_mode}")
-    print(f"Policy controls base: {env.control_hand_base}")
-    print(f"Policy controls fingers: {env.control_fingers}")
+    print(f"Policy controls base: {env.policy_controls_hand_base}")
+    print(f"Policy controls fingers: {env.policy_controls_fingers}")
     print(f"Action space size: {env.num_actions}")
 
-    if not env.control_hand_base:
+    if not env.policy_controls_hand_base:
         print("- Hand base will use RULE-BASED control (circular motion)")
-    if not env.control_fingers:
+    if not env.policy_controls_fingers:
         print("- Fingers will use RULE-BASED control (grasping motion)")
 
-    if env.control_fingers:
+    if env.policy_controls_fingers:
         print(f"Testing {len(action_to_dof_map)} finger actions:")
         for i, (dof_name, description) in enumerate(action_to_dof_map):
             print(f"  Action {i:2d}: {dof_name:<15} - {description}")
@@ -383,11 +383,11 @@ def main():
         # - Base DOFs: 0.0 (middle of range, neutral position)
         # - Finger DOFs: -1.0 (minimum of range, closed/contracted position)
         actions[:] = 0.0  # Initialize all to 0 first
-        
+
         # Set finger actions to -1.0 (closed position) as default
-        if env.control_fingers:
+        if env.policy_controls_fingers:
             # Find where finger actions start in the action space
-            finger_start_idx = env.action_processor.NUM_BASE_DOFS if env.control_hand_base else 0
+            finger_start_idx = env.action_processor.NUM_BASE_DOFS if env.policy_controls_hand_base else 0
             finger_end_idx = finger_start_idx + env.action_processor.NUM_ACTIVE_FINGER_DOFS
             actions[:, finger_start_idx:finger_end_idx] = -1.0
 
@@ -400,7 +400,7 @@ def main():
 
         # For base joints: Create pattern 0 → -1 → 1 → 0 over 100 steps (base middle is default)
         # For finger joints: Create pattern -1 → 1 → -1 over 100 steps (finger 0 is closed)
-        if env.control_hand_base and current_action_idx < base_actions_count:
+        if env.policy_controls_hand_base and current_action_idx < base_actions_count:
             # Base joints: 0 → -1 → 1 → 0 pattern
             if step_in_action < 25:
                 # 0 → -1 (first quarter)
@@ -424,7 +424,7 @@ def main():
                 action_value = 1.0 - 2.0 * progress
 
         # For policy-controlled base
-        if env.control_hand_base:
+        if env.policy_controls_hand_base:
             base_action_idx = current_action_idx
 
             if base_action_idx < base_actions_count:
@@ -433,9 +433,9 @@ def main():
                 actions[0, base_action_idx] = scaled_base_action
 
         # For policy-controlled fingers
-        if env.control_fingers:
+        if env.policy_controls_fingers:
             # Apply to policy actions
-            action_start_idx = base_actions_count if env.control_hand_base else 0
+            action_start_idx = base_actions_count if env.policy_controls_hand_base else 0
             finger_action_idx = current_action_idx
 
             if finger_action_idx < finger_actions_count:
@@ -451,17 +451,17 @@ def main():
 
         # Print progress every 25 steps and at key transitions
         if (step_in_action % 25 == 0 or step_in_action == 49 or step_in_action == 99):
-            if env.control_hand_base and current_action_idx < base_actions_count:
+            if env.policy_controls_hand_base and current_action_idx < base_actions_count:
                 base_action_names = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"]
                 action_name = base_action_names[current_action_idx]
                 action_sent = actions[0, current_action_idx].item() if current_action_idx < actions.shape[1] else action_value
                 print(f"  Step {step+1:4d}: Base Action {current_action_idx} ({action_name:>13}) = {action_sent:+6.3f} (substep {step_in_action+1:2d}/100)")
-            elif env.control_fingers and current_action_idx < finger_actions_count:
+            elif env.policy_controls_fingers and current_action_idx < finger_actions_count:
                 action_name = action_to_dof_map[current_action_idx][0]
                 print(f"  Step {step+1:4d}: Finger Action {current_action_idx} ({action_name:>13}) = {action_value:+6.3f} (substep {step_in_action+1:2d}/100)")
-            elif not env.control_fingers:
+            elif not env.policy_controls_fingers:
                 print(f"  Step {step+1:4d}: RULE-BASED finger control (substep {step_in_action+1:2d}/100)")
-            elif not env.control_hand_base:
+            elif not env.policy_controls_hand_base:
                 print(f"  Step {step+1:4d}: RULE-BASED base control (substep {step_in_action+1:2d}/100)")
             else:
                 print(f"  Step {step+1:4d}: Test completed (substep {step_in_action+1:2d}/100)")

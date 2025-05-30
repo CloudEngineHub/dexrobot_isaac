@@ -6,8 +6,8 @@ env:
 
   # Action space configuration
   controlMode: "position_delta"   # position or position_delta
-  controlHandBase: false          # Whether the policy controls the hand base (6 DOFs)
-  controlFingers: true            # Whether the policy controls the finger joints (12 controls)
+  policyControlsHandBase: true    # Whether the policy controls the hand base (6 DOFs) - when false, use rule-based control
+  policyControlsFingers: true     # Whether the policy controls the finger joints (12 controls) - when false, use rule-based control
 
   # Default targets for uncontrolled DOFs (fallback if task doesn't provide them)
   # These are used only if the task's get_task_dof_targets method doesn't return targets
@@ -15,10 +15,11 @@ env:
   defaultBaseTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default base targets [x, y, z, rx, ry, rz]
   defaultFingerTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets (12 controls)
 
-  # Motion limits
-  maxFingerVelocity: 2.0          # Maximum finger joint velocity (rad/s)
-  maxBaseLinearVelocity: 1.0      # Maximum base linear velocity (m/s)
-  maxBaseAngularVelocity: 1.5     # Maximum base angular velocity (rad/s)
+  # Component-wise velocity limits for position_delta mode action scaling
+  # These limits are applied PER COMPONENT (each joint/axis independently)
+  maxFingerJointVelocity: 1.0     # Maximum velocity for each finger joint (rad/s) - applied per joint
+  maxBaseLinearVelocity: 0.5      # Maximum velocity for each base linear axis (m/s) - applied per x/y/z axis
+  maxBaseAngularVelocity: 1.5     # Maximum velocity for each base angular axis (rad/s) - applied per rx/ry/rz axis
 
   # Controller parameters now loaded from MJCF model
 

@@ -50,8 +50,8 @@ class ActionProcessor:
 
         # Control settings
         self.action_control_mode = "position"  # position or position_delta
-        self.control_hand_base = True
-        self.control_fingers = True
+        self.policy_controls_hand_base = True
+        self.policy_controls_fingers = True
 
         # Constants for action dimensions
         self.NUM_BASE_DOFS = 6
@@ -177,22 +177,28 @@ class ActionProcessor:
 
         self.action_control_mode = mode
 
-    def set_control_options(self, control_hand_base=None, control_fingers=None):
+    def set_control_options(self, policy_controls_hand_base=None, policy_controls_fingers=None):
         """
-        Set which parts of the hand are controlled by the policy.
+        Set which parts of the hand are controlled by the policy vs rule-based control.
+
+        When policy_controls_hand_base=False, the hand base is controlled by rule-based controllers
+        instead of policy actions. The base DOFs can still move, but their motion is 
+        determined by programmatic rules rather than learned policy.
 
         Args:
-            control_hand_base: Whether to control the hand base (6 DOFs)
-            control_fingers: Whether to control the finger joints (12 DOFs)
+            policy_controls_hand_base: Whether the POLICY controls the hand base (6 DOFs)
+                                      If False, use rule-based control for base motion
+            policy_controls_fingers: Whether the POLICY controls the finger joints (12 DOFs)  
+                                    If False, use rule-based control for finger motion
         """
-        if control_hand_base is not None:
-            self.control_hand_base = control_hand_base
-        if control_fingers is not None:
-            self.control_fingers = control_fingers
+        if policy_controls_hand_base is not None:
+            self.policy_controls_hand_base = policy_controls_hand_base
+        if policy_controls_fingers is not None:
+            self.policy_controls_fingers = policy_controls_fingers
 
         # Validate control options - at least one must be True
-        if not self.control_hand_base and not self.control_fingers:
-            raise ValueError("At least one of control_hand_base or control_fingers must be True")
+        if not self.policy_controls_hand_base and not self.policy_controls_fingers:
+            raise ValueError("At least one of policy_controls_hand_base or policy_controls_fingers must be True")
 
     def set_default_targets(self, base_targets=None, finger_targets=None):
         """
@@ -214,12 +220,17 @@ class ActionProcessor:
 
     def set_velocity_limits(self, finger_vel_limit=None, base_lin_vel_limit=None, base_ang_vel_limit=None):
         """
-        Set velocity limits for safety.
+        Set component-wise velocity limits for position_delta mode action scaling.
+
+        These limits are applied per component (each joint/axis independently):
+        - finger_vel_limit: Applied to each finger joint individually
+        - base_lin_vel_limit: Applied to each base linear axis (x, y, z) individually  
+        - base_ang_vel_limit: Applied to each base angular axis (rx, ry, rz) individually
 
         Args:
-            finger_vel_limit: Finger joint velocity limit (rad/s)
-            base_lin_vel_limit: Base linear velocity limit (m/s)
-            base_ang_vel_limit: Base angular velocity limit (rad/s)
+            finger_vel_limit: Maximum velocity for each finger joint (rad/s)
+            base_lin_vel_limit: Maximum velocity for each base linear axis (m/s)
+            base_ang_vel_limit: Maximum velocity for each base angular axis (rad/s)
         """
         if finger_vel_limit is not None:
             self.policy_finger_velocity_limit = finger_vel_limit
@@ -267,7 +278,7 @@ class ActionProcessor:
             self.dof_pos = dof_pos
 
             # Validate joint mappings
-            if (self.control_fingers and
+            if (self.policy_controls_fingers and
                 (joint_to_control is None or active_joint_names is None)):
                 print("Error: joint_to_control and active_joint_names must be provided when controlling fingers")
                 return False
@@ -284,7 +295,7 @@ class ActionProcessor:
             action_idx = 0
 
             # Apply base actions
-            if self.control_hand_base:
+            if self.policy_controls_hand_base:
                 # Extract base actions
                 if self.actions.shape[1] > 0 and self.NUM_BASE_DOFS > 0:
                     base_actions = self.actions[:, :min(self.NUM_BASE_DOFS, self.actions.shape[1])]
@@ -361,7 +372,7 @@ class ActionProcessor:
                         print(f"Error: Cannot assign default_base_targets to targets[:, :self.NUM_BASE_DOFS]")
 
             # Apply finger actions
-            if self.control_fingers:
+            if self.policy_controls_fingers:
                 # Extract finger actions
                 if self.actions.shape[1] > action_idx and self.NUM_ACTIVE_FINGER_DOFS > 0:
                     finger_end_idx = min(action_idx + self.NUM_ACTIVE_FINGER_DOFS, self.actions.shape[1])
@@ -507,7 +518,7 @@ class ActionProcessor:
 
                 # CRITICAL: Directly set the base DOF targets from prev_active_targets
                 # This skips all the target tensor transformations that might zero things out
-                if self.control_hand_base:
+                if self.policy_controls_hand_base:
                     for env_idx in range(self.num_envs):
                         for dof_idx in range(min(self.NUM_BASE_DOFS, direct_targets.shape[1])):
                             if dof_idx < self.prev_active_targets.shape[1]:
