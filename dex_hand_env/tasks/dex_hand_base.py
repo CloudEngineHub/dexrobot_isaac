@@ -152,31 +152,6 @@ class DexHandBase(VecTask):
             "r_f_link4_pad", "r_f_link5_pad"
         ]
         
-        # Map from hardware active DoFs to full finger joint space
-        # based on HardwareMapping from dexhand_ros.py
-        self.active_joint_mapping = {
-            "th_dip": ["r_f_joint1_3", "r_f_joint1_4"],
-            "th_mcp": ["r_f_joint1_2"],
-            "th_rot": ["r_f_joint1_1"],
-            "ff_spr": ["r_f_joint2_1", "r_f_joint4_1", "r_f_joint5_1"],
-            "ff_dip": ["r_f_joint2_3", "r_f_joint2_4"],
-            "ff_mcp": ["r_f_joint2_2"],
-            "mf_dip": ["r_f_joint3_3", "r_f_joint3_4"],
-            "mf_mcp": ["r_f_joint3_2"],
-            "rf_dip": ["r_f_joint4_3", "r_f_joint4_4"],
-            "rf_mcp": ["r_f_joint4_2"],
-            "lf_dip": ["r_f_joint5_3", "r_f_joint5_4"],
-            "lf_mcp": ["r_f_joint5_2"]
-        }
-        
-        # Create reverse mapping from joint name to controller
-        self.joint_to_control = {}
-        for control, joints in self.active_joint_mapping.items():
-            for joint in joints:
-                self.joint_to_control[joint] = control
-        
-        # Active joint names (12 DoFs that can be controlled directly)
-        self.active_joint_names = list(self.active_joint_mapping.keys())
         
         # Default hand asset file
         self.hand_asset_file = "dexrobot_mujoco/dexrobot_mujoco/models/dexhand021_right_simplified_floating.xml"
@@ -528,7 +503,7 @@ class DexHandBase(VecTask):
         )
         
         # Initialize observation encoder now that we know the action space size
-        observation_keys = self.cfg["env"].get("observationKeys", ["dof_pos", "dof_vel", "hand_pose", "contact_forces"])
+        observation_keys = self.cfg["env"].get("observationKeys", ["base_dof_pos", "base_dof_vel", "finger_dof_pos", "finger_dof_vel", "hand_pose", "contact_forces"])
         
         self.observation_encoder.initialize(
             observation_keys=observation_keys,
@@ -536,7 +511,8 @@ class DexHandBase(VecTask):
             fingertip_indices=self.fingertip_indices,
             joint_to_control=self.hand_initializer.joint_to_control,
             active_joint_names=self.hand_initializer.active_joint_names,
-            num_actions=self.num_actions
+            num_actions=self.num_actions,
+            action_processor=self.action_processor
         )
         
         # Set observation space dimensions needed by VecTask

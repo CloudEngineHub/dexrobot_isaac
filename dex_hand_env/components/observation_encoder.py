@@ -77,7 +77,7 @@ class ObservationEncoder:
 
     def initialize(self, observation_keys: List[str], hand_indices: List[int], 
                   fingertip_indices: List[int], joint_to_control: Dict[str, str], 
-                  active_joint_names: List[str], num_actions: int = None):
+                  active_joint_names: List[str], num_actions: int = None, action_processor=None):
         """
         Initialize the observation encoder with configuration.
         
@@ -88,12 +88,17 @@ class ObservationEncoder:
             joint_to_control: Mapping from joint names to control names
             active_joint_names: List of active joint names
             num_actions: Actual number of actions in the action space
+            action_processor: Reference to action processor for accessing DOF targets
         """
         self.observation_keys = observation_keys
         self.hand_indices = hand_indices
         self.fingertip_indices = fingertip_indices
         self.joint_to_control = joint_to_control
         self.active_joint_names = active_joint_names
+        self.action_processor = action_processor
+        
+        # Pre-compute active finger DOF indices for efficient observation extraction
+        self.active_finger_dof_indices = self._compute_active_finger_dof_indices()
         
         # Initialize previous actions tensor if needed
         if "prev_actions" in self.observation_keys:
@@ -108,9 +113,25 @@ class ObservationEncoder:
         test_obs_dict = self._compute_default_observations()
         test_task_obs_dict = self._compute_task_observations(test_obs_dict)
         merged_obs_dict = {**test_obs_dict, **test_task_obs_dict}
+        
+        # Print dimensions of each observation component
+        print("Observation component dimensions:")
+        total_dim = 0
+        for key in self.observation_keys:
+            if key in merged_obs_dict:
+                tensor = merged_obs_dict[key]
+                if len(tensor.shape) > 2:
+                    tensor = tensor.reshape(self.num_envs, -1)
+                dim = tensor.shape[1]
+                total_dim += dim
+                print(f"  {key}: {dim}")
+            else:
+                print(f"  {key}: MISSING")
+        
         test_obs_tensor = self._concat_selected_observations(merged_obs_dict)
         
         self.num_observations = test_obs_tensor.shape[1]
+        print(f"Total observation dimension: {total_dim}")
         print(f"ObservationEncoder initialized with dynamic observation dimension: {self.num_observations}")
         
         # Initialize observation buffers
@@ -151,6 +172,45 @@ class ObservationEncoder:
         
         return self.obs_buf, merged_obs_dict
 
+    def _compute_active_finger_dof_indices(self) -> torch.Tensor:
+        """
+        Pre-compute indices mapping from full DOF tensor to active finger DOFs.
+        
+        Returns:
+            torch.Tensor of shape (num_active_finger_dofs,) with DOF indices
+        """
+        if not self.dof_names:
+            raise RuntimeError("DOF names not available from asset. Cannot compute active finger DOF indices.")
+        
+        if not self.joint_to_control:
+            raise RuntimeError("joint_to_control mapping not provided. Cannot compute active finger DOF indices.")
+        
+        if not self.active_joint_names:
+            raise RuntimeError("active_joint_names not provided. Cannot compute active finger DOF indices.")
+        
+        # Create mapping from control name to its index in the active joint list
+        control_to_idx = {name: idx for idx, name in enumerate(self.active_joint_names)}
+        
+        # Create array to store DOF indices for each active control
+        active_indices = torch.full((len(self.active_joint_names),), -1, dtype=torch.long, device=self.device)
+        
+        # Map each finger DOF to its corresponding active control index
+        for i, dof_name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
+            if dof_name in self.joint_to_control:
+                control_name = self.joint_to_control[dof_name]
+                if control_name in control_to_idx:
+                    control_idx = control_to_idx[control_name]
+                    active_indices[control_idx] = i + self.NUM_BASE_DOFS
+        
+        # Check that all active controls have been mapped
+        valid_mask = active_indices >= 0
+        if not valid_mask.all():
+            missing_indices = torch.nonzero(~valid_mask).flatten()
+            missing_controls = [self.active_joint_names[idx] for idx in missing_indices]
+            raise RuntimeError(f"Failed to map active finger controls to DOF indices: {missing_controls}")
+        
+        return active_indices
+
     def _compute_default_observations(self) -> Dict[str, torch.Tensor]:
         """
         Compute default observations dictionary.
@@ -171,68 +231,21 @@ class ObservationEncoder:
             print("Warning: Tensor handles not initialized. Cannot compute observations.")
             return obs_dict
         
-        # DOF positions (base + active finger DOFs)
-        if "dof_pos" in self.observation_keys:
-            active_positions = torch.zeros(
-                (self.num_envs, self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS),
-                device=self.device
-            )
-            
-            # Copy base DOF positions
-            active_positions[:, :self.NUM_BASE_DOFS] = dof_pos[:, :self.NUM_BASE_DOFS]
-            
-            # Map finger DOF positions to active DOFs
-            if self.joint_to_control is not None and self.active_joint_names is not None:
-                if not self.dof_names:
-                    print("Warning: DOF names not available from asset. Some observations may be incorrect.")
-                else:
-                    for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
-                        if name not in self.joint_to_control:
-                            continue
-                            
-                        try:
-                            control_name = self.joint_to_control[name]
-                            control_idx = self.active_joint_names.index(control_name)
-                            active_idx = self.NUM_BASE_DOFS + control_idx
-                            
-                            if active_idx < active_positions.shape[1]:
-                                dof_idx = i + self.NUM_BASE_DOFS
-                                if dof_idx < dof_pos.shape[1]:
-                                    active_positions[:, active_idx] = dof_pos[:, dof_idx]
-                        except (ValueError, IndexError, KeyError):
-                            pass  # Safely continue if mapping fails
-            
-            obs_dict["dof_pos"] = active_positions
+        # Base DOF positions (6 DOFs: x, y, z, rx, ry, rz)
+        if "base_dof_pos" in self.observation_keys:
+            obs_dict["base_dof_pos"] = dof_pos[:, :self.NUM_BASE_DOFS]
         
-        # DOF velocities (base + active finger DOFs)
-        if "dof_vel" in self.observation_keys:
-            active_velocities = torch.zeros(
-                (self.num_envs, self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS),
-                device=self.device
-            )
-            
-            # Copy base DOF velocities
-            active_velocities[:, :self.NUM_BASE_DOFS] = dof_vel[:, :self.NUM_BASE_DOFS]
-            
-            # Map finger DOF velocities to active DOFs
-            if self.joint_to_control is not None and self.active_joint_names is not None and self.dof_names:
-                for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
-                    if name not in self.joint_to_control:
-                        continue
-                        
-                    try:
-                        control_name = self.joint_to_control[name]
-                        control_idx = self.active_joint_names.index(control_name)
-                        active_idx = self.NUM_BASE_DOFS + control_idx
-                        
-                        if active_idx < active_velocities.shape[1]:
-                            dof_idx = i + self.NUM_BASE_DOFS
-                            if dof_idx < dof_vel.shape[1]:
-                                active_velocities[:, active_idx] = dof_vel[:, dof_idx]
-                    except (ValueError, IndexError, KeyError):
-                        pass  # Safely continue if mapping fails
-            
-            obs_dict["dof_vel"] = active_velocities
+        # Base DOF velocities (6 DOFs: x, y, z, rx, ry, rz)
+        if "base_dof_vel" in self.observation_keys:
+            obs_dict["base_dof_vel"] = dof_vel[:, :self.NUM_BASE_DOFS]
+        
+        # Active finger DOF positions (12 active finger controls)
+        if "finger_dof_pos" in self.observation_keys:
+            obs_dict["finger_dof_pos"] = dof_pos[:, self.active_finger_dof_indices]
+        
+        # Active finger DOF velocities (12 active finger controls)
+        if "finger_dof_vel" in self.observation_keys:
+            obs_dict["finger_dof_vel"] = dof_vel[:, self.active_finger_dof_indices]
         
         # Hand pose (position and orientation)
         if "hand_pose" in self.observation_keys and self.hand_indices is not None:
@@ -264,6 +277,26 @@ class ObservationEncoder:
         # Previous actions
         if "prev_actions" in self.observation_keys and self.prev_actions is not None:
             obs_dict["prev_actions"] = self.prev_actions
+        
+        # Base DOF targets (6 DOFs: x, y, z, rx, ry, rz)
+        if "base_dof_target" in self.observation_keys and self.action_processor is not None:
+            if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
+                obs_dict["base_dof_target"] = self.action_processor.current_targets[:, :self.NUM_BASE_DOFS]
+            else:
+                obs_dict["base_dof_target"] = torch.zeros((self.num_envs, self.NUM_BASE_DOFS), device=self.device)
+        
+        # Active finger DOF targets (12 active finger controls)
+        if "finger_dof_target" in self.observation_keys and self.action_processor is not None:
+            if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
+                obs_dict["finger_dof_target"] = self.action_processor.current_targets[:, self.active_finger_dof_indices]
+            else:
+                obs_dict["finger_dof_target"] = torch.zeros((self.num_envs, self.NUM_ACTIVE_FINGER_DOFS), device=self.device)
+        
+        # Contact force magnitude (magnitude for each finger)
+        if "contact_force_magnitude" in self.observation_keys and contact_forces is not None:
+            # Compute magnitude of contact forces for each finger (L2 norm of 3D force)
+            contact_magnitudes = torch.norm(contact_forces, dim=2)  # Shape: (num_envs, num_fingers)
+            obs_dict["contact_force_magnitude"] = contact_magnitudes
         
         return obs_dict
 

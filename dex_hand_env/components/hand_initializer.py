@@ -9,9 +9,32 @@ including loading assets, creating actors, and setting up initial states.
 import os
 import torch
 import numpy as np
+from enum import Enum
+from typing import List, Tuple
 
 # Import IsaacGym
 from isaacgym import gymapi, gymtorch
+
+
+class HardwareMapping(Enum):
+    """Mapping between URDF and hardware joints"""
+
+    th_dip = ("th_dip", ["r_f_joint1_3", "r_f_joint1_4"])
+    th_mcp = ("th_mcp", ["r_f_joint1_2"])
+    th_rot = ("th_rot", ["r_f_joint1_1"])
+    ff_spr = ("ff_spr", ["r_f_joint2_1", "r_f_joint4_1", "r_f_joint5_1"])
+    ff_dip = ("ff_dip", ["r_f_joint2_3", "r_f_joint2_4"])
+    ff_mcp = ("ff_mcp", ["r_f_joint2_2"])
+    mf_dip = ("mf_dip", ["r_f_joint3_3", "r_f_joint3_4"])
+    mf_mcp = ("mf_mcp", ["r_f_joint3_2"])
+    rf_dip = ("rf_dip", ["r_f_joint4_3", "r_f_joint4_4"])
+    rf_mcp = ("rf_mcp", ["r_f_joint4_2"])
+    lf_dip = ("lf_dip", ["r_f_joint5_3", "r_f_joint5_4"])
+    lf_mcp = ("lf_mcp", ["r_f_joint5_2"])
+
+    def __init__(self, control_name: str, joint_names: List[str]):
+        self.control_name = control_name
+        self.joint_names = joint_names
 
 
 class HandInitializer:
@@ -65,25 +88,8 @@ class HandInitializer:
             "r_f_joint5_1", "r_f_joint5_2", "r_f_joint5_3", "r_f_joint5_4"
         ]
         
-        # Map from hardware active DoFs to full finger joint space
-        # based on HardwareMapping from dexhand_ros.py
-        self.active_joint_mapping = {
-            "th_adduction": ["r_f_joint1_1"],
-            "th_mcp": ["r_f_joint1_2"],
-            "th_pip": ["r_f_joint1_3", "r_f_joint1_4"],
-            "ix_adduction": ["r_f_joint2_1"],
-            "ix_mcp": ["r_f_joint2_2"],
-            "ix_pip": ["r_f_joint2_3", "r_f_joint2_4"],
-            "mf_adduction": ["r_f_joint3_1"],
-            "mf_mcp": ["r_f_joint3_2"],
-            "mf_pip": ["r_f_joint3_3", "r_f_joint3_4"],
-            "rf_adduction": ["r_f_joint4_1"],
-            "rf_mcp": ["r_f_joint4_2"],
-            "rf_pip": ["r_f_joint4_3", "r_f_joint4_4"],
-            "lf_adduction": ["r_f_joint5_1"],
-            "lf_mcp": ["r_f_joint5_2"],
-            "lf_pip": ["r_f_joint5_3", "r_f_joint5_4"]
-        }
+        # Use the authoritative hardware mapping
+        self.active_joint_mapping = {member.control_name: member.joint_names for member in HardwareMapping}
         
         # Create reverse mapping from joint name to controller
         self.joint_to_control = {}
@@ -91,7 +97,7 @@ class HandInitializer:
             for joint in joints:
                 self.joint_to_control[joint] = control
         
-        # Active joint names (15 controls mapping to 20 DOFs - 5 fingers × 3 controls each)
+        # Active joint names (12 controls mapping to finger DOFs with coupling)
         self.active_joint_names = list(self.active_joint_mapping.keys())
         
         # Body names for fingertips and fingerpads in the MJCF model

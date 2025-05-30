@@ -29,11 +29,16 @@ env:
 
   # Observation configuration
   observationKeys:              # List of observation components to include in final observation tensor
-    - "dof_pos"                 # DOF positions (base + active finger DOFs)
-    - "dof_vel"                 # DOF velocities (base + active finger DOFs)
+    - "base_dof_pos"            # Base DOF positions (6 DOFs: x, y, z, rx, ry, rz)
+    - "base_dof_vel"            # Base DOF velocities (6 DOFs: x, y, z, rx, ry, rz)
+    - "finger_dof_pos"          # Active finger DOF positions (12 active finger controls)
+    - "finger_dof_vel"          # Active finger DOF velocities (12 active finger controls)
     - "hand_pose"               # Hand root pose (position + orientation)
     - "contact_forces"          # Contact forces (3D force for each finger)
     - "prev_actions"            # Previous actions
+    - "base_dof_target"         # Base DOF targets (6 DOFs: x, y, z, rx, ry, rz)
+    - "finger_dof_target"       # Active finger DOF targets (12 active finger controls)
+    - "contact_force_magnitude" # Contact force magnitude (scalar for each finger)
 
   # Reward parameters
   rewardScales:
