@@ -259,13 +259,19 @@ class ObservationEncoder:
         if "base_dof_vel" in self.observation_keys:
             obs_dict["base_dof_vel"] = dof_vel[:, :self.NUM_BASE_DOFS]
         
-        # Active finger DOF positions (12 active finger controls)
-        if "finger_dof_pos" in self.observation_keys:
-            obs_dict["finger_dof_pos"] = dof_pos[:, self.active_finger_dof_indices]
+        # Active finger DOF positions (12 active finger controls) - for RL observation tensor
+        if "active_finger_dof_pos" in self.observation_keys:
+            obs_dict["active_finger_dof_pos"] = dof_pos[:, self.active_finger_dof_indices]
         
-        # Active finger DOF velocities (12 active finger controls)
-        if "finger_dof_vel" in self.observation_keys:
-            obs_dict["finger_dof_vel"] = dof_vel[:, self.active_finger_dof_indices]
+        # Active finger DOF velocities (12 active finger controls) - for RL observation tensor
+        if "active_finger_dof_vel" in self.observation_keys:
+            obs_dict["active_finger_dof_vel"] = dof_vel[:, self.active_finger_dof_indices]
+        
+        # All finger DOF positions (20 finger DOFs: excluding base 6 DOFs, r_f_joint3_1 is fixed)
+        # Always available in obs_dict for semantic access, but not included in RL tensor by default
+        all_finger_dof_indices = torch.arange(self.NUM_BASE_DOFS, dof_pos.shape[1], device=self.device)
+        obs_dict["all_finger_dof_pos"] = dof_pos[:, all_finger_dof_indices]
+        obs_dict["all_finger_dof_vel"] = dof_vel[:, all_finger_dof_indices]
         
         # Hand pose (position and orientation)
         if "hand_pose" in self.observation_keys and self.hand_indices is not None:
@@ -305,12 +311,19 @@ class ObservationEncoder:
             else:
                 obs_dict["base_dof_target"] = torch.zeros((self.num_envs, self.NUM_BASE_DOFS), device=self.device)
         
-        # Active finger DOF targets (12 active finger controls)
-        if "finger_dof_target" in self.observation_keys and self.action_processor is not None:
+        # Active finger DOF targets (12 active finger controls) - for RL observation tensor
+        if "active_finger_dof_target" in self.observation_keys and self.action_processor is not None:
             if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
-                obs_dict["finger_dof_target"] = self.action_processor.current_targets[:, self.active_finger_dof_indices]
+                obs_dict["active_finger_dof_target"] = self.action_processor.current_targets[:, self.active_finger_dof_indices]
             else:
-                obs_dict["finger_dof_target"] = torch.zeros((self.num_envs, self.NUM_ACTIVE_FINGER_DOFS), device=self.device)
+                obs_dict["active_finger_dof_target"] = torch.zeros((self.num_envs, self.NUM_ACTIVE_FINGER_DOFS), device=self.device)
+        
+        # All finger DOF targets (20 finger DOFs) - always available for semantic access
+        if self.action_processor is not None:
+            if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
+                obs_dict["all_finger_dof_target"] = self.action_processor.current_targets[:, all_finger_dof_indices]
+            else:
+                obs_dict["all_finger_dof_target"] = torch.zeros((self.num_envs, all_finger_dof_indices.shape[0]), device=self.device)
         
         # Contact force magnitude (magnitude for each finger)
         if "contact_force_magnitude" in self.observation_keys and contact_forces is not None:
@@ -592,11 +605,11 @@ class ObservationEncoder:
         
         # Determine which observation component to use
         if obs_type == "pos":
-            component_key = "finger_dof_pos"
+            component_key = "active_finger_dof_pos"
         elif obs_type == "vel":
-            component_key = "finger_dof_vel"
+            component_key = "active_finger_dof_vel"
         elif obs_type == "target":
-            component_key = "finger_dof_target"
+            component_key = "active_finger_dof_target"
         else:
             raise ValueError(f"Unknown obs_type: {obs_type}. Available: pos, vel, target")
         
@@ -605,6 +618,55 @@ class ObservationEncoder:
         
         component_start, _ = self.component_slice_indices[component_key]
         return component_start + control_idx
+
+    def get_raw_finger_dof(self, dof_name: str, obs_type: str = "pos", 
+                           obs_data = None, env_idx: int = None):
+        """
+        Get finger DOF value by raw DOF name (including inactive DOFs like r_f_joint3_1).
+        
+        Args:
+            dof_name: Name of the raw finger DOF (e.g., "r_f_joint1_1", "r_f_joint3_1", etc.)
+            obs_type: Type of observation ("pos", "vel", "target")
+            obs_data: Either observation tensor OR observation dictionary (not both)
+            env_idx: Environment index (if None, returns data for all environments)
+            
+        Returns:
+            DOF value(s) - scalar if env_idx specified, tensor if env_idx is None
+        """
+        if dof_name not in self.raw_dof_name_to_index:
+            raise ValueError(f"Unknown DOF name: {dof_name}. Available: {list(self.raw_dof_name_to_index.keys())}")
+        
+        if obs_data is None:
+            raise ValueError("obs_data must be provided")
+        
+        # Determine which observation component to use
+        if obs_type == "pos":
+            component_key = "all_finger_dof_pos"
+        elif obs_type == "vel":
+            component_key = "all_finger_dof_vel"
+        elif obs_type == "target":
+            component_key = "all_finger_dof_target"
+        else:
+            raise ValueError(f"Unknown obs_type: {obs_type}. Available: pos, vel, target")
+        
+        # Check if obs_data is a dictionary
+        if isinstance(obs_data, dict):
+            if component_key not in obs_data:
+                raise ValueError(f"Component '{component_key}' not found in obs_dict")
+            
+            raw_dof_idx = self.raw_dof_name_to_index[dof_name]
+            finger_dof_idx = raw_dof_idx - self.NUM_BASE_DOFS
+            
+            if finger_dof_idx < 0:
+                raise ValueError(f"DOF {dof_name} is not a finger DOF (index {raw_dof_idx} < {self.NUM_BASE_DOFS})")
+            
+            data = obs_data[component_key][:, finger_dof_idx]
+            return data[env_idx].item() if env_idx is not None else data
+        
+        # obs_data is a tensor - raw finger DOFs not available in concatenated tensor
+        else:
+            raise ValueError(f"Raw finger DOF '{dof_name}' access requires obs_dict. "
+                           f"obs_tensor only contains active finger DOFs, not all raw DOFs.")
 
     def get_obs_range_for_finger_pose(self, finger_body_name: str, frame: str = "world"):
         """
@@ -661,12 +723,236 @@ class ObservationEncoder:
         
         return (force_start, force_end)
 
-    def parse_obs_tensor(self, obs_tensor: torch.Tensor = None, env_idx: int = 0):
+    def get_base_dof_value(self, joint_name: str, obs_type: str = "pos", obs_data = None, env_idx: int = None):
+        """
+        Get base DOF value by joint name.
+        
+        Args:
+            joint_name: Name of the base joint (e.g., "ARTx", "ARTy", etc.)
+            obs_type: Type of observation ("pos", "vel", "target")
+            obs_data: Either observation tensor OR observation dictionary (not both)
+            env_idx: Environment index (if None, returns data for all environments)
+            
+        Returns:
+            DOF value(s) - scalar if env_idx specified, tensor if env_idx is None
+        """
+        if joint_name not in self.base_joint_to_index:
+            raise ValueError(f"Unknown base joint name: {joint_name}. Available: {list(self.base_joint_to_index.keys())}")
+        
+        if obs_data is None:
+            raise ValueError("obs_data must be provided")
+        
+        joint_idx = self.base_joint_to_index[joint_name]
+        
+        # Determine which observation component to use
+        if obs_type == "pos":
+            component_key = "base_dof_pos"
+        elif obs_type == "vel":
+            component_key = "base_dof_vel"
+        elif obs_type == "target":
+            component_key = "base_dof_target"
+        else:
+            raise ValueError(f"Unknown obs_type: {obs_type}. Available: pos, vel, target")
+        
+        # Check if obs_data is a dictionary
+        if isinstance(obs_data, dict):
+            if component_key not in obs_data:
+                raise ValueError(f"Component '{component_key}' not found in obs_dict")
+            
+            data = obs_data[component_key][:, joint_idx]
+            return data[env_idx].item() if env_idx is not None else data
+        
+        # obs_data is a tensor
+        else:
+            if component_key not in self.component_slice_indices:
+                raise ValueError(f"Component '{component_key}' not found in observation tensor")
+            
+            component_start, _ = self.component_slice_indices[component_key]
+            tensor_idx = component_start + joint_idx
+            
+            if env_idx is not None:
+                return obs_data[env_idx, tensor_idx].item()
+            else:
+                return obs_data[:, tensor_idx]
+
+    def get_active_finger_dof_value(self, control_name: str, obs_type: str = "pos", obs_data = None, env_idx: int = None):
+        """
+        Get active finger DOF value by control name.
+        
+        Args:
+            control_name: Name of the finger control (e.g., "th_dip", "if_pip", etc.)
+            obs_type: Type of observation ("pos", "vel", "target")
+            obs_data: Either observation tensor OR observation dictionary (not both)
+            env_idx: Environment index (if None, returns data for all environments)
+            
+        Returns:
+            DOF value(s) - scalar if env_idx specified, tensor if env_idx is None
+        """
+        if control_name not in self.control_name_to_index:
+            raise ValueError(f"Unknown control name: {control_name}. Available: {list(self.control_name_to_index.keys())}")
+        
+        if obs_data is None:
+            raise ValueError("obs_data must be provided")
+        
+        control_idx = self.control_name_to_index[control_name]
+        
+        # Determine which observation component to use
+        if obs_type == "pos":
+            component_key = "active_finger_dof_pos"
+        elif obs_type == "vel":
+            component_key = "active_finger_dof_vel"
+        elif obs_type == "target":
+            component_key = "active_finger_dof_target"
+        else:
+            raise ValueError(f"Unknown obs_type: {obs_type}. Available: pos, vel, target")
+        
+        # Check if obs_data is a dictionary
+        if isinstance(obs_data, dict):
+            if component_key not in obs_data:
+                raise ValueError(f"Component '{component_key}' not found in obs_dict")
+            
+            data = obs_data[component_key][:, control_idx]
+            return data[env_idx].item() if env_idx is not None else data
+        
+        # obs_data is a tensor
+        else:
+            if component_key not in self.component_slice_indices:
+                raise ValueError(f"Component '{component_key}' not found in observation tensor")
+            
+            component_start, _ = self.component_slice_indices[component_key]
+            tensor_idx = component_start + control_idx
+            
+            if env_idx is not None:
+                return obs_data[env_idx, tensor_idx].item()
+            else:
+                return obs_data[:, tensor_idx]
+
+    def get_finger_pose_value(self, finger_body_name: str, frame: str = "world", obs_data = None, env_idx: int = None):
+        """
+        Get finger pose by body name.
+        
+        Args:
+            finger_body_name: Name of the finger body (e.g., "r_f_link1_tip", "r_f_link2_pad", etc.)
+            frame: Reference frame ("world" or "hand")
+            obs_data: Either observation tensor OR observation dictionary (not both)
+            env_idx: Environment index (if None, returns data for all environments)
+            
+        Returns:
+            Pose data - dict with 'position' and 'orientation' (numpy arrays if env_idx specified, tensors if None)
+        """
+        if finger_body_name not in self.finger_body_to_index:
+            raise ValueError(f"Unknown finger body name: {finger_body_name}. Available: {list(self.finger_body_to_index.keys())}")
+        
+        if obs_data is None:
+            raise ValueError("obs_data must be provided")
+        
+        body_type, finger_idx = self.finger_body_to_index[finger_body_name]
+        
+        # Determine which observation component to use
+        if body_type == "fingertip":
+            component_key = f"fingertip_poses_{frame}"
+        elif body_type == "fingerpad":
+            component_key = f"fingerpad_poses_{frame}"
+        else:
+            raise ValueError(f"Unknown body type: {body_type}")
+        
+        # Check if obs_data is a dictionary
+        if isinstance(obs_data, dict):
+            if component_key not in obs_data:
+                raise ValueError(f"Component '{component_key}' not found in obs_dict")
+            
+            pose_start = finger_idx * 7
+            pose_end = pose_start + 7
+            pose_data = obs_data[component_key][:, pose_start:pose_end]
+            
+            if env_idx is not None:
+                return {
+                    'position': pose_data[env_idx, :3].cpu().numpy(),
+                    'orientation': pose_data[env_idx, 3:7].cpu().numpy()
+                }
+            else:
+                return {
+                    'position': pose_data[:, :3],
+                    'orientation': pose_data[:, 3:7]
+                }
+        
+        # obs_data is a tensor
+        else:
+            if component_key not in self.component_slice_indices:
+                raise ValueError(f"Component '{component_key}' not found in observation tensor")
+            
+            component_start, _ = self.component_slice_indices[component_key]
+            pose_start = component_start + finger_idx * 7
+            pose_end = pose_start + 7
+            
+            if env_idx is not None:
+                pose_data = obs_data[env_idx, pose_start:pose_end]
+                return {
+                    'position': pose_data[:3].cpu().numpy(),
+                    'orientation': pose_data[3:7].cpu().numpy()
+                }
+            else:
+                pose_data = obs_data[:, pose_start:pose_end]
+                return {
+                    'position': pose_data[:, :3],
+                    'orientation': pose_data[:, 3:7]
+                }
+
+    def get_contact_force_value(self, finger_idx: int, obs_data = None, env_idx: int = None):
+        """
+        Get contact force by finger index.
+        
+        Args:
+            finger_idx: Finger index (0-4 for 5 fingers)
+            obs_data: Either observation tensor OR observation dictionary (not both)
+            env_idx: Environment index (if None, returns data for all environments)
+            
+        Returns:
+            Contact force - numpy array if env_idx specified, tensor if env_idx is None
+        """
+        if finger_idx < 0 or finger_idx >= 5:
+            raise ValueError(f"Finger index must be 0-4, got {finger_idx}")
+        
+        if obs_data is None:
+            raise ValueError("obs_data must be provided")
+        
+        component_key = "contact_forces"
+        
+        # Check if obs_data is a dictionary
+        if isinstance(obs_data, dict):
+            if component_key not in obs_data:
+                raise ValueError(f"Component '{component_key}' not found in obs_dict")
+            
+            force_start = finger_idx * 3
+            force_end = force_start + 3
+            force_data = obs_data[component_key][:, force_start:force_end]
+            
+            if env_idx is not None:
+                return force_data[env_idx].cpu().numpy()
+            else:
+                return force_data
+        
+        # obs_data is a tensor
+        else:
+            if component_key not in self.component_slice_indices:
+                raise ValueError(f"Component '{component_key}' not found in observation tensor")
+            
+            component_start, _ = self.component_slice_indices[component_key]
+            force_start = component_start + finger_idx * 3
+            force_end = force_start + 3
+            
+            if env_idx is not None:
+                return obs_data[env_idx, force_start:force_end].cpu().numpy()
+            else:
+                return obs_data[:, force_start:force_end]
+
+    def parse_obs_tensor(self, obs_tensor: torch.Tensor = None, obs_dict: Dict[str, torch.Tensor] = None, env_idx: int = 0):
         """
         Parse observation tensor and provide convenient access to components.
         
         Args:
             obs_tensor: Observation tensor to parse (if None, uses current observation)
+            obs_dict: Observation dictionary for accessing all_finger_dof components (if None, uses limited access)
             env_idx: Environment index
             
         Returns:
@@ -684,7 +970,7 @@ class ObservationEncoder:
         else:
             obs_data = obs_tensor[env_idx]
         
-        return ObservationParser(obs_data, self)
+        return ObservationParser(obs_data, self, obs_dict)
 
 
 class ObservationParser:
@@ -692,9 +978,10 @@ class ObservationParser:
     Helper class to parse and access observation tensor components.
     """
     
-    def __init__(self, obs_data: torch.Tensor, encoder: 'ObservationEncoder'):
+    def __init__(self, obs_data: torch.Tensor, encoder: 'ObservationEncoder', obs_dict: Dict[str, torch.Tensor] = None):
         self.obs_data = obs_data
         self.encoder = encoder
+        self.obs_dict = obs_dict
     
     def get_base_dof(self, joint_name: str, obs_type: str = "pos"):
         """Get base DOF value by joint name."""
@@ -719,3 +1006,20 @@ class ObservationParser:
         """Get contact force by finger index."""
         start_idx, end_idx = self.encoder.get_obs_range_for_contact_force(finger_idx)
         return self.obs_data[start_idx:end_idx].cpu().numpy()
+    
+    def get_raw_finger_dof(self, dof_name: str, obs_type: str = "pos"):
+        """
+        Get any finger DOF value by raw DOF name (including inactive DOFs).
+        Requires obs_dict to be provided during parsing.
+        
+        Args:
+            dof_name: Name of the raw finger DOF (e.g., "r_f_joint1_1", "r_f_joint3_1", etc.)
+            obs_type: Type of observation ("pos", "vel", "target")
+            
+        Returns:
+            DOF value for the specified finger DOF (single environment)
+        """
+        if self.obs_dict is None:
+            raise ValueError("obs_dict must be provided during parsing to access raw finger DOF values")
+        
+        return self.encoder.get_raw_finger_dof(dof_name, obs_type, self.obs_dict, env_idx=0)
