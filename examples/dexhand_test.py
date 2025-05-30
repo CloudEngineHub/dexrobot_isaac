@@ -379,6 +379,9 @@ def main():
     print("=" * 60)
 
     for step in range(total_steps):
+        # Exit early if we've reached the requested number of steps
+        if step >= args.steps:
+            break
         # Initialize policy actions with proper defaults:
         # - Base DOFs: 0.0 (middle of range, neutral position)
         # - Finger DOFs: -1.0 (minimum of range, closed/contracted position)
