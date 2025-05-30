@@ -358,6 +358,9 @@ class DexHandBase(VecTask):
             base_ang_vel_limit=self.cfg["env"].get("maxBaseAngularVelocity", 1.5)
         )
         
+        # Set initial control_dt (will be updated after reset when physics steps are auto-detected)
+        self.action_processor.set_control_dt(self.physics_manager.control_dt)
+        
         # Create observation encoder
         self.observation_encoder = ObservationEncoder(
             gym=self.gym,
@@ -752,6 +755,10 @@ class DexHandBase(VecTask):
             
             # Physics step count tracking for auto-detecting steps per control
             self.physics_manager.mark_control_step()
+            
+            # Update action processor control_dt if it was auto-detected and changed
+            if self.physics_manager.auto_detected_physics_steps:
+                self.action_processor.set_control_dt(self.physics_manager.control_dt)
             
             # Update extras
             self.extras = {

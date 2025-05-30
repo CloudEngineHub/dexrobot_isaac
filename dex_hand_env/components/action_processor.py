@@ -102,6 +102,9 @@ class ActionProcessor:
         self.policy_base_lin_velocity_limit = 1.0
         self.policy_base_ang_velocity_limit = 1.5
         
+        # Control timestep for position_delta mode (must be set before processing actions)
+        self.control_dt = None
+        
         # Initialize with empty tensors - will be properly initialized later
         self.dof_pos = None
         self.prev_active_targets = None
@@ -225,6 +228,17 @@ class ActionProcessor:
         if base_ang_vel_limit is not None:
             self.policy_base_ang_velocity_limit = base_ang_vel_limit
     
+    def set_control_dt(self, control_dt):
+        """
+        Set the control timestep for position_delta mode.
+        
+        Args:
+            control_dt: Control timestep in seconds
+        """
+        if control_dt is None or control_dt <= 0:
+            raise ValueError(f"Invalid control_dt: {control_dt}. Must be positive.")
+        self.control_dt = control_dt
+    
     def process_actions(self, actions, dof_pos, joint_to_control=None, active_joint_names=None, task_targets=None):
         """
         Process actions to generate DOF position targets.
@@ -243,6 +257,10 @@ class ActionProcessor:
             if actions is None:
                 print("Warning: Actions is None, skipping action processing")
                 return False
+            
+            # Validate control_dt is set for position_delta mode
+            if self.action_control_mode == "position_delta" and self.control_dt is None:
+                raise RuntimeError("control_dt must be set before processing actions in position_delta mode. Call set_control_dt() first.")
                 
             # Store actions for reference
             self.actions = actions.clone()
@@ -274,16 +292,22 @@ class ActionProcessor:
                     # Base targets from actions (position control)
                     base_pos_targets = None
                     
-                    # Scale base actions from [-1, +1] to [DOF_min, DOF_max] like finger actions
+                    # Scale base actions based on control mode
                     scaled_base_actions = torch.zeros_like(base_actions)
                     for i in range(min(self.NUM_BASE_DOFS, base_actions.shape[1])):
-                        dof_min = self.dof_lower_limits[i]
-                        dof_max = self.dof_upper_limits[i]
-                        
-                        
-                        # Map action from [-1, +1] to [dof_min, dof_max]
-                        # action = -1 -> dof_min, action = +1 -> dof_max
-                        scaled_base_actions[:, i] = (base_actions[:, i] + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
+                        if self.action_control_mode == "position":
+                            # Position mode: map action from [-1, +1] to [dof_min, dof_max]
+                            dof_min = self.dof_lower_limits[i]
+                            dof_max = self.dof_upper_limits[i]
+                            scaled_base_actions[:, i] = (base_actions[:, i] + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
+                        elif self.action_control_mode == "position_delta":
+                            # Position delta mode: map action from [-1, +1] to [-max_pos_delta, +max_pos_delta]
+                            # where max_pos_delta = control_dt * max_velocity
+                            if i < 3:  # Translation DOFs (x, y, z)
+                                max_pos_delta = self.control_dt * self.policy_base_lin_velocity_limit
+                            else:  # Rotation DOFs (rx, ry, rz)
+                                max_pos_delta = self.control_dt * self.policy_base_ang_velocity_limit
+                            scaled_base_actions[:, i] = base_actions[:, i] * max_pos_delta
                     
                     if self.action_control_mode == "position":
                         # Direct position targets
@@ -386,29 +410,27 @@ class ActionProcessor:
                                 if joint_name in dof_name_to_idx:
                                     dof_idx = dof_name_to_idx[joint_name]
                                     
-                                    # Scale action from [-1, +1] to [DOF_min, DOF_max]
-                                    if self.dof_lower_limits is not None and self.dof_upper_limits is not None:
-                                        dof_min = self.dof_lower_limits[dof_idx]
-                                        dof_max = self.dof_upper_limits[dof_idx]
-                                        
-                                        # Map action from [-1, +1] to [dof_min, dof_max]
-                                        # action = -1 -> dof_min, action = +1 -> dof_max
-                                        scaled_action = (raw_action_value + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
-                                        final_target = scaled_action * scale
-                                        
-                                        if self.action_control_mode == "position":
-                                            # Direct position control
+                                    # Scale action based on control mode
+                                    if self.action_control_mode == "position":
+                                        # Position mode: map action from [-1, +1] to [dof_min, dof_max]
+                                        if self.dof_lower_limits is not None and self.dof_upper_limits is not None:
+                                            dof_min = self.dof_lower_limits[dof_idx]
+                                            dof_max = self.dof_upper_limits[dof_idx]
+                                            scaled_action = (raw_action_value + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
+                                            final_target = scaled_action * scale
                                             targets[:, dof_idx] = final_target
-                                        elif self.action_control_mode == "position_delta":
-                                            # Delta control: add to current position
-                                            targets[:, dof_idx] = self.dof_pos[:, dof_idx] + final_target
+                                        else:
+                                            # Fallback: use raw action value
+                                            targets[:, dof_idx] = raw_action_value * scale
+                                    elif self.action_control_mode == "position_delta":
+                                        # Position delta mode: map action from [-1, +1] to [-max_pos_delta, +max_pos_delta]
+                                        # where max_pos_delta = control_dt * max_finger_velocity
+                                        max_pos_delta = self.control_dt * self.policy_finger_velocity_limit
+                                        scaled_delta = raw_action_value * max_pos_delta * scale
+                                        targets[:, dof_idx] = self.dof_pos[:, dof_idx] + scaled_delta
                                         
-                                        # Debug output for specific joints (disabled)
-                                        # if joint_name in ['r_f_joint1_1', 'r_f_joint1_2', 'r_f_joint1_3']:
-                                        #     print(f"DEBUG scaling for {joint_name}: action={raw_action_value.item():.3f}, dof_min={dof_min:.3f}, dof_max={dof_max:.3f}, scaled={scaled_action.item():.6f}, scale={scale:.3f}, final={final_target.item():.6f}")
                                     else:
-                                        # Fallback: use raw action value
-                                        targets[:, dof_idx] = raw_action_value * scale
+                                        raise ValueError(f"Unknown control mode: {self.action_control_mode}")
                         
                         # Fix r_f_joint3_1 to 0 (middle finger spread)
                         if "r_f_joint3_1" in dof_name_to_idx:
