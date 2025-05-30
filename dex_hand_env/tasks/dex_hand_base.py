@@ -189,6 +189,9 @@ class DexHandBase(VecTask):
         # Initialize observation dict
         self.obs_dict = {}
         
+        # Create index mappings for convenient access (must be before _setup_additional_tensors)
+        self._create_index_mappings()
+        
         # Additional setup (should only happen after components are created)
         self._setup_additional_tensors()
         
@@ -515,7 +518,13 @@ class DexHandBase(VecTask):
             joint_to_control=self.hand_initializer.joint_to_control,
             active_joint_names=self.hand_initializer.active_joint_names,
             num_actions=self.num_actions,
-            action_processor=self.action_processor
+            action_processor=self.action_processor,
+            index_mappings={
+                'base_joint_to_index': self.base_joint_to_index,
+                'control_name_to_index': self.control_name_to_index,
+                'raw_dof_name_to_index': self.raw_dof_name_to_index,
+                'finger_body_to_index': self.finger_body_to_index
+            }
         )
         
         # Set observation space dimensions needed by VecTask
@@ -775,6 +784,15 @@ class DexHandBase(VecTask):
         
         return obs, rew, done, info
 
+    def get_observations_dict(self):
+        """
+        Get the current observation dictionary for external access.
+        
+        Returns:
+            Dictionary containing all computed observations
+        """
+        return self.obs_dict.copy() if hasattr(self, 'obs_dict') else {}
+
     def set_rule_based_controllers(self, base_controller=None, finger_controller=None):
         """
         Set rule-based control functions for hand parts not controlled by the policy.
@@ -865,6 +883,48 @@ class DexHandBase(VecTask):
                 print(f"Error setting DOF targets: {e}")
                 import traceback
                 traceback.print_exc()
+
+    def _create_index_mappings(self):
+        """
+        Create index mappings for convenient access to tensors by key names.
+        """
+        print("Creating index mappings...")
+        
+        # 1. Base joint name to index mapping (ARTx, ARTy, etc. -> 0-5)
+        self.base_joint_to_index = {}
+        for i, joint_name in enumerate(self.base_joint_names):
+            self.base_joint_to_index[joint_name] = i
+        
+        # 2. Control name to active finger DOF index mapping (th_dip, etc. -> 0-11)
+        self.control_name_to_index = {}
+        if hasattr(self, 'hand_initializer') and hasattr(self.hand_initializer, 'active_joint_names'):
+            for i, control_name in enumerate(self.hand_initializer.active_joint_names):
+                self.control_name_to_index[control_name] = i
+        
+        # 3. Raw finger DOF name to raw DOF tensor index mapping (r_f_joint1_1, etc. -> 0-25)
+        self.raw_dof_name_to_index = {}
+        if hasattr(self, 'observation_encoder') and hasattr(self.observation_encoder, 'dof_names'):
+            for i, dof_name in enumerate(self.observation_encoder.dof_names):
+                self.raw_dof_name_to_index[dof_name] = i
+        
+        # 4. Finger name + pad/tip to body tensor index mapping
+        self.finger_body_to_index = {}
+        
+        # Map fingertip body names to indices
+        for i, tip_name in enumerate(self.fingertip_body_names):
+            finger_name = tip_name.replace("_tip", "")  # e.g., "r_f_link1_tip" -> "r_f_link1"
+            self.finger_body_to_index[f"{finger_name}_tip"] = ("fingertip", i)
+        
+        # Map fingerpad body names to indices  
+        for i, pad_name in enumerate(self.fingerpad_body_names):
+            finger_name = pad_name.replace("_pad", "")  # e.g., "r_f_link1_pad" -> "r_f_link1"
+            self.finger_body_to_index[f"{finger_name}_pad"] = ("fingerpad", i)
+        
+        print(f"Created mappings:")
+        print(f"  Base joints: {len(self.base_joint_to_index)} entries")
+        print(f"  Control names: {len(self.control_name_to_index)} entries") 
+        print(f"  Raw DOF names: {len(self.raw_dof_name_to_index)} entries")
+        print(f"  Finger bodies: {len(self.finger_body_to_index)} entries")
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""

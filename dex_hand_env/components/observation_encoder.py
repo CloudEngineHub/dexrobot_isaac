@@ -82,7 +82,8 @@ class ObservationEncoder:
     def initialize(self, observation_keys: List[str], hand_indices: List[int], 
                   fingertip_indices: List[int], fingerpad_indices: List[int],
                   joint_to_control: Dict[str, str], 
-                  active_joint_names: List[str], num_actions: int = None, action_processor=None):
+                  active_joint_names: List[str], num_actions: int = None, action_processor=None,
+                  index_mappings: Dict = None):
         """
         Initialize the observation encoder with configuration.
         
@@ -106,6 +107,18 @@ class ObservationEncoder:
         
         # Pre-compute active finger DOF indices for efficient observation extraction
         self.active_finger_dof_indices = self._compute_active_finger_dof_indices()
+        
+        # Store index mappings from DexHandBase
+        if index_mappings:
+            self.base_joint_to_index = index_mappings.get('base_joint_to_index', {})
+            self.control_name_to_index = index_mappings.get('control_name_to_index', {})
+            self.raw_dof_name_to_index = index_mappings.get('raw_dof_name_to_index', {})
+            self.finger_body_to_index = index_mappings.get('finger_body_to_index', {})
+        else:
+            self.base_joint_to_index = {}
+            self.control_name_to_index = {}
+            self.raw_dof_name_to_index = {}
+            self.finger_body_to_index = {}
         
         # Initialize previous actions tensor if needed
         if "prev_actions" in self.observation_keys:
@@ -347,6 +360,7 @@ class ObservationEncoder:
     def _concat_selected_observations(self, obs_dict: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
         Concatenate selected observations into final observation tensor.
+        Records slice indices for each component during concatenation.
         
         Args:
             obs_dict: Dictionary of all available observations
@@ -356,6 +370,12 @@ class ObservationEncoder:
         """
         obs_tensors = []
         
+        # Initialize slice indices dictionary if not exists
+        if not hasattr(self, 'component_slice_indices'):
+            self.component_slice_indices = {}
+        
+        current_idx = 0
+        
         # Concat observations in the order specified by observation_keys
         for key in self.observation_keys:
             if key in obs_dict:
@@ -363,6 +383,12 @@ class ObservationEncoder:
                 # Ensure tensor is 2D (num_envs, obs_dim)
                 if len(tensor.shape) > 2:
                     tensor = tensor.reshape(self.num_envs, -1)
+                
+                # Record slice indices for this component
+                component_size = tensor.shape[1]
+                self.component_slice_indices[key] = (current_idx, current_idx + component_size)
+                current_idx += component_size
+                
                 obs_tensors.append(tensor)
             else:
                 print(f"Warning: Observation key '{key}' not found in observation dictionary")
@@ -515,3 +541,181 @@ class ObservationEncoder:
             high=float('inf'),
             shape=(self.num_observations,)
         )
+
+    def get_obs_index_for_base_joint(self, joint_name: str, obs_type: str = "pos"):
+        """
+        Get the index in the concatenated observation tensor for a base joint.
+        
+        Args:
+            joint_name: Name of the base joint (e.g., "ARTx", "ARTy", etc.)
+            obs_type: Type of observation ("pos", "vel", "target")
+            
+        Returns:
+            Index in the concatenated observation tensor
+        """
+        if joint_name not in self.base_joint_to_index:
+            raise ValueError(f"Unknown base joint name: {joint_name}. Available: {list(self.base_joint_to_index.keys())}")
+        
+        joint_idx = self.base_joint_to_index[joint_name]
+        
+        # Determine which observation component to use
+        if obs_type == "pos":
+            component_key = "base_dof_pos"
+        elif obs_type == "vel":
+            component_key = "base_dof_vel"
+        elif obs_type == "target":
+            component_key = "base_dof_target"
+        else:
+            raise ValueError(f"Unknown obs_type: {obs_type}. Available: pos, vel, target")
+        
+        if component_key not in self.component_slice_indices:
+            raise ValueError(f"Observation component {component_key} not found in observation keys")
+        
+        component_start, _ = self.component_slice_indices[component_key]
+        return component_start + joint_idx
+
+    def get_obs_index_for_finger_control(self, control_name: str, obs_type: str = "pos"):
+        """
+        Get the index in the concatenated observation tensor for a finger control.
+        
+        Args:
+            control_name: Name of the finger control (e.g., "th_dip", "if_pip", etc.)
+            obs_type: Type of observation ("pos", "vel", "target")
+            
+        Returns:
+            Index in the concatenated observation tensor
+        """
+        if control_name not in self.control_name_to_index:
+            raise ValueError(f"Unknown control name: {control_name}. Available: {list(self.control_name_to_index.keys())}")
+        
+        control_idx = self.control_name_to_index[control_name]
+        
+        # Determine which observation component to use
+        if obs_type == "pos":
+            component_key = "finger_dof_pos"
+        elif obs_type == "vel":
+            component_key = "finger_dof_vel"
+        elif obs_type == "target":
+            component_key = "finger_dof_target"
+        else:
+            raise ValueError(f"Unknown obs_type: {obs_type}. Available: pos, vel, target")
+        
+        if component_key not in self.component_slice_indices:
+            raise ValueError(f"Observation component {component_key} not found in observation keys")
+        
+        component_start, _ = self.component_slice_indices[component_key]
+        return component_start + control_idx
+
+    def get_obs_range_for_finger_pose(self, finger_body_name: str, frame: str = "world"):
+        """
+        Get the index range in the concatenated observation tensor for a finger pose.
+        
+        Args:
+            finger_body_name: Name of the finger body (e.g., "r_f_link1_tip", "r_f_link2_pad", etc.)
+            frame: Reference frame ("world" or "hand")
+            
+        Returns:
+            Tuple of (start_index, end_index) for the 7D pose in concatenated tensor
+        """
+        if finger_body_name not in self.finger_body_to_index:
+            raise ValueError(f"Unknown finger body name: {finger_body_name}. Available: {list(self.finger_body_to_index.keys())}")
+        
+        body_type, finger_idx = self.finger_body_to_index[finger_body_name]
+        
+        # Determine which observation component to use
+        if body_type == "fingertip":
+            component_key = f"fingertip_poses_{frame}"
+        elif body_type == "fingerpad":
+            component_key = f"fingerpad_poses_{frame}"
+        else:
+            raise ValueError(f"Unknown body type: {body_type}")
+        
+        if component_key not in self.component_slice_indices:
+            raise ValueError(f"Observation component {component_key} not found in observation keys")
+        
+        component_start, _ = self.component_slice_indices[component_key]
+        pose_start = component_start + finger_idx * 7
+        pose_end = pose_start + 7
+        
+        return (pose_start, pose_end)
+
+    def get_obs_range_for_contact_force(self, finger_idx: int):
+        """
+        Get the index range in the concatenated observation tensor for contact force.
+        
+        Args:
+            finger_idx: Finger index (0-4 for 5 fingers)
+            
+        Returns:
+            Tuple of (start_index, end_index) for the 3D force in concatenated tensor
+        """
+        if finger_idx < 0 or finger_idx >= 5:
+            raise ValueError(f"Finger index must be 0-4, got {finger_idx}")
+        
+        if "contact_forces" not in self.component_slice_indices:
+            raise ValueError("Contact forces not found in observation keys")
+        
+        component_start, _ = self.component_slice_indices["contact_forces"]
+        force_start = component_start + finger_idx * 3
+        force_end = force_start + 3
+        
+        return (force_start, force_end)
+
+    def parse_obs_tensor(self, obs_tensor: torch.Tensor = None, env_idx: int = 0):
+        """
+        Parse observation tensor and provide convenient access to components.
+        
+        Args:
+            obs_tensor: Observation tensor to parse (if None, uses current observation)
+            env_idx: Environment index
+            
+        Returns:
+            ObservationParser instance with convenient accessor methods
+        """
+        if obs_tensor is None:
+            obs_tensor = self.obs_buf
+        
+        if obs_tensor is None:
+            raise ValueError("No observation tensor available")
+        
+        # Extract the observation for the specified environment
+        if len(obs_tensor.shape) == 1:
+            obs_data = obs_tensor  # Already single environment
+        else:
+            obs_data = obs_tensor[env_idx]
+        
+        return ObservationParser(obs_data, self)
+
+
+class ObservationParser:
+    """
+    Helper class to parse and access observation tensor components.
+    """
+    
+    def __init__(self, obs_data: torch.Tensor, encoder: 'ObservationEncoder'):
+        self.obs_data = obs_data
+        self.encoder = encoder
+    
+    def get_base_dof(self, joint_name: str, obs_type: str = "pos"):
+        """Get base DOF value by joint name."""
+        idx = self.encoder.get_obs_index_for_base_joint(joint_name, obs_type)
+        return self.obs_data[idx].item()
+    
+    def get_finger_dof(self, control_name: str, obs_type: str = "pos"):
+        """Get finger DOF value by control name."""
+        idx = self.encoder.get_obs_index_for_finger_control(control_name, obs_type)
+        return self.obs_data[idx].item()
+    
+    def get_finger_pose(self, finger_body_name: str, frame: str = "world"):
+        """Get finger pose by body name."""
+        start_idx, end_idx = self.encoder.get_obs_range_for_finger_pose(finger_body_name, frame)
+        pose_data = self.obs_data[start_idx:end_idx]
+        return {
+            'position': pose_data[:3].cpu().numpy(),
+            'orientation': pose_data[3:7].cpu().numpy()
+        }
+    
+    def get_contact_force(self, finger_idx: int):
+        """Get contact force by finger index."""
+        start_idx, end_idx = self.encoder.get_obs_range_for_contact_force(finger_idx)
+        return self.obs_data[start_idx:end_idx].cpu().numpy()
