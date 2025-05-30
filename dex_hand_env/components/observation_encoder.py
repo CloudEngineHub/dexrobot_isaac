@@ -8,6 +8,10 @@ including proprioceptive states, sensor readings, and task-specific observations
 # Import standard libraries
 import torch
 import numpy as np
+from typing import Dict, List, Optional, Any, Tuple
+
+# Import gym for spaces
+import gym
 
 # Import IsaacGym
 from isaacgym import gymapi, gymtorch
@@ -22,9 +26,15 @@ class ObservationEncoder:
     - Process sensor readings (contact forces, tactile)
     - Create task-specific observations
     - Normalize and format observations for the policy
+    
+    The new design follows a cleaner architecture:
+    1. Compute a dictionary of "default" observations
+    2. Call a function to compute task-specific observations
+    3. Merge the two dictionaries
+    4. Concat tensors with selected keys into final observation buffer
     """
     
-    def __init__(self, gym, sim, num_envs, device, hand_asset=None):
+    def __init__(self, gym, sim, num_envs, device, tensor_manager, hand_asset=None):
         """
         Initialize the observation encoder.
         
@@ -33,12 +43,14 @@ class ObservationEncoder:
             sim: The isaacgym simulation instance
             num_envs: Number of environments
             device: PyTorch device
+            tensor_manager: Reference to tensor manager for accessing tensors
             hand_asset: Hand asset for getting DOF names (optional)
         """
         self.gym = gym
         self.sim = sim
         self.num_envs = num_envs
         self.device = device
+        self.tensor_manager = tensor_manager
         self.hand_asset = hand_asset
         
         # Store DOF names if asset is provided
@@ -52,435 +64,251 @@ class ObservationEncoder:
         self.NUM_ACTIVE_FINGER_DOFS = 12  # 12 finger controls mapping to 19 DOFs with coupling
         self.NUM_FINGERS = 5
         
-        # Configuration flags
-        self.include_dof_pos = True
-        self.include_dof_vel = True
-        self.include_hand_pose = True
-        self.include_contact_forces = True
-        self.include_actions = False
-        
-        # Initialize observation dimension
-        self._calculate_obs_dim()
-        print(f"ObservationEncoder initialized with observation dimension: {self.num_observations}")
+        # Configuration - will be set during initialize()
+        self.observation_keys = []
+        self.num_observations = 0
         
         # Initialize observation buffers
         self.obs_buf = None
         self.states_buf = None
-        self.obs_dict = {}
         
-        # Track observation keys and dimensions
-        self.obs_keys = []
-        self.num_observations = 0
-        
-        # Cached tensors
-        self.dof_pos = None
-        self.dof_vel = None
-        self.root_state_tensor = None
-        self.contact_forces = None
+        # Previous actions for observation (if enabled)
         self.prev_actions = None
-    
-    def configure(self, include_dof_pos=None, include_dof_vel=None, 
-                 include_hand_pose=None, include_contact_forces=None,
-                 include_actions=None):
+
+    def initialize(self, observation_keys: List[str], hand_indices: List[int], 
+                  fingertip_indices: List[int], joint_to_control: Dict[str, str], 
+                  active_joint_names: List[str]):
         """
-        Configure which observations to include.
+        Initialize the observation encoder with configuration.
         
         Args:
-            include_dof_pos: Include DOF positions
-            include_dof_vel: Include DOF velocities
-            include_hand_pose: Include hand root pose
-            include_contact_forces: Include contact force sensors
-            include_actions: Include previous actions
+            observation_keys: List of observation components to include
+            hand_indices: Indices of hand actors
+            fingertip_indices: Indices of fingertips  
+            joint_to_control: Mapping from joint names to control names
+            active_joint_names: List of active joint names
         """
-        if include_dof_pos is not None:
-            self.include_dof_pos = include_dof_pos
-        if include_dof_vel is not None:
-            self.include_dof_vel = include_dof_vel
-        if include_hand_pose is not None:
-            self.include_hand_pose = include_hand_pose
-        if include_contact_forces is not None:
-            self.include_contact_forces = include_contact_forces
-        if include_actions is not None:
-            self.include_actions = include_actions
+        self.observation_keys = observation_keys
+        self.hand_indices = hand_indices
+        self.fingertip_indices = fingertip_indices
+        self.joint_to_control = joint_to_control
+        self.active_joint_names = active_joint_names
         
-        # Recalculate observation space
-        self._calculate_obs_dim()
-    
-    def _calculate_obs_dim(self):
+        # Compute observation dimension dynamically by creating a test observation
+        test_obs_dict = self._compute_default_observations()
+        test_task_obs_dict = self._compute_task_observations(test_obs_dict)
+        merged_obs_dict = {**test_obs_dict, **test_task_obs_dict}
+        test_obs_tensor = self._concat_selected_observations(merged_obs_dict)
+        
+        self.num_observations = test_obs_tensor.shape[1]
+        print(f"ObservationEncoder initialized with dynamic observation dimension: {self.num_observations}")
+        
+        # Initialize observation buffers
+        self.obs_buf = torch.zeros((self.num_envs, self.num_observations), device=self.device)
+        self.states_buf = torch.zeros((self.num_envs, self.num_observations), device=self.device)
+        
+        # Initialize previous actions tensor if needed
+        if "prev_actions" in self.observation_keys:
+            self.prev_actions = torch.zeros(
+                (self.num_envs, self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS), 
+                device=self.device
+            )
+
+    def update_prev_actions(self, actions: torch.Tensor):
         """
-        Calculate observation dimension based on configuration.
-        
-        Returns:
-            Total observation dimension
-        """
-        self.obs_keys = []
-        self.num_observations = 0
-        
-        if self.include_dof_pos:
-            # DOF positions (base + fingers)
-            self.obs_keys.append("dof_pos")
-            self.num_observations += self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS
-            
-        if self.include_dof_vel:
-            # DOF velocities (base + fingers)
-            self.obs_keys.append("dof_vel")
-            self.num_observations += self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS
-            
-        if self.include_hand_pose:
-            # Hand root pose (position + orientation)
-            self.obs_keys.append("hand_pose")
-            self.num_observations += 7  # 3 for position, 4 for quaternion
-            
-        if self.include_contact_forces:
-            # Contact forces (3D force for each finger)
-            self.obs_keys.append("contact_forces")
-            self.num_observations += self.NUM_FINGERS * 3
-            
-        if self.include_actions:
-            # Previous actions
-            self.obs_keys.append("prev_actions")
-            self.num_observations += self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS
-        
-        return self.num_observations
-    
-    def initialize_buffers(self, num_dof):
-        """
-        Initialize observation buffers.
-        
-        Args:
-            num_dof: Total number of DOFs in the model
-        """
-        # Calculate observation dimension
-        self._calculate_obs_dim()
-        
-        # Create observation buffer
-        self.obs_buf = torch.zeros(
-            (self.num_envs, self.num_observations), device=self.device
-        )
-        
-        # Create state buffer (full state, not just observation)
-        # This can be used for asymmetric actor-critic algorithms
-        self.states_buf = torch.zeros(
-            (self.num_envs, self.num_observations), device=self.device
-        )
-        
-        # Initialize dictionary to store individual observation components
-        self.obs_dict = {}
-        
-        # Initialize contact forces tensor
-        self.contact_forces = torch.zeros(
-            (self.num_envs, self.NUM_FINGERS, 3), device=self.device
-        )
-        
-        # Initialize previous actions tensor
-        self.prev_actions = torch.zeros(
-            (self.num_envs, self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS), 
-            device=self.device
-        )
-    
-    def update_cached_tensors(self, dof_pos=None, dof_vel=None, root_state_tensor=None):
-        """
-        Update cached tensors with latest values from simulation.
-        
-        Args:
-            dof_pos: DOF position tensor
-            dof_vel: DOF velocity tensor
-            root_state_tensor: Root state tensor
-        """
-        if dof_pos is not None:
-            self.dof_pos = dof_pos
-        if dof_vel is not None:
-            self.dof_vel = dof_vel
-        if root_state_tensor is not None:
-            self.root_state_tensor = root_state_tensor
-    
-    def update_contact_forces(self, contact_forces):
-        """
-        Update contact force readings.
-        
-        Args:
-            contact_forces: Contact force tensor
-        """
-        self.contact_forces = contact_forces
-    
-    def update_prev_actions(self, actions):
-        """
-        Update previous actions.
+        Update previous actions for observation.
         
         Args:
             actions: Current action tensor
         """
-        if actions is not None and hasattr(actions, 'shape'):
+        if actions is not None and hasattr(actions, 'shape') and self.prev_actions is not None:
             self.prev_actions = actions.clone()
-    
-    def compute_observations(self, hand_indices=None, fingertip_indices=None, joint_to_control=None, active_joint_names=None):
+
+    def compute_observations(self) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
-        Compute the observation vector.
+        Compute the observation vector and dictionary.
         
-        Args:
-            hand_indices: Indices of hand actors
-            fingertip_indices: Indices of fingertips
-            joint_to_control: Mapping from joint names to control names
-            active_joint_names: List of active joint names
-            
         Returns:
-            Observation tensor and dictionary of components
+            Tuple of (observation tensor, observation dictionary)
         """
-        # Reset observation dictionary
-        self.obs_dict = {}
+        # Step 1: Compute default observations
+        default_obs_dict = self._compute_default_observations()
         
-        # Current buffer index for filling observations
-        obs_idx = 0
+        # Step 2: Compute task-specific observations
+        task_obs_dict = self._compute_task_observations(default_obs_dict)
         
-        # Safety check - make sure tensors are initialized
-        if self.dof_pos is None or self.dof_vel is None or self.root_state_tensor is None:
+        # Step 3: Merge dictionaries
+        merged_obs_dict = {**default_obs_dict, **task_obs_dict}
+        
+        # Step 4: Concat selected observations into final observation buffer
+        self.obs_buf = self._concat_selected_observations(merged_obs_dict)
+        
+        # Copy to states buffer (for asymmetric actor-critic)
+        self.states_buf = self.obs_buf.clone()
+        
+        return self.obs_buf, merged_obs_dict
+
+    def _compute_default_observations(self) -> Dict[str, torch.Tensor]:
+        """
+        Compute default observations dictionary.
+        
+        Returns:
+            Dictionary of default observations
+        """
+        obs_dict = {}
+        
+        # Access tensors directly from tensor manager (no caching needed)
+        dof_pos = self.tensor_manager.dof_pos
+        dof_vel = self.tensor_manager.dof_vel
+        root_state_tensor = self.tensor_manager.root_state_tensor
+        contact_forces = self.tensor_manager.contact_forces
+        
+        # Safety check
+        if dof_pos is None or dof_vel is None or root_state_tensor is None:
             print("Warning: Tensor handles not initialized. Cannot compute observations.")
-            return self.obs_buf, self.obs_dict
-            
-        if joint_to_control is None or active_joint_names is None:
-            print("Warning: Joint mappings not provided. Some observations may be incorrect.")
+            return obs_dict
         
-        # DOF positions
-        if self.include_dof_pos:
-            # Select joint positions (base + active finger DOFs)
+        # DOF positions (base + active finger DOFs)
+        if "dof_pos" in self.observation_keys:
             active_positions = torch.zeros(
                 (self.num_envs, self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS),
                 device=self.device
             )
             
             # Copy base DOF positions
-            active_positions[:, :self.NUM_BASE_DOFS] = self.dof_pos[:, :self.NUM_BASE_DOFS]
+            active_positions[:, :self.NUM_BASE_DOFS] = dof_pos[:, :self.NUM_BASE_DOFS]
             
             # Map finger DOF positions to active DOFs
-            if joint_to_control is not None and active_joint_names is not None:
-                # Use stored DOF names if available, otherwise log a warning
+            if self.joint_to_control is not None and self.active_joint_names is not None:
                 if not self.dof_names:
                     print("Warning: DOF names not available from asset. Some observations may be incorrect.")
-                    return self.obs_buf, self.obs_dict
-                
-                for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
-                    # Skip if not in joint_to_control mapping
-                    if name not in joint_to_control:
-                        continue
-                        
-                    # Map from joint name to control index
-                    try:
-                        control_name = joint_to_control[name]
+                else:
+                    for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
+                        if name not in self.joint_to_control:
+                            continue
+                            
                         try:
-                            control_idx = active_joint_names.index(control_name)
+                            control_name = self.joint_to_control[name]
+                            control_idx = self.active_joint_names.index(control_name)
                             active_idx = self.NUM_BASE_DOFS + control_idx
                             
                             if active_idx < active_positions.shape[1]:
-                                # DOF index in the full state
                                 dof_idx = i + self.NUM_BASE_DOFS
-                                
-                                # Copy the position value
-                                if dof_idx < self.dof_pos.shape[1]:
-                                    active_positions[:, active_idx] = self.dof_pos[:, dof_idx]
-                        except (ValueError, IndexError) as e:
+                                if dof_idx < dof_pos.shape[1]:
+                                    active_positions[:, active_idx] = dof_pos[:, dof_idx]
+                        except (ValueError, IndexError, KeyError):
                             pass  # Safely continue if mapping fails
-                    except KeyError:
-                        pass  # Safely continue if joint not in mapping
             
-            # Store in observation buffer
-            self.obs_buf[:, obs_idx:obs_idx + active_positions.shape[1]] = active_positions
-            obs_idx += active_positions.shape[1]
-            
-            # Store in observation dictionary
-            self.obs_dict["dof_pos"] = active_positions
+            obs_dict["dof_pos"] = active_positions
         
-        # DOF velocities
-        if self.include_dof_vel:
-            # Select joint velocities (base + active finger DOFs)
+        # DOF velocities (base + active finger DOFs)
+        if "dof_vel" in self.observation_keys:
             active_velocities = torch.zeros(
                 (self.num_envs, self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS),
                 device=self.device
             )
             
             # Copy base DOF velocities
-            active_velocities[:, :self.NUM_BASE_DOFS] = self.dof_vel[:, :self.NUM_BASE_DOFS]
+            active_velocities[:, :self.NUM_BASE_DOFS] = dof_vel[:, :self.NUM_BASE_DOFS]
             
             # Map finger DOF velocities to active DOFs
-            if joint_to_control is not None and active_joint_names is not None:
-                # Use stored DOF names if available (already checked above)
+            if self.joint_to_control is not None and self.active_joint_names is not None and self.dof_names:
                 for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
-                    # Skip if not in joint_to_control mapping
-                    if name not in joint_to_control:
+                    if name not in self.joint_to_control:
                         continue
                         
-                    # Map from joint name to control index
                     try:
-                        control_name = joint_to_control[name]
-                        try:
-                            control_idx = active_joint_names.index(control_name)
-                            active_idx = self.NUM_BASE_DOFS + control_idx
-                            
-                            if active_idx < active_velocities.shape[1]:
-                                # DOF index in the full state
-                                dof_idx = i + self.NUM_BASE_DOFS
-                                
-                                # Copy the velocity value
-                                if dof_idx < self.dof_vel.shape[1]:
-                                    active_velocities[:, active_idx] = self.dof_vel[:, dof_idx]
-                        except (ValueError, IndexError) as e:
-                            pass  # Safely continue if mapping fails
-                    except KeyError:
-                        pass  # Safely continue if joint not in mapping
+                        control_name = self.joint_to_control[name]
+                        control_idx = self.active_joint_names.index(control_name)
+                        active_idx = self.NUM_BASE_DOFS + control_idx
+                        
+                        if active_idx < active_velocities.shape[1]:
+                            dof_idx = i + self.NUM_BASE_DOFS
+                            if dof_idx < dof_vel.shape[1]:
+                                active_velocities[:, active_idx] = dof_vel[:, dof_idx]
+                    except (ValueError, IndexError, KeyError):
+                        pass  # Safely continue if mapping fails
             
-            # Store in observation buffer
-            self.obs_buf[:, obs_idx:obs_idx + active_velocities.shape[1]] = active_velocities
-            obs_idx += active_velocities.shape[1]
-            
-            # Store in observation dictionary
-            self.obs_dict["dof_vel"] = active_velocities
+            obs_dict["dof_vel"] = active_velocities
         
         # Hand pose (position and orientation)
-        if self.include_hand_pose and hand_indices is not None:
-            if len(hand_indices) > 0:
+        if "hand_pose" in self.observation_keys and self.hand_indices is not None:
+            if len(self.hand_indices) > 0:
                 hand_poses = torch.zeros((self.num_envs, 7), device=self.device)
                 
                 # Extract root state for hand actors
-                for i, hand_idx in enumerate(hand_indices):
+                for i, hand_idx in enumerate(self.hand_indices):
                     if i >= self.num_envs:
                         break
                         
-                    # The root_state_tensor has shape [num_envs, num_bodies, 13]
-                    # For each env, we need to extract the position (3) and orientation (4) for the hand actor
-                    if i >= self.root_state_tensor.shape[0]:
-                        raise RuntimeError(f"Environment index {i} exceeds root_state_tensor shape {self.root_state_tensor.shape}")
-                        
-                    if hand_idx >= self.root_state_tensor.shape[1]:
-                        raise RuntimeError(f"Hand index {hand_idx} exceeds root_state_tensor bodies dimension {self.root_state_tensor.shape[1]}")
+                    if i >= root_state_tensor.shape[0] or hand_idx >= root_state_tensor.shape[1]:
+                        continue
                         
                     # Position (3) and orientation (4)
-                    hand_poses[i, :3] = self.root_state_tensor[i, hand_idx, :3]  # Position
-                    hand_poses[i, 3:7] = self.root_state_tensor[i, hand_idx, 3:7]  # Orientation
+                    hand_poses[i, :3] = root_state_tensor[i, hand_idx, :3]  # Position
+                    hand_poses[i, 3:7] = root_state_tensor[i, hand_idx, 3:7]  # Orientation
                 
-                # Store in observation buffer
-                self.obs_buf[:, obs_idx:obs_idx + 7] = hand_poses
-                obs_idx += 7
-                
-                # Store in observation dictionary
-                self.obs_dict["hand_pose"] = hand_poses
+                obs_dict["hand_pose"] = hand_poses
             else:
-                # No hand indices provided, fill with zeros
-                self.obs_buf[:, obs_idx:obs_idx + 7] = 0
-                obs_idx += 7
-                
-                # Store in observation dictionary
-                self.obs_dict["hand_pose"] = torch.zeros((self.num_envs, 7), device=self.device)
+                obs_dict["hand_pose"] = torch.zeros((self.num_envs, 7), device=self.device)
         
-        # Contact forces
-        if self.include_contact_forces:
+        # Contact forces (3D force for each finger)
+        if "contact_forces" in self.observation_keys and contact_forces is not None:
             # Reshape contact forces to flat tensor
-            flat_contacts = self.contact_forces.reshape(self.num_envs, -1)
-            
-            # Store in observation buffer
-            self.obs_buf[:, obs_idx:obs_idx + flat_contacts.shape[1]] = flat_contacts
-            obs_idx += flat_contacts.shape[1]
-            
-            # Store in observation dictionary
-            self.obs_dict["contact_forces"] = flat_contacts
+            flat_contacts = contact_forces.reshape(self.num_envs, -1)
+            obs_dict["contact_forces"] = flat_contacts
         
         # Previous actions
-        if self.include_actions:
-            # Store in observation buffer
-            self.obs_buf[:, obs_idx:obs_idx + self.prev_actions.shape[1]] = self.prev_actions
-            obs_idx += self.prev_actions.shape[1]
-            
-            # Store in observation dictionary
-            self.obs_dict["prev_actions"] = self.prev_actions
+        if "prev_actions" in self.observation_keys and self.prev_actions is not None:
+            obs_dict["prev_actions"] = self.prev_actions
         
-        # Copy to states buffer (for asymmetric actor-critic)
-        self.states_buf = self.obs_buf.clone()
-        
-        return self.obs_buf, self.obs_dict
-    
-    def add_task_observations(self, task_obs_dict):
+        return obs_dict
+
+    def _compute_task_observations(self, default_obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
-        Add task-specific observations to the observation buffer.
+        Compute task-specific observations.
+        
+        This method can be overridden by specific tasks to add custom observations.
+        The base implementation returns an empty dictionary.
         
         Args:
-            task_obs_dict: Dictionary of task-specific observations
+            default_obs_dict: Dictionary of default observations
             
         Returns:
-            Updated observation tensor and dictionary
+            Dictionary of task-specific observations
         """
-        # Start from current observation index
-        obs_idx = self._get_current_obs_index()
-        
-        # Add each task observation to the buffer
-        for key, value in task_obs_dict.items():
-            if isinstance(value, torch.Tensor):
-                # Reshape to flat tensor if needed
-                if len(value.shape) > 2:
-                    flat_value = value.reshape(self.num_envs, -1)
-                else:
-                    flat_value = value
-                
-                # Check if buffer needs resizing
-                if obs_idx + flat_value.shape[1] > self.obs_buf.shape[1]:
-                    # Resize observation buffer
-                    new_buf = torch.zeros(
-                        (self.num_envs, obs_idx + flat_value.shape[1]),
-                        device=self.device
-                    )
-                    new_buf[:, :self.obs_buf.shape[1]] = self.obs_buf
-                    self.obs_buf = new_buf
-                    
-                    # Resize state buffer
-                    new_states = torch.zeros(
-                        (self.num_envs, obs_idx + flat_value.shape[1]),
-                        device=self.device
-                    )
-                    new_states[:, :self.states_buf.shape[1]] = self.states_buf
-                    self.states_buf = new_states
-                
-                # Add to observation buffer
-                self.obs_buf[:, obs_idx:obs_idx + flat_value.shape[1]] = flat_value
-                obs_idx += flat_value.shape[1]
-                
-                # Add to observation dictionary
-                self.obs_dict[key] = flat_value
-                
-                # Add to obs_keys if not already present
-                if key not in self.obs_keys:
-                    self.obs_keys.append(key)
-        
-        # Update observation dimension
-        self.num_observations = self.obs_buf.shape[1]
-        
-        # Copy to states buffer
-        self.states_buf = self.obs_buf.clone()
-        
-        return self.obs_buf, self.obs_dict
-    
-    def _get_current_obs_index(self):
+        # Base implementation returns empty dict
+        # Specific tasks can override this method to add custom observations
+        return {}
+
+    def _concat_selected_observations(self, obs_dict: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
-        Get the current index in the observation buffer.
+        Concatenate selected observations into final observation tensor.
         
+        Args:
+            obs_dict: Dictionary of all available observations
+            
         Returns:
-            Current observation index
+            Concatenated observation tensor
         """
-        obs_idx = 0
+        obs_tensors = []
         
-        if self.include_dof_pos:
-            obs_idx += self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS
-            
-        if self.include_dof_vel:
-            obs_idx += self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS
-            
-        if self.include_hand_pose:
-            obs_idx += 7  # 3 for position, 4 for quaternion
-            
-        if self.include_contact_forces:
-            obs_idx += self.NUM_FINGERS * 3
-            
-        if self.include_actions:
-            obs_idx += self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS
+        # Concat observations in the order specified by observation_keys
+        for key in self.observation_keys:
+            if key in obs_dict:
+                tensor = obs_dict[key]
+                # Ensure tensor is 2D (num_envs, obs_dim)
+                if len(tensor.shape) > 2:
+                    tensor = tensor.reshape(self.num_envs, -1)
+                obs_tensors.append(tensor)
+            else:
+                print(f"Warning: Observation key '{key}' not found in observation dictionary")
         
-        return obs_idx
-    
+        if obs_tensors:
+            return torch.cat(obs_tensors, dim=1)
+        else:
+            return torch.zeros((self.num_envs, 0), device=self.device)
+
     def get_observation_space(self):
         """
         Get the observation space for the environment.

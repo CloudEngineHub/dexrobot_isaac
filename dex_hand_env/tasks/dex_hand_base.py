@@ -361,26 +361,26 @@ class DexHandBase(VecTask):
         # Set initial control_dt (will be updated after reset when physics steps are auto-detected)
         self.action_processor.set_control_dt(self.physics_manager.control_dt)
         
-        # Create observation encoder
+        # Create observation encoder with tensor manager reference
         self.observation_encoder = ObservationEncoder(
             gym=self.gym,
             sim=self.sim,
             num_envs=self.num_envs,
             device=self.device,
+            tensor_manager=self.tensor_manager,
             hand_asset=self.hand_asset
         )
         
-        # Configure observation encoder
-        self.observation_encoder.configure(
-            include_dof_pos=True,
-            include_dof_vel=True,
-            include_hand_pose=True,
-            include_contact_forces=True,
-            include_actions=self.cfg["env"].get("includeActionsInObs", False)
-        )
+        # Initialize observation encoder with configuration from config file
+        observation_keys = self.cfg["env"].get("observationKeys", ["dof_pos", "dof_vel", "hand_pose", "contact_forces"])
         
-        # Initialize observation buffers
-        self.observation_encoder.initialize_buffers(self.num_dof)
+        self.observation_encoder.initialize(
+            observation_keys=observation_keys,
+            hand_indices=self.hand_indices,
+            fingertip_indices=self.fingertip_indices,
+            joint_to_control=self.hand_initializer.joint_to_control,
+            active_joint_names=self.hand_initializer.active_joint_names
+        )
         
         # Create reset manager
         self.reset_manager = ResetManager(
@@ -687,29 +687,11 @@ class DexHandBase(VecTask):
             # Refresh tensors from simulation
             self.tensor_manager.refresh_tensors(self.fingertip_indices)
             
-            # Update cached tensors in observation encoder
-            self.observation_encoder.update_cached_tensors(
-                dof_pos=self.dof_pos,
-                dof_vel=self.dof_vel,
-                root_state_tensor=self.root_state_tensor
-            )
+            # Compute observations using the new simplified interface
+            self.obs_buf, self.obs_dict = self.observation_encoder.compute_observations()
             
-            # Update contact forces
-            self.observation_encoder.update_contact_forces(self.contact_forces)
-            
-            # Compute observations
-            self.obs_buf, self.obs_dict = self.observation_encoder.compute_observations(
-                hand_indices=self.hand_indices,
-                fingertip_indices=self.fingertip_indices,
-                joint_to_control=self.hand_initializer.joint_to_control,
-                active_joint_names=self.hand_initializer.active_joint_names
-            )
-            
-            # Add task-specific observations
-            if hasattr(self.task, 'get_task_observations'):
-                task_obs = self.task.get_task_observations(self.obs_dict)
-                if task_obs:
-                    self.observation_encoder.add_task_observations(task_obs)
+            # Task-specific observations are now handled internally by the observation encoder
+            # via the _compute_task_observations method
             
             # Get task rewards
             if hasattr(self.task, 'compute_task_rewards'):

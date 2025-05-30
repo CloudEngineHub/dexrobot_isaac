@@ -27,6 +27,14 @@ env:
   initialHandPos: [0.0, 0.0, 0.5] # Initial hand position
   initialHandRot: [0.0, 0.0, 0.0, 1.0]  # Initial hand rotation (quaternion)
 
+  # Observation configuration
+  observationKeys:              # List of observation components to include in final observation tensor
+    - "dof_pos"                 # DOF positions (base + active finger DOFs)
+    - "dof_vel"                 # DOF velocities (base + active finger DOFs) 
+    - "hand_pose"               # Hand root pose (position + orientation)
+    - "contact_forces"          # Contact forces (3D force for each finger)
+    # - "prev_actions"          # Previous actions (uncomment to include)
+
   # Reward parameters
   rewardScales:
     pose: 1.0                     # Scale for pose matching reward
