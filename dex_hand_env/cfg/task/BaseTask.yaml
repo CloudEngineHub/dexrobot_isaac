@@ -30,10 +30,10 @@ env:
   # Observation configuration
   observationKeys:              # List of observation components to include in final observation tensor
     - "dof_pos"                 # DOF positions (base + active finger DOFs)
-    - "dof_vel"                 # DOF velocities (base + active finger DOFs) 
+    - "dof_vel"                 # DOF velocities (base + active finger DOFs)
     - "hand_pose"               # Hand root pose (position + orientation)
     - "contact_forces"          # Contact forces (3D force for each finger)
-    # - "prev_actions"          # Previous actions (uncomment to include)
+    - "prev_actions"            # Previous actions
 
   # Reward parameters
   rewardScales:

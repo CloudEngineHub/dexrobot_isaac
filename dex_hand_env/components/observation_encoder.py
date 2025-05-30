@@ -77,7 +77,7 @@ class ObservationEncoder:
 
     def initialize(self, observation_keys: List[str], hand_indices: List[int], 
                   fingertip_indices: List[int], joint_to_control: Dict[str, str], 
-                  active_joint_names: List[str]):
+                  active_joint_names: List[str], num_actions: int = None):
         """
         Initialize the observation encoder with configuration.
         
@@ -87,12 +87,22 @@ class ObservationEncoder:
             fingertip_indices: Indices of fingertips  
             joint_to_control: Mapping from joint names to control names
             active_joint_names: List of active joint names
+            num_actions: Actual number of actions in the action space
         """
         self.observation_keys = observation_keys
         self.hand_indices = hand_indices
         self.fingertip_indices = fingertip_indices
         self.joint_to_control = joint_to_control
         self.active_joint_names = active_joint_names
+        
+        # Initialize previous actions tensor if needed
+        if "prev_actions" in self.observation_keys:
+            # Use actual action space size if provided, otherwise default to full size
+            prev_action_size = num_actions if num_actions is not None else (self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS)
+            self.prev_actions = torch.zeros(
+                (self.num_envs, prev_action_size), 
+                device=self.device
+            )
         
         # Compute observation dimension dynamically by creating a test observation
         test_obs_dict = self._compute_default_observations()
@@ -106,13 +116,6 @@ class ObservationEncoder:
         # Initialize observation buffers
         self.obs_buf = torch.zeros((self.num_envs, self.num_observations), device=self.device)
         self.states_buf = torch.zeros((self.num_envs, self.num_observations), device=self.device)
-        
-        # Initialize previous actions tensor if needed
-        if "prev_actions" in self.observation_keys:
-            self.prev_actions = torch.zeros(
-                (self.num_envs, self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS), 
-                device=self.device
-            )
 
     def update_prev_actions(self, actions: torch.Tensor):
         """

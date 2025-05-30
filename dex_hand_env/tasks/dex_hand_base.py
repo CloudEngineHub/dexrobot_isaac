@@ -361,7 +361,7 @@ class DexHandBase(VecTask):
         # Set initial control_dt (will be updated after reset when physics steps are auto-detected)
         self.action_processor.set_control_dt(self.physics_manager.control_dt)
         
-        # Create observation encoder with tensor manager reference
+        # Create observation encoder with tensor manager reference (will be initialized later)
         self.observation_encoder = ObservationEncoder(
             gym=self.gym,
             sim=self.sim,
@@ -369,17 +369,6 @@ class DexHandBase(VecTask):
             device=self.device,
             tensor_manager=self.tensor_manager,
             hand_asset=self.hand_asset
-        )
-        
-        # Initialize observation encoder with configuration from config file
-        observation_keys = self.cfg["env"].get("observationKeys", ["dof_pos", "dof_vel", "hand_pose", "contact_forces"])
-        
-        self.observation_encoder.initialize(
-            observation_keys=observation_keys,
-            hand_indices=self.hand_indices,
-            fingertip_indices=self.fingertip_indices,
-            joint_to_control=self.hand_initializer.joint_to_control,
-            active_joint_names=self.hand_initializer.active_joint_names
         )
         
         # Create reset manager
@@ -444,9 +433,6 @@ class DexHandBase(VecTask):
         self.action_control_mode = self.action_processor.action_control_mode
         self.policy_controls_hand_base = self.action_processor.policy_controls_hand_base
         self.policy_controls_fingers = self.action_processor.policy_controls_fingers
-        
-        # Set observation space dimensions needed by VecTask
-        self.num_observations = self.observation_encoder.num_observations
     
     def _create_envs(self):
         """
@@ -540,6 +526,21 @@ class DexHandBase(VecTask):
         self.actions = torch.zeros(
             (self.num_envs, self.num_actions), device=self.device
         )
+        
+        # Initialize observation encoder now that we know the action space size
+        observation_keys = self.cfg["env"].get("observationKeys", ["dof_pos", "dof_vel", "hand_pose", "contact_forces"])
+        
+        self.observation_encoder.initialize(
+            observation_keys=observation_keys,
+            hand_indices=self.hand_indices,
+            fingertip_indices=self.fingertip_indices,
+            joint_to_control=self.hand_initializer.joint_to_control,
+            active_joint_names=self.hand_initializer.active_joint_names,
+            num_actions=self.num_actions
+        )
+        
+        # Set observation space dimensions needed by VecTask
+        self.num_observations = self.observation_encoder.num_observations
         
         # Create extras dictionary for additional info
         self.extras = {}
