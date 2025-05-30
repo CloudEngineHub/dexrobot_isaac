@@ -15,6 +15,10 @@ import gym
 
 # Import IsaacGym
 from isaacgym import gymapi, gymtorch
+from isaacgym.torch_utils import quat_mul, quat_conjugate
+
+# Import utilities
+from dex_hand_env.utils.coordinate_transforms import point_in_hand_frame
 
 
 class ObservationEncoder:
@@ -479,86 +483,25 @@ class ObservationEncoder:
                     finger_pos_world = poses_world[env_idx, start_idx:start_idx+3]
                     finger_quat_world = poses_world[env_idx, start_idx+3:start_idx+7]
                     
-                    # Transform position to hand frame
-                    finger_pos_hand = self._transform_position_to_hand_frame(
-                        finger_pos_world, hand_pos, hand_quat
-                    )
+                    # Transform position to hand frame using existing utility
+                    finger_pos_hand = point_in_hand_frame(
+                        finger_pos_world.unsqueeze(0), 
+                        hand_pos.unsqueeze(0), 
+                        hand_quat.unsqueeze(0)
+                    ).squeeze(0)
                     
-                    # Transform quaternion to hand frame
-                    finger_quat_hand = self._transform_quaternion_to_hand_frame(
-                        finger_quat_world, hand_quat
-                    )
+                    # Transform quaternion to hand frame using Isaac Gym utilities
+                    hand_quat_conj = quat_conjugate(hand_quat.unsqueeze(0)).squeeze(0)
+                    finger_quat_hand = quat_mul(
+                        hand_quat_conj.unsqueeze(0), 
+                        finger_quat_world.unsqueeze(0)
+                    ).squeeze(0)
                     
                     # Store transformed pose
                     poses_hand[env_idx, start_idx:start_idx+3] = finger_pos_hand
                     poses_hand[env_idx, start_idx+3:start_idx+7] = finger_quat_hand
         
         return poses_hand
-    
-    def _transform_position_to_hand_frame(self, pos_world: torch.Tensor, hand_pos: torch.Tensor, hand_quat: torch.Tensor) -> torch.Tensor:
-        """
-        Transform a position from world frame to hand frame.
-        
-        Args:
-            pos_world: position in world frame (3,)
-            hand_pos: hand position in world frame (3,)
-            hand_quat: hand quaternion in world frame (4,) [x, y, z, w]
-            
-        Returns:
-            position in hand frame (3,)
-        """
-        # Translate to hand origin
-        pos_relative = pos_world - hand_pos
-        
-        # Rotate by inverse of hand quaternion to get hand frame coordinates
-        # For quaternion [x, y, z, w], the conjugate is [-x, -y, -z, w]
-        hand_quat_conj = torch.tensor([-hand_quat[0], -hand_quat[1], -hand_quat[2], hand_quat[3]], device=self.device)
-        
-        # Convert position to quaternion for rotation [0, x, y, z]
-        pos_quat = torch.cat([torch.tensor([0.0], device=self.device), pos_relative])
-        
-        # Apply rotation: q_conj * pos_quat * q
-        rotated_pos_quat = self._quaternion_multiply(
-            self._quaternion_multiply(hand_quat_conj, pos_quat), hand_quat
-        )
-        
-        # Extract position part (ignore w component)
-        return rotated_pos_quat[1:4]
-    
-    def _transform_quaternion_to_hand_frame(self, quat_world: torch.Tensor, hand_quat: torch.Tensor) -> torch.Tensor:
-        """
-        Transform a quaternion from world frame to hand frame.
-        
-        Args:
-            quat_world: quaternion in world frame (4,) [x, y, z, w]
-            hand_quat: hand quaternion in world frame (4,) [x, y, z, w]
-            
-        Returns:
-            quaternion in hand frame (4,)
-        """
-        # To transform quaternion to hand frame: hand_quat_conj * quat_world
-        hand_quat_conj = torch.tensor([-hand_quat[0], -hand_quat[1], -hand_quat[2], hand_quat[3]], device=self.device)
-        return self._quaternion_multiply(hand_quat_conj, quat_world)
-    
-    def _quaternion_multiply(self, q1: torch.Tensor, q2: torch.Tensor) -> torch.Tensor:
-        """
-        Multiply two quaternions.
-        
-        Args:
-            q1, q2: quaternions [x, y, z, w]
-            
-        Returns:
-            product quaternion [x, y, z, w]
-        """
-        x1, y1, z1, w1 = q1[0], q1[1], q1[2], q1[3]
-        x2, y2, z2, w2 = q2[0], q2[1], q2[2], q2[3]
-        
-        return torch.tensor([
-            w1*x2 + x1*w2 + y1*z2 - z1*y2,
-            w1*y2 - x1*z2 + y1*w2 + z1*x2,
-            w1*z2 + x1*y2 - y1*x2 + z1*w2,
-            w1*w2 - x1*x2 - y1*y2 - z1*z2
-        ], device=self.device)
 
     def get_observation_space(self):
         """
