@@ -233,8 +233,10 @@ class DexHandBase(VecTask):
         handles = self.hand_initializer.create_hands(self.envs, self.hand_asset)
         self.hand_handles = handles["hand_handles"]
         self.fingertip_body_handles = handles["fingertip_body_handles"]
+        self.fingerpad_body_handles = handles["fingerpad_body_handles"]
         self.hand_indices = handles["hand_indices"]
         self.fingertip_indices = handles["fingertip_indices"]
+        self.fingerpad_indices = handles.get("fingerpad_indices", [])
         self.dof_properties_from_asset = handles.get("dof_properties", None)
         
         # Set up viewer
@@ -509,6 +511,7 @@ class DexHandBase(VecTask):
             observation_keys=observation_keys,
             hand_indices=self.hand_indices,
             fingertip_indices=self.fingertip_indices,
+            fingerpad_indices=self.fingerpad_indices,
             joint_to_control=self.hand_initializer.joint_to_control,
             active_joint_names=self.hand_initializer.active_joint_names,
             num_actions=self.num_actions,

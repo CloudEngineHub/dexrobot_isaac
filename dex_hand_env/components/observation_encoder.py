@@ -76,7 +76,8 @@ class ObservationEncoder:
         self.prev_actions = None
 
     def initialize(self, observation_keys: List[str], hand_indices: List[int], 
-                  fingertip_indices: List[int], joint_to_control: Dict[str, str], 
+                  fingertip_indices: List[int], fingerpad_indices: List[int],
+                  joint_to_control: Dict[str, str], 
                   active_joint_names: List[str], num_actions: int = None, action_processor=None):
         """
         Initialize the observation encoder with configuration.
@@ -84,7 +85,8 @@ class ObservationEncoder:
         Args:
             observation_keys: List of observation components to include
             hand_indices: Indices of hand actors
-            fingertip_indices: Indices of fingertips  
+            fingertip_indices: Indices of fingertips
+            fingerpad_indices: Indices of fingerpads  
             joint_to_control: Mapping from joint names to control names
             active_joint_names: List of active joint names
             num_actions: Actual number of actions in the action space
@@ -93,6 +95,7 @@ class ObservationEncoder:
         self.observation_keys = observation_keys
         self.hand_indices = hand_indices
         self.fingertip_indices = fingertip_indices
+        self.fingerpad_indices = fingerpad_indices
         self.joint_to_control = joint_to_control
         self.active_joint_names = active_joint_names
         self.action_processor = action_processor
@@ -298,6 +301,26 @@ class ObservationEncoder:
             contact_magnitudes = torch.norm(contact_forces, dim=2)  # Shape: (num_envs, num_fingers)
             obs_dict["contact_force_magnitude"] = contact_magnitudes
         
+        # Fingertip poses in world frame (5 fingers × 7 pose dimensions = 35)
+        if "fingertip_poses_world" in self.observation_keys:
+            fingertip_poses_world = self._extract_fingertip_poses_world()
+            obs_dict["fingertip_poses_world"] = fingertip_poses_world
+        
+        # Fingertip poses in hand frame (5 fingers × 7 pose dimensions = 35)
+        if "fingertip_poses_hand" in self.observation_keys:
+            fingertip_poses_hand = self._extract_fingertip_poses_hand()
+            obs_dict["fingertip_poses_hand"] = fingertip_poses_hand
+        
+        # Fingerpad poses in world frame (5 fingers × 7 pose dimensions = 35)
+        if "fingerpad_poses_world" in self.observation_keys:
+            fingerpad_poses_world = self._extract_fingerpad_poses_world()
+            obs_dict["fingerpad_poses_world"] = fingerpad_poses_world
+        
+        # Fingerpad poses in hand frame (5 fingers × 7 pose dimensions = 35)
+        if "fingerpad_poses_hand" in self.observation_keys:
+            fingerpad_poses_hand = self._extract_fingerpad_poses_hand()
+            obs_dict["fingerpad_poses_hand"] = fingerpad_poses_hand
+        
         return obs_dict
 
     def _compute_task_observations(self, default_obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -344,6 +367,198 @@ class ObservationEncoder:
             return torch.cat(obs_tensors, dim=1)
         else:
             return torch.zeros((self.num_envs, 0), device=self.device)
+
+    def _extract_fingertip_poses_world(self) -> torch.Tensor:
+        """
+        Extract fingertip poses in world frame.
+        
+        Returns:
+            torch.Tensor of shape (num_envs, 35) with 5 fingers × 7 pose dimensions
+        """
+        root_state_tensor = self.tensor_manager.root_state_tensor
+        if root_state_tensor is None or self.fingertip_indices is None:
+            return torch.zeros((self.num_envs, 35), device=self.device)
+        
+        poses = torch.zeros((self.num_envs, 35), device=self.device)
+        
+        for env_idx in range(self.num_envs):
+            if env_idx < len(self.fingertip_indices):
+                for finger_idx, tip_idx in enumerate(self.fingertip_indices[env_idx]):
+                    if finger_idx < 5:  # 5 fingers
+                        start_idx = finger_idx * 7
+                        # Position (3) + quaternion (4) = 7 dimensions per fingertip
+                        poses[env_idx, start_idx:start_idx+3] = root_state_tensor[env_idx, tip_idx, :3]  # Position
+                        poses[env_idx, start_idx+3:start_idx+7] = root_state_tensor[env_idx, tip_idx, 3:7]  # Quaternion
+        
+        return poses
+    
+    def _extract_fingerpad_poses_world(self) -> torch.Tensor:
+        """
+        Extract fingerpad poses in world frame.
+        
+        Returns:
+            torch.Tensor of shape (num_envs, 35) with 5 fingers × 7 pose dimensions
+        """
+        root_state_tensor = self.tensor_manager.root_state_tensor
+        if root_state_tensor is None:
+            return torch.zeros((self.num_envs, 35), device=self.device)
+        
+        poses = torch.zeros((self.num_envs, 35), device=self.device)
+        
+        # Get fingerpad body indices from hand initializer if available
+        if hasattr(self, 'fingerpad_indices') and self.fingerpad_indices is not None:
+            for env_idx in range(self.num_envs):
+                if env_idx < len(self.fingerpad_indices):
+                    for finger_idx, pad_idx in enumerate(self.fingerpad_indices[env_idx]):
+                        if finger_idx < 5:  # 5 fingers
+                            start_idx = finger_idx * 7
+                            poses[env_idx, start_idx:start_idx+3] = root_state_tensor[env_idx, pad_idx, :3]  # Position
+                            poses[env_idx, start_idx+3:start_idx+7] = root_state_tensor[env_idx, pad_idx, 3:7]  # Quaternion
+        
+        return poses
+    
+    def _extract_fingertip_poses_hand(self) -> torch.Tensor:
+        """
+        Extract fingertip poses in hand reference frame.
+        
+        Returns:
+            torch.Tensor of shape (num_envs, 35) with 5 fingers × 7 pose dimensions
+        """
+        # Get fingertip poses in world frame
+        fingertip_poses_world = self._extract_fingertip_poses_world()
+        
+        # Transform to hand frame
+        fingertip_poses_hand = self._transform_poses_to_hand_frame(fingertip_poses_world)
+        
+        return fingertip_poses_hand
+    
+    def _extract_fingerpad_poses_hand(self) -> torch.Tensor:
+        """
+        Extract fingerpad poses in hand reference frame.
+        
+        Returns:
+            torch.Tensor of shape (num_envs, 35) with 5 fingers × 7 pose dimensions
+        """
+        # Get fingerpad poses in world frame
+        fingerpad_poses_world = self._extract_fingerpad_poses_world()
+        
+        # Transform to hand frame
+        fingerpad_poses_hand = self._transform_poses_to_hand_frame(fingerpad_poses_world)
+        
+        return fingerpad_poses_hand
+    
+    def _transform_poses_to_hand_frame(self, poses_world: torch.Tensor) -> torch.Tensor:
+        """
+        Transform poses from world frame to hand reference frame.
+        
+        Args:
+            poses_world: tensor of shape (num_envs, 35) with poses in world frame
+            
+        Returns:
+            torch.Tensor of shape (num_envs, 35) with poses in hand frame
+        """
+        root_state_tensor = self.tensor_manager.root_state_tensor
+        if root_state_tensor is None or self.hand_indices is None:
+            return poses_world  # Return world poses if transformation not possible
+        
+        poses_hand = torch.zeros_like(poses_world)
+        
+        for env_idx in range(self.num_envs):
+            if env_idx < len(self.hand_indices):
+                hand_idx = self.hand_indices[env_idx]
+                
+                # Get hand pose in world frame
+                hand_pos = root_state_tensor[env_idx, hand_idx, :3]  # Position
+                hand_quat = root_state_tensor[env_idx, hand_idx, 3:7]  # Quaternion
+                
+                # Transform each finger pose to hand frame
+                for finger_idx in range(5):
+                    start_idx = finger_idx * 7
+                    
+                    # Extract finger pose in world frame
+                    finger_pos_world = poses_world[env_idx, start_idx:start_idx+3]
+                    finger_quat_world = poses_world[env_idx, start_idx+3:start_idx+7]
+                    
+                    # Transform position to hand frame
+                    finger_pos_hand = self._transform_position_to_hand_frame(
+                        finger_pos_world, hand_pos, hand_quat
+                    )
+                    
+                    # Transform quaternion to hand frame
+                    finger_quat_hand = self._transform_quaternion_to_hand_frame(
+                        finger_quat_world, hand_quat
+                    )
+                    
+                    # Store transformed pose
+                    poses_hand[env_idx, start_idx:start_idx+3] = finger_pos_hand
+                    poses_hand[env_idx, start_idx+3:start_idx+7] = finger_quat_hand
+        
+        return poses_hand
+    
+    def _transform_position_to_hand_frame(self, pos_world: torch.Tensor, hand_pos: torch.Tensor, hand_quat: torch.Tensor) -> torch.Tensor:
+        """
+        Transform a position from world frame to hand frame.
+        
+        Args:
+            pos_world: position in world frame (3,)
+            hand_pos: hand position in world frame (3,)
+            hand_quat: hand quaternion in world frame (4,) [x, y, z, w]
+            
+        Returns:
+            position in hand frame (3,)
+        """
+        # Translate to hand origin
+        pos_relative = pos_world - hand_pos
+        
+        # Rotate by inverse of hand quaternion to get hand frame coordinates
+        # For quaternion [x, y, z, w], the conjugate is [-x, -y, -z, w]
+        hand_quat_conj = torch.tensor([-hand_quat[0], -hand_quat[1], -hand_quat[2], hand_quat[3]], device=self.device)
+        
+        # Convert position to quaternion for rotation [0, x, y, z]
+        pos_quat = torch.cat([torch.tensor([0.0], device=self.device), pos_relative])
+        
+        # Apply rotation: q_conj * pos_quat * q
+        rotated_pos_quat = self._quaternion_multiply(
+            self._quaternion_multiply(hand_quat_conj, pos_quat), hand_quat
+        )
+        
+        # Extract position part (ignore w component)
+        return rotated_pos_quat[1:4]
+    
+    def _transform_quaternion_to_hand_frame(self, quat_world: torch.Tensor, hand_quat: torch.Tensor) -> torch.Tensor:
+        """
+        Transform a quaternion from world frame to hand frame.
+        
+        Args:
+            quat_world: quaternion in world frame (4,) [x, y, z, w]
+            hand_quat: hand quaternion in world frame (4,) [x, y, z, w]
+            
+        Returns:
+            quaternion in hand frame (4,)
+        """
+        # To transform quaternion to hand frame: hand_quat_conj * quat_world
+        hand_quat_conj = torch.tensor([-hand_quat[0], -hand_quat[1], -hand_quat[2], hand_quat[3]], device=self.device)
+        return self._quaternion_multiply(hand_quat_conj, quat_world)
+    
+    def _quaternion_multiply(self, q1: torch.Tensor, q2: torch.Tensor) -> torch.Tensor:
+        """
+        Multiply two quaternions.
+        
+        Args:
+            q1, q2: quaternions [x, y, z, w]
+            
+        Returns:
+            product quaternion [x, y, z, w]
+        """
+        x1, y1, z1, w1 = q1[0], q1[1], q1[2], q1[3]
+        x2, y2, z2, w2 = q2[0], q2[1], q2[2], q2[3]
+        
+        return torch.tensor([
+            w1*x2 + x1*w2 + y1*z2 - z1*y2,
+            w1*y2 - x1*z2 + y1*w2 + z1*x2,
+            w1*z2 + x1*y2 - y1*x2 + z1*w2,
+            w1*w2 - x1*x2 - y1*y2 - z1*z2
+        ], device=self.device)
 
     def get_observation_space(self):
         """

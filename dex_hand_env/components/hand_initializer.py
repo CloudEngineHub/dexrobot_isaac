@@ -117,6 +117,7 @@ class HandInitializer:
         self.fingerpad_body_handles = []
         self.hand_indices = []
         self.fingertip_indices = []
+        self.fingerpad_indices = []
         
         # Initial pose settings
         self.initial_hand_pos = [0.0, 0.0, 0.5]
@@ -200,6 +201,7 @@ class HandInitializer:
         self.fingerpad_body_handles = []
         self.hand_indices = []
         self.fingertip_indices = []
+        self.fingerpad_indices = []
         
         # Note: We'll get DOF properties from the first actor after creation
         # to avoid issues with GPU pipeline
@@ -285,6 +287,13 @@ class HandInitializer:
                 body_idx = self.gym.find_actor_rigid_body_index(env, hand_handle, name, gymapi.DOMAIN_SIM)
                 fingertip_indices.append(body_idx)
             self.fingertip_indices.append(fingertip_indices)
+            
+            # Get fingerpad indices
+            fingerpad_indices = []
+            for name in self.fingerpad_body_names:
+                body_idx = self.gym.find_actor_rigid_body_index(env, hand_handle, name, gymapi.DOMAIN_SIM)
+                fingerpad_indices.append(body_idx)
+            self.fingerpad_indices.append(fingerpad_indices)
         
         return {
             "hand_handles": self.hand_handles,
@@ -292,6 +301,7 @@ class HandInitializer:
             "fingerpad_body_handles": self.fingerpad_body_handles,
             "hand_indices": self.hand_indices,
             "fingertip_indices": self.fingertip_indices,
+            "fingerpad_indices": self.fingerpad_indices,
             "dof_properties": self.original_dof_props  # Add DOF properties to return value
         }
     

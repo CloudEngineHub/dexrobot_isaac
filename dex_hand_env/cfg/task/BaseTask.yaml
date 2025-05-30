@@ -39,6 +39,10 @@ env:
     - "base_dof_target"         # Base DOF targets (6 DOFs: x, y, z, rx, ry, rz)
     - "finger_dof_target"       # Active finger DOF targets (12 active finger controls)
     - "contact_force_magnitude" # Contact force magnitude (scalar for each finger)
+    - "fingertip_poses_world"   # Fingertip poses in world frame (5 fingers × 7 pose dimensions = 35)
+    - "fingertip_poses_hand"    # Fingertip poses in hand frame (5 fingers × 7 pose dimensions = 35)
+    - "fingerpad_poses_world"   # Fingerpad poses in world frame (5 fingers × 7 pose dimensions = 35)
+    - "fingerpad_poses_hand"    # Fingerpad poses in hand frame (5 fingers × 7 pose dimensions = 35)
 
   # Reward parameters
   rewardScales:
