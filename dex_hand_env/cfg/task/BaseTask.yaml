@@ -43,6 +43,16 @@ env:
     - "fingertip_poses_hand"    # Fingertip poses in hand frame (5 fingers × 7 pose dimensions = 35)
     - "fingerpad_poses_world"   # Fingerpad poses in world frame (5 fingers × 7 pose dimensions = 35)
     - "fingerpad_poses_hand"    # Fingerpad poses in hand frame (5 fingers × 7 pose dimensions = 35)
+    
+    # Disabled observation keys (available in obs_dict but not included in RL observation tensor)
+    # Uncomment any of these to include them in the RL observation tensor:
+    
+    # Note: The following are always available in obs_dict for semantic access regardless of whether
+    # they are included in observationKeys. They are commented out to avoid redundancy in RL tensor.
+    
+    # - "all_finger_dof_pos"     # All finger DOF positions (20 finger DOFs) - semantic access only
+    # - "all_finger_dof_vel"     # All finger DOF velocities (20 finger DOFs) - semantic access only
+    # - "all_finger_dof_target"  # All finger DOF targets (20 finger DOFs) - semantic access only
 
   # Reward parameters
   rewardScales:
