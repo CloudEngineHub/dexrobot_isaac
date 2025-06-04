@@ -110,6 +110,9 @@ class ActionProcessor:
         self.prev_active_targets = None
         self.current_targets = None
         self.actions = None
+        
+        # Scaling coefficients for unscaling actions (will be computed during setup)
+        self.action_scaling_coeffs = None
 
     def setup(self, num_dof, dof_props=None):
         """
@@ -163,6 +166,9 @@ class ActionProcessor:
             # Default limits
             self.dof_lower_limits = torch.full((self.num_dof,), -1.0, device=self.device)
             self.dof_upper_limits = torch.full((self.num_dof,), 1.0, device=self.device)
+        
+        # Compute action scaling coefficients for unscaling
+        self._compute_action_scaling_coeffs()
 
     def set_control_mode(self, mode):
         """
@@ -620,3 +626,122 @@ class ActionProcessor:
         if "r_f_joint3_1" in dof_name_to_idx:
             dof_idx = dof_name_to_idx["r_f_joint3_1"]
             self.current_targets[:, dof_idx] = 0.0
+
+    def _compute_action_scaling_coeffs(self):
+        """
+        Compute scaling coefficients for converting actions from [-1,+1] to physical units.
+        This allows for efficient unscaling later.
+        """
+        # Determine total action space size
+        total_actions = 0
+        if self.policy_controls_hand_base:
+            total_actions += self.NUM_BASE_DOFS
+        if self.policy_controls_fingers:
+            total_actions += self.NUM_ACTIVE_FINGER_DOFS
+        
+        if total_actions == 0:
+            self.action_scaling_coeffs = torch.zeros((0,), device=self.device)
+            return
+        
+        self.action_scaling_coeffs = torch.zeros(total_actions, device=self.device)
+        action_idx = 0
+        
+        # Base DOF scaling coefficients
+        if self.policy_controls_hand_base:
+            for i in range(self.NUM_BASE_DOFS):
+                if self.action_control_mode == "position":
+                    # Scale from [-1,+1] to [dof_min, dof_max]
+                    if self.dof_lower_limits is not None and self.dof_upper_limits is not None:
+                        dof_min = self.dof_lower_limits[i]
+                        dof_max = self.dof_upper_limits[i]
+                        self.action_scaling_coeffs[action_idx] = 0.5 * (dof_max - dof_min)
+                    else:
+                        # Fallback defaults
+                        if i < 3:  # Translation DOFs (meters)
+                            self.action_scaling_coeffs[action_idx] = 0.5
+                        else:  # Rotation DOFs (radians)
+                            self.action_scaling_coeffs[action_idx] = 1.57
+                elif self.action_control_mode == "position_delta":
+                    # Scale from [-1,+1] to [-max_delta, +max_delta]
+                    if i < 3:  # Linear DOFs
+                        max_delta = self.policy_base_linear_velocity_limit
+                    else:  # Angular DOFs
+                        max_delta = self.policy_base_angular_velocity_limit
+                    self.action_scaling_coeffs[action_idx] = max_delta
+                action_idx += 1
+        
+        # Finger DOF scaling coefficients
+        if self.policy_controls_fingers:
+            for finger_action_idx in range(self.NUM_ACTIVE_FINGER_DOFS):
+                if self.action_control_mode == "position":
+                    # Find the primary DOF for this action to get limits
+                    if finger_action_idx in self.finger_coupling_map:
+                        joint_mapping = self.finger_coupling_map[finger_action_idx]
+                        first_joint_spec = joint_mapping[0]
+                        if isinstance(first_joint_spec, str):
+                            joint_name = first_joint_spec
+                            scale = 1.0
+                        elif isinstance(first_joint_spec, tuple):
+                            joint_name, scale = first_joint_spec
+                        else:
+                            self.action_scaling_coeffs[action_idx] = 0.785  # Default
+                            action_idx += 1
+                            continue
+                        
+                        # Find DOF index
+                        dof_idx = None
+                        for i, name in enumerate(self.dof_names):
+                            if name == joint_name:
+                                dof_idx = i
+                                break
+                        
+                        if dof_idx is not None and self.dof_lower_limits is not None and self.dof_upper_limits is not None:
+                            dof_min = self.dof_lower_limits[dof_idx]
+                            dof_max = self.dof_upper_limits[dof_idx]
+                            self.action_scaling_coeffs[action_idx] = 0.5 * (dof_max - dof_min) * scale
+                        else:
+                            self.action_scaling_coeffs[action_idx] = 0.785  # Default
+                    else:
+                        self.action_scaling_coeffs[action_idx] = 0.785  # Default
+                elif self.action_control_mode == "position_delta":
+                    # Scale from [-1,+1] to [-max_delta, +max_delta]
+                    if finger_action_idx in self.finger_coupling_map:
+                        joint_mapping = self.finger_coupling_map[finger_action_idx]
+                        first_joint_spec = joint_mapping[0]
+                        if isinstance(first_joint_spec, tuple):
+                            _, scale = first_joint_spec
+                        else:
+                            scale = 1.0
+                        self.action_scaling_coeffs[action_idx] = self.policy_finger_velocity_limit * scale
+                    else:
+                        self.action_scaling_coeffs[action_idx] = self.policy_finger_velocity_limit
+                action_idx += 1
+
+    def unscale_actions(self, actions: torch.Tensor) -> torch.Tensor:
+        """
+        Convert actions from normalized space [-1, +1] to physical units.
+        
+        Args:
+            actions: Normalized actions in range [-1, +1], shape (num_envs, num_actions)
+            
+        Returns:
+            torch.Tensor: Actions in physical units (meters for base translation,
+                         radians for base rotation and finger joints)
+        """
+        if actions is None or actions.numel() == 0 or self.action_scaling_coeffs is None:
+            return torch.zeros_like(actions) if actions is not None else torch.zeros((self.num_envs, 0), device=self.device)
+        
+        # Apply scaling coefficients - this handles both position and position_delta modes
+        if self.action_control_mode == "position":
+            # For position mode: unscaled = (action + 1.0) * scaling_coeff + offset
+            # But since we stored 0.5 * (max - min) as coeff, we need: (action + 1.0) * coeff + min
+            # For simplicity, we'll just multiply by the coefficient (approximate for visualization)
+            return actions * self.action_scaling_coeffs.unsqueeze(0)
+        elif self.action_control_mode == "position_delta":
+            # For position_delta mode: unscaled = action * scaling_coeff * control_dt
+            if self.control_dt is not None:
+                return actions * self.action_scaling_coeffs.unsqueeze(0) * self.control_dt
+            else:
+                return actions * self.action_scaling_coeffs.unsqueeze(0)
+        else:
+            return actions * self.action_scaling_coeffs.unsqueeze(0)
