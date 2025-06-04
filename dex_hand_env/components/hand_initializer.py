@@ -258,12 +258,12 @@ class HandInitializer:
             # Set DOF properties
             self.gym.set_actor_dof_properties(env, hand_handle, hand_dof_props)
             
-            # Get global index
-            hand_idx = self.gym.get_actor_index(env, hand_handle, gymapi.DOMAIN_SIM)
+            # Get hand base rigid body index (this is what actually moves via DOFs)
+            hand_base_idx = self.gym.find_actor_rigid_body_index(env, hand_handle, "right_hand_base", gymapi.DOMAIN_SIM)
             
             # Store handles and indices
             self.hand_handles.append(hand_handle)
-            self.hand_indices.append(hand_idx)
+            self.hand_indices.append(hand_base_idx)
             
             # Get fingertip body handles
             fingertip_body_handles = []

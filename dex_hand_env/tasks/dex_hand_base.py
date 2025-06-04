@@ -274,7 +274,7 @@ class DexHandBase(VecTask):
         self.dof_state = tensors["dof_state"]
         self.dof_pos = tensors["dof_pos"]
         self.dof_vel = tensors["dof_vel"]
-        self.root_state_tensor = tensors["root_state_tensor"]
+        self.actor_root_state_tensor = tensors["actor_root_state_tensor"]
         self.num_dof = tensors["num_dof"]
         self.dof_props = tensors["dof_props"]
         self.rigid_body_states = tensors["rigid_body_states"]
@@ -567,32 +567,22 @@ class DexHandBase(VecTask):
                     self.dof_state[env_id, :, 0] = self.default_dof_pos  # Positions
                     self.dof_state[env_id, :, 1] = 0.0  # Velocities
             
-            # Reset hand pose in root state tensor
-            for env_id in env_ids:
-                if env_id < len(self.hand_indices):
-                    hand_idx = self.hand_indices[env_id]
-                    
-                    # Set position (at default height)
-                    self.root_state_tensor[env_id, hand_idx, 0:3] = torch.tensor([0.0, 0.0, 0.5], device=self.device)
-                    
-                    # Set rotation (identity quaternion)
-                    self.root_state_tensor[env_id, hand_idx, 3:7] = torch.tensor([0.0, 0.0, 0.0, 1.0], device=self.device)
-                    
-                    # Zero velocities
-                    self.root_state_tensor[env_id, hand_idx, 7:13] = torch.zeros(6, device=self.device)
+            # Reset hand pose using proper Isaac Gym API
+            # Note: The hand pose is controlled by DOF positions, not by directly setting rigid body states
+            # The hand base rigid body will move automatically based on the DOF values we set above
             
             # Call task-specific reset if available
             if hasattr(self.task, 'reset_task'):
                 self.task.reset_task(env_ids)
             
-            # Apply the updated tensor states to the simulation
+            # Apply the updated DOF states to the simulation
             self.physics_manager.apply_tensor_states(
                 gym=self.gym,
                 sim=self.sim,
                 env_ids=env_ids,
                 dof_state=self.dof_state,
-                root_state_tensor=self.root_state_tensor,
-                hand_indices=self.hand_indices
+                root_state_tensor=None,  # Don't modify rigid body states directly
+                hand_indices=None
             )
         except Exception as e:
             print(f"CRITICAL ERROR in reset_idx: {e}")
@@ -710,13 +700,13 @@ class DexHandBase(VecTask):
             if self.camera_controller is not None:
                 # Get hand positions for camera following
                 hand_positions = None
-                if self.root_state_tensor is not None and self.hand_indices:
+                if self.rigid_body_states is not None and self.hand_indices:
                     hand_positions = torch.zeros((self.num_envs, 3), device=self.device)
                     for i, hand_idx in enumerate(self.hand_indices):
                         if i >= self.num_envs:
                             break
                         # Get position using the correct tensor indexing (root_state_tensor shape is [num_envs, num_bodies, 13])
-                        hand_positions[i] = self.root_state_tensor[i, hand_idx, :3]
+                        hand_positions[i] = self.rigid_body_states[i, hand_idx, :3]
                 
                 self.camera_controller.update_camera_position(hand_positions)
             

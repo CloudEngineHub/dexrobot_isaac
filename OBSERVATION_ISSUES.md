@@ -30,7 +30,7 @@ This document tracks issues found during real-time plotting validation of the ob
 - Print DOF position tensor directly to verify raw values
 
 ### 3. Hand Pose Always at Spawn Point
-**Status**: Open  
+**Status**: ✅ **SOLVED**  
 **Description**: `hand_pos` and `hand_quat` remain constant at spawn location despite hand movement.  
 **Root Cause**: Reading pose from hand actor instead of hand base link.  
 **Technical Details**:
@@ -38,10 +38,11 @@ This document tracks issues found during real-time plotting validation of the ob
 - Needed: Pose of hand base link within the hand actor
 - Hand actor is fixed in world, hand base link moves via DOFs
 
-**Fix Required**: 
-- Use rigid body states to get pose of specific hand base link
-- Identify correct rigid body index for hand base link
-- Update `_compute_default_observations()` in `observation_encoder.py`
+**Fix Applied**: 
+- ✅ Updated to use `rigid_body_states` tensor instead of `actor_root_state_tensor`
+- ✅ Fixed Isaac Gym tensor naming throughout codebase
+- ✅ Implemented vectorized hand pose extraction using `rigid_body_states[:, hand_base_idx, :7]`
+- ✅ Updated `_compute_default_observations()` in `observation_encoder.py`
 
 ### 4. No Contact Forces
 **Status**: Expected (No objects in scene)  
@@ -63,7 +64,7 @@ This document tracks issues found during real-time plotting validation of the ob
 - Verify action scaling math in `ActionProcessor.unscale_actions()`
 
 ### 6. World to Hand Frame Transformation Wrong
-**Status**: Open  
+**Status**: ✅ **SOLVED**  
 **Description**: Coordinate frame transformation from world to hand frame appears incorrect.  
 **Root Cause**: Likely using hand actor pose instead of hand base link pose as reference frame.  
 **Technical Details**:
@@ -71,10 +72,11 @@ This document tracks issues found during real-time plotting validation of the ob
 - Hand actor is fixed, so transformations would be identity
 - Need pose of moving hand base link for proper coordinate transformation
 
-**Fix Required**:
-- Update `_transform_poses_to_hand_frame()` in `observation_encoder.py`
-- Use hand base link pose instead of hand actor pose
-- Coordinate with fix for Issue #3
+**Fix Applied**:
+- ✅ Updated `_transform_poses_to_hand_frame()` in `observation_encoder.py`
+- ✅ Now uses hand base link pose from `rigid_body_states` tensor
+- ✅ Implemented vectorized coordinate transformations without loops
+- ✅ Fixed to work with correct tensor shapes and Isaac Gym naming
 
 ### 7. Missing Scaling Between ff_spr and joint5_1
 **Status**: Open  
@@ -92,7 +94,7 @@ This document tracks issues found during real-time plotting validation of the ob
 
 ## Next Steps
 
-1. **Immediate**: Fix hand pose reading (Issues #3, #6) - most critical for coordinate transformations
+1. ✅ **COMPLETED**: Fixed hand pose reading (Issues #3, #6) - critical for coordinate transformations
 2. **High Priority**: Debug DOF reading issues (#2, #7) - affects finger control validation  
 3. **Medium Priority**: Investigate velocity issues (#1, #5) - affects action-observation consistency
 4. **Future**: Add contact force testing (#4) - requires scene modifications

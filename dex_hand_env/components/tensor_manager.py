@@ -57,7 +57,7 @@ class TensorManager:
         self.dof_state = None
         self.dof_pos = None
         self.dof_vel = None
-        self.root_state_tensor = None
+        self.actor_root_state_tensor = None
         self.num_dof = None
         self.dof_props = None
         self.rigid_body_states = None
@@ -218,22 +218,29 @@ class TensorManager:
         
         # Wrap rigid body state tensor
         print("Wrapping rigid body state tensor...")
-        self.rigid_body_states = gymtorch.wrap_tensor(self._rigid_body_state_tensor_handle)
+        rigid_body_states_flat = gymtorch.wrap_tensor(self._rigid_body_state_tensor_handle)
         
-        if self.rigid_body_states is None or self.rigid_body_states.numel() == 0:
+        if rigid_body_states_flat is None or rigid_body_states_flat.numel() == 0:
             raise RuntimeError("Rigid body state tensor is empty or None after wrapping")
         
-        print(f"Rigid body states tensor shape: {self.rigid_body_states.shape}")
+        print(f"Rigid body states flat tensor shape: {rigid_body_states_flat.shape}")
         
-        # Reshape rigid body states
-        if self.rigid_body_states.shape[0] % self.num_envs != 0:
-            raise RuntimeError(f"Rigid body tensor shape {self.rigid_body_states.shape[0]} is not divisible by num_envs {self.num_envs}")
+        # Reshape rigid body states to (num_envs, num_bodies_per_env, 13)
+        if rigid_body_states_flat.shape[0] % self.num_envs != 0:
+            raise RuntimeError(f"Rigid body tensor shape {rigid_body_states_flat.shape[0]} is not divisible by num_envs {self.num_envs}")
         
-        # Extract root state tensor (one root state per environment)
-        num_bodies_per_env = self.rigid_body_states.shape[0] // self.num_envs
-        self.root_state_tensor = self.rigid_body_states.view(self.num_envs, num_bodies_per_env, 13)
+        num_bodies_per_env = rigid_body_states_flat.shape[0] // self.num_envs
+        self.rigid_body_states = rigid_body_states_flat.view(self.num_envs, num_bodies_per_env, 13)
+        print(f"Rigid body states tensor reshaped to: {self.rigid_body_states.shape}")
         
-        print(f"Root state tensor shape: {self.root_state_tensor.shape}")
+        # Wrap actor root state tensor (correct Isaac Gym API)
+        print("Wrapping actor root state tensor...")
+        self.actor_root_state_tensor = gymtorch.wrap_tensor(self._actor_root_state_tensor_handle)
+        
+        if self.actor_root_state_tensor is None or self.actor_root_state_tensor.numel() == 0:
+            raise RuntimeError("Actor root state tensor is empty or None after wrapping")
+        
+        print(f"Actor root state tensor shape: {self.actor_root_state_tensor.shape}")
         
         # Wrap contact force tensor
         print("Wrapping contact force tensor...")
@@ -275,7 +282,7 @@ class TensorManager:
             "dof_state": self.dof_state,
             "dof_pos": self.dof_pos,
             "dof_vel": self.dof_vel,
-            "root_state_tensor": self.root_state_tensor,
+            "actor_root_state_tensor": self.actor_root_state_tensor,
             "num_dof": self.num_dof,
             "dof_props": self.dof_props,
             "rigid_body_states": self.rigid_body_states,
@@ -344,7 +351,7 @@ class TensorManager:
             return {
                 "dof_pos": self.dof_pos,
                 "dof_vel": self.dof_vel,
-                "root_state_tensor": self.root_state_tensor,
+                "actor_root_state_tensor": self.actor_root_state_tensor,
                 "contact_forces": self.contact_forces
             }
         except Exception as e:
