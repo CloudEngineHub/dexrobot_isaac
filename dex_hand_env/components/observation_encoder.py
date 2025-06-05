@@ -78,6 +78,10 @@ class ObservationEncoder:
         
         # Previous actions for observation (if enabled)
         self.prev_actions = None
+        
+        # Manual velocity computation (to replace unreliable Isaac Gym velocities)
+        self.prev_dof_pos = None
+        self.control_dt = None  # Will be set during initialization
 
     def initialize(self, observation_keys: List[str], hand_indices: List[int], 
                   fingertip_indices: List[int], fingerpad_indices: List[int],
@@ -158,6 +162,16 @@ class ObservationEncoder:
         self.obs_buf = torch.zeros((self.num_envs, self.num_observations), device=self.device)
         self.states_buf = torch.zeros((self.num_envs, self.num_observations), device=self.device)
 
+    def set_control_dt(self, control_dt: float):
+        """
+        Set the control timestep for manual velocity computation.
+        
+        Args:
+            control_dt: Control timestep in seconds
+        """
+        self.control_dt = control_dt
+        print(f"ObservationEncoder: Manual velocity computation enabled with dt={control_dt}")
+
     def update_prev_actions(self, actions: torch.Tensor):
         """
         Update previous actions for observation.
@@ -167,6 +181,31 @@ class ObservationEncoder:
         """
         if actions is not None and hasattr(actions, 'shape') and self.prev_actions is not None:
             self.prev_actions = actions.clone()
+    
+    def _compute_manual_velocities(self, current_dof_pos: torch.Tensor) -> torch.Tensor:
+        """
+        Compute DOF velocities manually using position differences.
+        
+        This replaces the unreliable Isaac Gym velocity readings with numerical differentiation.
+        
+        Args:
+            current_dof_pos: Current DOF positions tensor (num_envs, num_dofs)
+            
+        Returns:
+            Computed velocities tensor (num_envs, num_dofs)
+        """
+        if self.prev_dof_pos is None or self.control_dt is None:
+            # First step - initialize with zeros
+            self.prev_dof_pos = current_dof_pos.clone()
+            return torch.zeros_like(current_dof_pos)
+        
+        # Compute velocity as (current_pos - prev_pos) / dt
+        velocity = (current_dof_pos - self.prev_dof_pos) / self.control_dt
+        
+        # Update previous positions for next iteration
+        self.prev_dof_pos = current_dof_pos.clone()
+        
+        return velocity
 
     def compute_observations(self) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
@@ -262,15 +301,18 @@ class ObservationEncoder:
         
         # Access tensors directly from tensor manager (no caching needed)
         dof_pos = self.tensor_manager.dof_pos
-        dof_vel = self.tensor_manager.dof_vel
+        isaac_dof_vel = self.tensor_manager.dof_vel  # Original Isaac Gym velocities (unreliable)
         actor_root_state_tensor = self.tensor_manager.actor_root_state_tensor
         rigid_body_states = self.tensor_manager.rigid_body_states
         contact_forces = self.tensor_manager.contact_forces
         
         # Safety check
-        if dof_pos is None or dof_vel is None or actor_root_state_tensor is None:
+        if dof_pos is None or isaac_dof_vel is None or actor_root_state_tensor is None:
             print("Warning: Tensor handles not initialized. Cannot compute observations.")
             return obs_dict
+        
+        # Compute manual velocities to replace unreliable Isaac Gym velocities
+        dof_vel = self._compute_manual_velocities(dof_pos)
         
         # Base DOF positions (6 DOFs: x, y, z, rx, ry, rz)
         if "base_dof_pos" in self.observation_keys:

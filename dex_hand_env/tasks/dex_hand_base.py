@@ -530,6 +530,9 @@ class DexHandBase(VecTask):
         # Set observation space dimensions needed by VecTask
         self.num_observations = self.observation_encoder.num_observations
         
+        # Set control timestep for manual velocity computation in observation encoder
+        self.observation_encoder.set_control_dt(self.physics_manager.control_dt)
+        
         # Create extras dictionary for additional info
         self.extras = {}
 
@@ -717,9 +720,10 @@ class DexHandBase(VecTask):
             # Physics step count tracking for auto-detecting steps per control
             self.physics_manager.mark_control_step()
             
-            # Update action processor control_dt if it was auto-detected and changed
+            # Update control_dt if it was auto-detected and changed
             if self.physics_manager.auto_detected_physics_steps:
                 self.action_processor.set_control_dt(self.physics_manager.control_dt)
+                self.observation_encoder.set_control_dt(self.physics_manager.control_dt)
             
             # Update extras
             self.extras = {
