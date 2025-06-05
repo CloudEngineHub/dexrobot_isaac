@@ -16,18 +16,15 @@ This document tracks issues found during real-time plotting validation of the ob
 **Investigation**: Check if linear velocities (ARTx, ARTy, ARTz) are also messy to isolate linear vs angular issue.
 
 ### 2. mf_mcp_pos Value Always 0
-**Status**: Open  
+**Status**: ✅ **SOLVED**  
 **Description**: Middle finger MCP position (`mf_mcp_pos`) consistently reads 0, indicating incorrect data retrieval.  
-**Possible Causes**:
-- Control name `"mf_mcp"` not found in `control_name_to_index` mapping
-- Active finger DOF indices computation error in `_compute_active_finger_dof_indices()`
-- Coupling mapping issue between action space and DOF space
-- DOF not being actuated, so it stays at default position
+**Root Cause**: The `_compute_active_finger_dof_indices()` method had a bug where multiple DOFs mapping to the same control would overwrite each other, leaving some controls unmapped.
 
-**Investigation**: 
-- Verify `control_name_to_index` contains `"mf_mcp"`
-- Check if other finger DOFs (e.g., `th_rot_pos`) also read 0
-- Print DOF position tensor directly to verify raw values
+**Fix Applied**:
+- ✅ Updated `_compute_active_finger_dof_indices()` to use **primary DOF** (first joint) for each control
+- ✅ `mf_mcp` now correctly maps to `r_f_joint3_2` (DOF index 15)
+- ✅ Fixed architectural mismatch between ActionProcessor (many-to-many) and ObservationEncoder (1:1) 
+- ✅ All 12 finger controls now properly mapped to their primary joints
 
 ### 3. Hand Pose Always at Spawn Point
 **Status**: ✅ **SOLVED**  
@@ -79,25 +76,38 @@ This document tracks issues found during real-time plotting validation of the ob
 - ✅ Fixed to work with correct tensor shapes and Isaac Gym naming
 
 ### 7. Missing Scaling Between ff_spr and joint5_1
-**Status**: Open  
+**Status**: ✅ **SOLVED**  
 **Description**: Expected scaling relationship between active finger control `ff_spr` and raw DOF `r_f_joint5_1` not observed.  
-**Expected Behavior**: `ff_spr` should have 2x scaling factor relative to `joint5_1` based on coupling map.  
-**Possible Causes**:
-- Coupling scaling not applied correctly in action processing
-- Wrong DOF being read for `joint5_1`
-- Finger spread action not being applied properly
+**Root Cause**: Same issue as #2 - the observation encoder was incorrectly mapping multi-DOF controls to finger observations, plus a critical bug where DOF targets were reset to current positions every step.
 
-**Investigation**:
-- Check `finger_coupling_map` in `ActionProcessor`
-- Verify mapping: `3: [("r_f_joint2_1", 1.0), ("r_f_joint4_1", 1.0), ("r_f_joint5_1", 2.0)]`
-- Confirm `ff_spr` corresponds to action index 3
+**Fix Applied**:
+- ✅ Fixed `_compute_active_finger_dof_indices()` to use primary DOF (`r_f_joint2_1`) for `ff_spr` observations
+- ✅ **CRITICAL**: Fixed ActionProcessor target persistence bug where all targets were reset to current positions every step
+- ✅ DOF targets now properly persist between steps unless actively commanded
+- ✅ `ff_spr` observations now correctly read from `r_f_joint2_1` while ActionProcessor still applies 2x scaling to `r_f_joint5_1`
+
+### 8. Quaternion to Euler Conversion for Human Inspection
+**Status**: Enhancement (Low Priority)  
+**Description**: Quaternion rotations in observations (hand pose, fingertip poses, fingerpad poses) are difficult for humans to interpret during debugging and visualization.  
+**Proposed Enhancement**: Convert quaternions to Euler angles in observation plotting for more intuitive human inspection.  
+**Benefits**:
+- More intuitive rotation values for debugging
+- Easier to understand hand orientation changes
+- Better visualization in plotting tools
+- Simplified manual inspection of rotation observations
+
+**Implementation Notes**:
+- Add conversion utility for plotting/debugging purposes only
+- Keep quaternions in actual observation tensors for RL algorithms
+- Apply to hand pose, fingertip poses, and fingerpad poses in plotting tools
 
 ## Next Steps
 
 1. ✅ **COMPLETED**: Fixed hand pose reading (Issues #3, #6) - critical for coordinate transformations
-2. **High Priority**: Debug DOF reading issues (#2, #7) - affects finger control validation  
-3. **Medium Priority**: Investigate velocity issues (#1, #5) - affects action-observation consistency
+2. ✅ **COMPLETED**: Fixed DOF reading issues (#2, #7) - critical target persistence bug resolved
+3. **High Priority**: Investigate velocity issues (#1, #5) - affects action-observation consistency
 4. **Future**: Add contact force testing (#4) - requires scene modifications
+5. **Enhancement**: Convert quaternions to Euler angles for plotting (#8) - improves debugging experience
 
 ## Code Locations
 

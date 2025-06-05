@@ -196,17 +196,20 @@ class ObservationEncoder:
         """
         Pre-compute indices mapping from full DOF tensor to active finger DOFs.
         
+        For controls that map to multiple DOFs (like ff_spr), this uses the PRIMARY DOF
+        (the first one in the joint list) to represent the control in observations.
+        
         Returns:
             torch.Tensor of shape (num_active_finger_dofs,) with DOF indices
         """
         if not self.dof_names:
             raise RuntimeError("DOF names not available from asset. Cannot compute active finger DOF indices.")
         
-        if not self.joint_to_control:
-            raise RuntimeError("joint_to_control mapping not provided. Cannot compute active finger DOF indices.")
-        
         if not self.active_joint_names:
             raise RuntimeError("active_joint_names not provided. Cannot compute active finger DOF indices.")
+        
+        # Import HardwareMapping to get the authoritative control-to-joint mapping
+        from dex_hand_env.components.hand_initializer import HardwareMapping
         
         # Create mapping from control name to its index in the active joint list
         control_to_idx = {name: idx for idx, name in enumerate(self.active_joint_names)}
@@ -214,13 +217,30 @@ class ObservationEncoder:
         # Create array to store DOF indices for each active control
         active_indices = torch.full((len(self.active_joint_names),), -1, dtype=torch.long, device=self.device)
         
-        # Map each finger DOF to its corresponding active control index
-        for i, dof_name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
-            if dof_name in self.joint_to_control:
-                control_name = self.joint_to_control[dof_name]
-                if control_name in control_to_idx:
-                    control_idx = control_to_idx[control_name]
-                    active_indices[control_idx] = i + self.NUM_BASE_DOFS
+        # For each control, find the PRIMARY DOF (first joint in the list)
+        for control_name in self.active_joint_names:
+            if control_name in control_to_idx:
+                control_idx = control_to_idx[control_name]
+                
+                # Get the joint names for this control from HardwareMapping
+                hardware_mapping = None
+                for member in HardwareMapping:
+                    if member.control_name == control_name:
+                        hardware_mapping = member
+                        break
+                
+                if hardware_mapping is None:
+                    raise RuntimeError(f"Control '{control_name}' not found in HardwareMapping")
+                
+                # Use the PRIMARY DOF (first joint) to represent this control
+                primary_joint = hardware_mapping.joint_names[0]
+                
+                # Find the DOF index for this primary joint
+                for i, dof_name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
+                    if dof_name == primary_joint:
+                        active_indices[control_idx] = i + self.NUM_BASE_DOFS
+                        print(f"Mapped control '{control_name}' -> primary joint '{primary_joint}' -> DOF index {i + self.NUM_BASE_DOFS}")
+                        break
         
         # Check that all active controls have been mapped
         valid_mask = active_indices >= 0
@@ -306,21 +326,21 @@ class ObservationEncoder:
             if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
                 obs_dict["base_dof_target"] = self.action_processor.current_targets[:, :self.NUM_BASE_DOFS]
             else:
-                obs_dict["base_dof_target"] = torch.zeros((self.num_envs, self.NUM_BASE_DOFS), device=self.device)
+                raise RuntimeError("ActionProcessor current_targets not available. Cannot compute base_dof_target.")
         
         # Active finger DOF targets (12 active finger controls) - for RL observation tensor
         if "active_finger_dof_target" in self.observation_keys and self.action_processor is not None:
             if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
                 obs_dict["active_finger_dof_target"] = self.action_processor.current_targets[:, self.active_finger_dof_indices]
             else:
-                obs_dict["active_finger_dof_target"] = torch.zeros((self.num_envs, self.NUM_ACTIVE_FINGER_DOFS), device=self.device)
+                raise RuntimeError("ActionProcessor current_targets not available. Cannot compute active_finger_dof_target.")
         
         # All finger DOF targets (20 finger DOFs) - always available for semantic access
         if self.action_processor is not None:
             if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
                 obs_dict["all_finger_dof_target"] = self.action_processor.current_targets[:, all_finger_dof_indices]
             else:
-                obs_dict["all_finger_dof_target"] = torch.zeros((self.num_envs, all_finger_dof_indices.shape[0]), device=self.device)
+                raise RuntimeError("ActionProcessor current_targets not available. Cannot compute all_finger_dof_target.")
         
         # Contact force magnitude (magnitude for each finger)
         if "contact_force_magnitude" in self.observation_keys and contact_forces is not None:

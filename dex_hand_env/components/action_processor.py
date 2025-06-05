@@ -294,8 +294,13 @@ class ActionProcessor:
                 print(f"Error: DOF position tensor has invalid shape {self.dof_pos.shape}")
                 return False
 
-            # Initialize targets with current positions
-            targets = self.dof_pos.clone()
+            # Initialize targets with previous targets (maintain position unless commanded)
+            # CRITICAL: In position control, targets should persist between steps
+            if self.current_targets is not None:
+                targets = self.current_targets.clone()
+            else:
+                # Only on first step, initialize with current positions
+                targets = self.dof_pos.clone()
 
             # Split actions into base and finger components
             action_idx = 0
