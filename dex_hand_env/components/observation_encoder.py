@@ -130,14 +130,13 @@ class ObservationEncoder:
         else:
             raise RuntimeError("index_mappings not provided to ObservationEncoder. These mappings are required for tensor indexing.")
         
-        # Initialize previous actions tensor if needed
-        if "prev_actions" in self.observation_keys:
-            # Use actual action space size if provided, otherwise default to full size
-            prev_action_size = num_actions if num_actions is not None else (self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS)
-            self.prev_actions = torch.zeros(
-                (self.num_envs, prev_action_size), 
-                device=self.device
-            )
+        # Initialize previous actions tensor - always available for inspection
+        if num_actions is None:
+            raise RuntimeError("num_actions not provided to ObservationEncoder initialization. Cannot determine action space size.")
+        self.prev_actions = torch.zeros(
+            (self.num_envs, num_actions), 
+            device=self.device
+        )
         
         # Compute observation dimension dynamically by creating a test observation
         test_obs_dict = self._compute_default_observations()
@@ -321,20 +320,16 @@ class ObservationEncoder:
         dof_vel = self._compute_manual_velocities(dof_pos)
         
         # Base DOF positions (6 DOFs: x, y, z, rx, ry, rz)
-        if "base_dof_pos" in self.observation_keys:
-            obs_dict["base_dof_pos"] = dof_pos[:, :self.NUM_BASE_DOFS]
+        obs_dict["base_dof_pos"] = dof_pos[:, :self.NUM_BASE_DOFS]
         
         # Base DOF velocities (6 DOFs: x, y, z, rx, ry, rz)
-        if "base_dof_vel" in self.observation_keys:
-            obs_dict["base_dof_vel"] = dof_vel[:, :self.NUM_BASE_DOFS]
+        obs_dict["base_dof_vel"] = dof_vel[:, :self.NUM_BASE_DOFS]
         
         # Active finger DOF positions (12 active finger controls) - for RL observation tensor
-        if "active_finger_dof_pos" in self.observation_keys:
-            obs_dict["active_finger_dof_pos"] = dof_pos[:, self.active_finger_dof_indices]
+        obs_dict["active_finger_dof_pos"] = dof_pos[:, self.active_finger_dof_indices]
         
         # Active finger DOF velocities (12 active finger controls) - for RL observation tensor
-        if "active_finger_dof_vel" in self.observation_keys:
-            obs_dict["active_finger_dof_vel"] = dof_vel[:, self.active_finger_dof_indices]
+        obs_dict["active_finger_dof_vel"] = dof_vel[:, self.active_finger_dof_indices]
         
         # All finger DOF positions (20 finger DOFs: excluding base 6 DOFs, r_f_joint3_1 is fixed)
         # Always available in obs_dict for semantic access, but not included in RL tensor by default
@@ -343,78 +338,63 @@ class ObservationEncoder:
         obs_dict["all_finger_dof_vel"] = dof_vel[:, all_finger_dof_indices]
         
         # Hand pose (position and orientation)
-        if "hand_pose" in self.observation_keys and self.hand_indices is not None:
-            if len(self.hand_indices) > 0 and rigid_body_states is not None:
-                # For multi-env case, assume same hand base index across all envs
-                hand_base_idx = self.hand_indices[0]  # Same rigid body index within each env
-                
-                if hand_base_idx < 0 or hand_base_idx >= rigid_body_states.shape[1]:
-                    raise RuntimeError(f"Invalid hand base rigid body index {hand_base_idx}. Rigid body states shape: {rigid_body_states.shape}")
-                
-                # Vectorized extraction: get hand base pose for all envs at once
-                # rigid_body_states shape: (num_envs, num_bodies_per_env, 13)
-                hand_poses = rigid_body_states[:, hand_base_idx, :7]  # Extract pos(3) + quat(4) for all envs
-                
-                obs_dict["hand_pose"] = hand_poses
-            else:
-                obs_dict["hand_pose"] = torch.zeros((self.num_envs, 7), device=self.device)
+        # hand_indices and rigid_body_states should never be None/empty during observation computation
+        # If they are, that indicates an initialization bug that must be fixed
+        hand_base_idx = self.hand_indices[0]  # Same rigid body index within each env
+        
+        if hand_base_idx < 0 or hand_base_idx >= rigid_body_states.shape[1]:
+            raise RuntimeError(f"Invalid hand base rigid body index {hand_base_idx}. Rigid body states shape: {rigid_body_states.shape}")
+        
+        # Vectorized extraction: get hand base pose for all envs at once
+        # rigid_body_states shape: (num_envs, num_bodies_per_env, 13)
+        hand_poses = rigid_body_states[:, hand_base_idx, :7]  # Extract pos(3) + quat(4) for all envs
+        obs_dict["hand_pose"] = hand_poses
         
         # Contact forces (3D force for each finger)
-        if "contact_forces" in self.observation_keys and contact_forces is not None:
-            # Reshape contact forces to flat tensor
-            flat_contacts = contact_forces.reshape(self.num_envs, -1)
-            obs_dict["contact_forces"] = flat_contacts
+        # contact_forces should never be None during observation computation
+        # If it is None, that indicates a tensor initialization bug that must be fixed
+        flat_contacts = contact_forces.reshape(self.num_envs, -1)
+        obs_dict["contact_forces"] = flat_contacts
         
         # Previous actions
-        if "prev_actions" in self.observation_keys and self.prev_actions is not None:
-            obs_dict["prev_actions"] = self.prev_actions
+        if self.prev_actions is None:
+            raise RuntimeError("prev_actions tensor not initialized. This indicates a programming error in ObservationEncoder initialization.")
+        obs_dict["prev_actions"] = self.prev_actions
         
         # Base DOF targets (6 DOFs: x, y, z, rx, ry, rz)
-        if "base_dof_target" in self.observation_keys and self.action_processor is not None:
-            if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
-                obs_dict["base_dof_target"] = self.action_processor.current_targets[:, :self.NUM_BASE_DOFS]
-            else:
-                raise RuntimeError("ActionProcessor current_targets not available. Cannot compute base_dof_target.")
+        # action_processor should never be None during observation computation
+        # If it is, that indicates an initialization bug that must be fixed
+        if not hasattr(self.action_processor, 'current_targets') or self.action_processor.current_targets is None:
+            raise RuntimeError("ActionProcessor current_targets not available. Cannot compute DOF targets.")
+        
+        obs_dict["base_dof_target"] = self.action_processor.current_targets[:, :self.NUM_BASE_DOFS]
         
         # Active finger DOF targets (12 active finger controls) - for RL observation tensor
-        if "active_finger_dof_target" in self.observation_keys and self.action_processor is not None:
-            if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
-                obs_dict["active_finger_dof_target"] = self.action_processor.current_targets[:, self.active_finger_dof_indices]
-            else:
-                raise RuntimeError("ActionProcessor current_targets not available. Cannot compute active_finger_dof_target.")
+        obs_dict["active_finger_dof_target"] = self.action_processor.current_targets[:, self.active_finger_dof_indices]
         
         # All finger DOF targets (20 finger DOFs) - always available for semantic access
-        if self.action_processor is not None:
-            if hasattr(self.action_processor, 'current_targets') and self.action_processor.current_targets is not None:
-                obs_dict["all_finger_dof_target"] = self.action_processor.current_targets[:, all_finger_dof_indices]
-            else:
-                raise RuntimeError("ActionProcessor current_targets not available. Cannot compute all_finger_dof_target.")
+        obs_dict["all_finger_dof_target"] = self.action_processor.current_targets[:, all_finger_dof_indices]
         
         # Contact force magnitude (magnitude for each finger)
-        if "contact_force_magnitude" in self.observation_keys and contact_forces is not None:
-            # Compute magnitude of contact forces for each finger (L2 norm of 3D force)
-            contact_magnitudes = torch.norm(contact_forces, dim=2)  # Shape: (num_envs, num_fingers)
-            obs_dict["contact_force_magnitude"] = contact_magnitudes
+        # contact_forces should never be None during observation computation (same tensor as above)
+        contact_magnitudes = torch.norm(contact_forces, dim=2)  # Shape: (num_envs, num_fingers)
+        obs_dict["contact_force_magnitude"] = contact_magnitudes
         
         # Fingertip poses in world frame (5 fingers × 7 pose dimensions = 35)
-        if "fingertip_poses_world" in self.observation_keys:
-            fingertip_poses_world = self._extract_fingertip_poses_world()
-            obs_dict["fingertip_poses_world"] = fingertip_poses_world
+        fingertip_poses_world = self._extract_fingertip_poses_world()
+        obs_dict["fingertip_poses_world"] = fingertip_poses_world
         
         # Fingertip poses in hand frame (5 fingers × 7 pose dimensions = 35)
-        if "fingertip_poses_hand" in self.observation_keys:
-            fingertip_poses_hand = self._extract_fingertip_poses_hand()
-            obs_dict["fingertip_poses_hand"] = fingertip_poses_hand
+        fingertip_poses_hand = self._extract_fingertip_poses_hand()
+        obs_dict["fingertip_poses_hand"] = fingertip_poses_hand
         
         # Fingerpad poses in world frame (5 fingers × 7 pose dimensions = 35)
-        if "fingerpad_poses_world" in self.observation_keys:
-            fingerpad_poses_world = self._extract_fingerpad_poses_world()
-            obs_dict["fingerpad_poses_world"] = fingerpad_poses_world
+        fingerpad_poses_world = self._extract_fingerpad_poses_world()
+        obs_dict["fingerpad_poses_world"] = fingerpad_poses_world
         
         # Fingerpad poses in hand frame (5 fingers × 7 pose dimensions = 35)
-        if "fingerpad_poses_hand" in self.observation_keys:
-            fingerpad_poses_hand = self._extract_fingerpad_poses_hand()
-            obs_dict["fingerpad_poses_hand"] = fingerpad_poses_hand
+        fingerpad_poses_hand = self._extract_fingerpad_poses_hand()
+        obs_dict["fingerpad_poses_hand"] = fingerpad_poses_hand
         
         return obs_dict
 

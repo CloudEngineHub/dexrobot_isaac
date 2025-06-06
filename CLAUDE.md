@@ -75,11 +75,48 @@ if joint_name not in self.dof_names:
 dof_idx = self.dof_names.index(joint_name)
 ```
 
+### CRITICAL: Don't Handle States That Should Never Occur
+
+Beyond avoiding fallback values, **never write code to handle programming errors**:
+
+❌ WRONG - Defensive programming that hides bugs:
+```python
+if contact_forces is not None:
+    obs_dict["contact_forces"] = contact_forces.reshape(...)
+else:
+    obs_dict["contact_forces"] = torch.zeros(...)  # "handles" broken state
+```
+
+✅ CORRECT - Let it crash to expose the bug:
+```python
+# contact_forces should NEVER be None during observation computation
+# If it is None, that indicates a tensor initialization bug that must be fixed
+obs_dict["contact_forces"] = contact_forces.reshape(...)
+```
+
+❌ WRONG - Avoiding work by allowing broken behavior:
+```python
+if self.action_processor is not None:
+    targets = self.action_processor.current_targets
+else:
+    targets = torch.zeros(...)  # "handles" missing component
+```
+
+✅ CORRECT - Force architectural problems to be fixed:
+```python
+# action_processor should NEVER be None when computing observations
+# If it is None, that indicates an initialization bug that must be fixed
+targets = self.action_processor.current_targets
+```
+
+**Key Insight**: If code executes correctly, only one path in if-else will be entered. Writing branches to handle "impossible" states is mental laziness that hides bugs instead of forcing them to be fixed.
+
 ### Remember:
 - Research code needs to expose problems, not hide them
 - A clear error message is more helpful than silently wrong behavior
 - Debugging is easier when failures happen at the source of the problem
 - Magic numbers and fallback values make debugging nearly impossible
+- **Don't write defensive code for states that should never occur - let it crash and fix the root cause**
 
 ## Isaac Gym Version
 - No need to handle different isaac gym versions. Refer to the docs of the current isaac gym version in @reference/isaacgym when necessary.
@@ -165,6 +202,45 @@ final_target = scaled_action * coupling_scale
   2. This ensures proper tracking of physics steps and automatic adjustment of control frequency
   3. Both the main stepping function and reset operations should use this wrapper
   4. The wrapper handles both simulation and result fetching in one call
+
+## Observation System Design
+
+### Observation Dictionary vs. Observation Tensor
+
+The observation system follows a clear separation between **complete data availability** and **selective data inclusion**:
+
+**Observation Dictionary (`obs_dict`):**
+- Contains ALL computed observations regardless of configuration
+- Used for debugging, inspection, analysis, and plotting
+- Always available for external tools and utilities
+- Includes disabled/inactive observation components with zero values
+
+**Observation Tensor (`obs_buf`):**
+- Contains ONLY observations specified in `observation_keys` configuration
+- Used for RL training and policy inference
+- Concatenated in the order specified by `observation_keys`
+- Optimized for memory and computational efficiency
+
+**Design Rationale:**
+- **Research Flexibility**: Researchers can always inspect any observation component even if it's disabled in the RL pipeline
+- **Debugging Support**: All observation data remains accessible for analysis and troubleshooting
+- **Performance**: RL training only processes the minimal required observation set
+- **Configuration Control**: Users explicitly specify which observations the policy should receive
+
+**Example:**
+```python
+# Configuration disables hand_pose for RL training
+observation_keys = ["base_dof_pos", "finger_dof_pos"]
+
+# But obs_dict still contains hand_pose for inspection
+obs_dict = env.get_observations_dict()
+hand_pose = obs_dict["hand_pose"]  # Always available
+
+# While obs_tensor only contains the enabled components
+obs_tensor = env.obs_buf  # Only base_dof_pos + finger_dof_pos
+```
+
+This design ensures that **disabling an observation component means excluding it from RL training**, not making it unavailable for inspection.
 
 ## DexRobot Project Roadmap
 
