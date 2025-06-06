@@ -726,6 +726,9 @@ class ActionProcessor:
         """
         Convert actions from normalized space [-1, +1] to physical units.
         
+        This method applies the EXACT same scaling formula used in process_actions()
+        to ensure consistency between action processing and unscaling.
+        
         Args:
             actions: Normalized actions in range [-1, +1], shape (num_envs, num_actions)
             
@@ -733,20 +736,84 @@ class ActionProcessor:
             torch.Tensor: Actions in physical units (meters for base translation,
                          radians for base rotation and finger joints)
         """
-        if actions is None or actions.numel() == 0 or self.action_scaling_coeffs is None:
+        if actions is None or actions.numel() == 0:
             return torch.zeros_like(actions) if actions is not None else torch.zeros((self.num_envs, 0), device=self.device)
         
-        # Apply scaling coefficients - this handles both position and position_delta modes
-        if self.action_control_mode == "position":
-            # For position mode: unscaled = (action + 1.0) * scaling_coeff + offset
-            # But since we stored 0.5 * (max - min) as coeff, we need: (action + 1.0) * coeff + min
-            # For simplicity, we'll just multiply by the coefficient (approximate for visualization)
-            return actions * self.action_scaling_coeffs.unsqueeze(0)
-        elif self.action_control_mode == "position_delta":
-            # For position_delta mode: unscaled = action * scaling_coeff * control_dt
-            if self.control_dt is not None:
-                return actions * self.action_scaling_coeffs.unsqueeze(0) * self.control_dt
-            else:
-                return actions * self.action_scaling_coeffs.unsqueeze(0)
-        else:
-            return actions * self.action_scaling_coeffs.unsqueeze(0)
+        if self.dof_lower_limits is None or self.dof_upper_limits is None:
+            raise RuntimeError("DOF limits not available for action unscaling. Cannot proceed.")
+        
+        unscaled_actions = torch.zeros_like(actions)
+        action_idx = 0
+        
+        # Base DOF unscaling
+        if self.policy_controls_hand_base:
+            for i in range(min(self.NUM_BASE_DOFS, actions.shape[1] - action_idx)):
+                if self.action_control_mode == "position":
+                    # Position mode: unscaled = (action + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
+                    dof_min = self.dof_lower_limits[i]
+                    dof_max = self.dof_upper_limits[i]
+                    unscaled_actions[:, action_idx] = (actions[:, action_idx] + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
+                elif self.action_control_mode == "position_delta":
+                    # Position delta mode: unscaled = action * control_dt * max_velocity
+                    if self.control_dt is None:
+                        raise RuntimeError("control_dt not set for position_delta mode")
+                    if i < 3:  # Translation DOFs (x, y, z)
+                        max_pos_delta = self.control_dt * self.policy_base_lin_velocity_limit
+                    else:  # Rotation DOFs (rx, ry, rz)
+                        max_pos_delta = self.control_dt * self.policy_base_ang_velocity_limit
+                    unscaled_actions[:, action_idx] = actions[:, action_idx] * max_pos_delta
+                action_idx += 1
+        
+        # Finger DOF unscaling
+        if self.policy_controls_fingers:
+            for finger_action_idx in range(min(self.NUM_ACTIVE_FINGER_DOFS, actions.shape[1] - action_idx)):
+                if self.action_control_mode == "position":
+                    # Find the primary DOF for this action to get limits
+                    if finger_action_idx not in self.finger_coupling_map:
+                        raise RuntimeError(f"Finger action index {finger_action_idx} not found in coupling map")
+                    
+                    joint_mapping = self.finger_coupling_map[finger_action_idx]
+                    first_joint_spec = joint_mapping[0]
+                    if isinstance(first_joint_spec, str):
+                        joint_name = first_joint_spec
+                        scale = 1.0
+                    elif isinstance(first_joint_spec, tuple):
+                        joint_name, scale = first_joint_spec
+                    else:
+                        raise RuntimeError(f"Invalid joint spec type: {type(first_joint_spec)}")
+                    
+                    # Find DOF index for this joint
+                    dof_idx = None
+                    for i, name in enumerate(self.dof_names):
+                        if name == joint_name:
+                            dof_idx = i
+                            break
+                    
+                    if dof_idx is None:
+                        raise RuntimeError(f"Joint '{joint_name}' not found in DOF names")
+                    
+                    # Apply exact same scaling as in process_actions
+                    dof_min = self.dof_lower_limits[dof_idx]
+                    dof_max = self.dof_upper_limits[dof_idx]
+                    scaled_action = (actions[:, action_idx] + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
+                    unscaled_actions[:, action_idx] = scaled_action * scale
+                    
+                elif self.action_control_mode == "position_delta":
+                    # Position delta mode: unscaled = action * control_dt * max_finger_velocity * scale
+                    if self.control_dt is None:
+                        raise RuntimeError("control_dt not set for position_delta mode")
+                    
+                    if finger_action_idx in self.finger_coupling_map:
+                        joint_mapping = self.finger_coupling_map[finger_action_idx]
+                        first_joint_spec = joint_mapping[0]
+                        if isinstance(first_joint_spec, tuple):
+                            _, scale = first_joint_spec
+                        else:
+                            scale = 1.0
+                        max_pos_delta = self.control_dt * self.policy_finger_velocity_limit * scale
+                    else:
+                        max_pos_delta = self.control_dt * self.policy_finger_velocity_limit
+                    unscaled_actions[:, action_idx] = actions[:, action_idx] * max_pos_delta
+                action_idx += 1
+        
+        return unscaled_actions

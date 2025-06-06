@@ -33,6 +33,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - DO NOT proceed to the next issue unless the current issue is fully resolved and the user explicitly confirms.
 - Always be precise about the current state - segmentation faults are NEVER acceptable, even if some steps seem to run.
 
+## CRITICAL: No Fallback Values Policy
+**This is a research codebase where failing fast is essential for debugging.**
+
+### FORBIDDEN Patterns (NEVER use these):
+- `if x is None: x = default_value` → Use `raise RuntimeError("x is None")`
+- `try: ... except: use_fallback` → Let it crash with informative error
+- `value = x if x else fallback` → Raise error if x is invalid
+- `value = 0.785 # fallback` → Raise error instead of magic numbers
+- `# Fallback to default` → This comment itself indicates wrong approach
+- `return default_value` → Use `raise RuntimeError("Missing required value")`
+
+### REQUIRED Pattern:
+When something is missing or invalid, ALWAYS:
+```python
+raise RuntimeError(f"Descriptive error message explaining what is missing/wrong")
+```
+
+### Examples:
+❌ WRONG:
+```python
+if self.dof_props is None:
+    self.dof_props = torch.zeros((26, 6))  # default
+```
+
+✅ CORRECT:
+```python
+if self.dof_props is None:
+    raise RuntimeError("DOF properties not initialized. Cannot proceed without DOF limits.")
+```
+
+❌ WRONG:
+```python
+dof_idx = self.dof_names.index(joint_name) if joint_name in self.dof_names else 0
+```
+
+✅ CORRECT:
+```python
+if joint_name not in self.dof_names:
+    raise RuntimeError(f"Joint '{joint_name}' not found in DOF names: {self.dof_names}")
+dof_idx = self.dof_names.index(joint_name)
+```
+
+### Remember:
+- Research code needs to expose problems, not hide them
+- A clear error message is more helpful than silently wrong behavior
+- Debugging is easier when failures happen at the source of the problem
+- Magic numbers and fallback values make debugging nearly impossible
+
 ## Isaac Gym Version
 - No need to handle different isaac gym versions. Refer to the docs of the current isaac gym version in @reference/isaacgym when necessary.
 
