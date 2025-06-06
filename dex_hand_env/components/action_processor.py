@@ -158,14 +158,9 @@ class ActionProcessor:
                 self.dof_lower_limits = torch.tensor(dof_props['lower'], dtype=torch.float, device=self.device)
                 self.dof_upper_limits = torch.tensor(dof_props['upper'], dtype=torch.float, device=self.device)
             else:
-                print("Warning: DOF properties format not recognized, using default limits")
-                # Default limits
-                self.dof_lower_limits = torch.full((self.num_dof,), -1.0, device=self.device)
-                self.dof_upper_limits = torch.full((self.num_dof,), 1.0, device=self.device)
+                raise RuntimeError(f"DOF properties format not recognized: {type(dof_props)}. Expected torch.Tensor or dict with 'lower'/'upper' keys. Cannot proceed without valid DOF limits.")
         else:
-            # Default limits
-            self.dof_lower_limits = torch.full((self.num_dof,), -1.0, device=self.device)
-            self.dof_upper_limits = torch.full((self.num_dof,), 1.0, device=self.device)
+            raise RuntimeError("DOF properties not provided to ActionProcessor. Cannot proceed without DOF limits.")
         
         # Compute action scaling coefficients for unscaling
         self._compute_action_scaling_coeffs()
@@ -443,8 +438,7 @@ class ActionProcessor:
                                             final_target = scaled_action * scale
                                             targets[:, dof_idx] = final_target
                                         else:
-                                            # Fallback: use raw action value
-                                            targets[:, dof_idx] = raw_action_value * scale
+                                            raise RuntimeError(f"DOF limits not available for scaling action to joint {joint_name}. Cannot proceed without proper limits.")
                                     elif self.action_control_mode == "position_delta":
                                         # Position delta mode: map action from [-1, +1] to [-max_pos_delta, +max_pos_delta]
                                         # where max_pos_delta = control_dt * max_finger_velocity
@@ -689,7 +683,7 @@ class ActionProcessor:
                         elif isinstance(first_joint_spec, tuple):
                             joint_name, scale = first_joint_spec
                         else:
-                            self.action_scaling_coeffs[action_idx] = 0.785  # Default
+                            raise RuntimeError(f"Invalid joint spec type in finger coupling map for action {finger_action_idx}: {type(first_joint_spec)}")
                             action_idx += 1
                             continue
                         
@@ -705,9 +699,9 @@ class ActionProcessor:
                             dof_max = self.dof_upper_limits[dof_idx]
                             self.action_scaling_coeffs[action_idx] = 0.5 * (dof_max - dof_min) * scale
                         else:
-                            self.action_scaling_coeffs[action_idx] = 0.785  # Default
+                            raise RuntimeError(f"Failed to find DOF index for joint '{joint_name}' in finger action {finger_action_idx}")
                     else:
-                        self.action_scaling_coeffs[action_idx] = 0.785  # Default
+                        raise RuntimeError(f"Finger action index {finger_action_idx} not found in coupling map")
                 elif self.action_control_mode == "position_delta":
                     # Scale from [-1,+1] to [-max_delta, +max_delta]
                     if finger_action_idx in self.finger_coupling_map:

@@ -114,15 +114,21 @@ class ObservationEncoder:
         
         # Store index mappings from DexHandBase
         if index_mappings:
-            self.base_joint_to_index = index_mappings.get('base_joint_to_index', {})
-            self.control_name_to_index = index_mappings.get('control_name_to_index', {})
-            self.raw_dof_name_to_index = index_mappings.get('raw_dof_name_to_index', {})
-            self.finger_body_to_index = index_mappings.get('finger_body_to_index', {})
+            if 'base_joint_to_index' not in index_mappings:
+                raise RuntimeError("base_joint_to_index mapping not found in index_mappings")
+            if 'control_name_to_index' not in index_mappings:
+                raise RuntimeError("control_name_to_index mapping not found in index_mappings")
+            if 'raw_dof_name_to_index' not in index_mappings:
+                raise RuntimeError("raw_dof_name_to_index mapping not found in index_mappings")
+            if 'finger_body_to_index' not in index_mappings:
+                raise RuntimeError("finger_body_to_index mapping not found in index_mappings")
+            
+            self.base_joint_to_index = index_mappings['base_joint_to_index']
+            self.control_name_to_index = index_mappings['control_name_to_index']
+            self.raw_dof_name_to_index = index_mappings['raw_dof_name_to_index']
+            self.finger_body_to_index = index_mappings['finger_body_to_index']
         else:
-            self.base_joint_to_index = {}
-            self.control_name_to_index = {}
-            self.raw_dof_name_to_index = {}
-            self.finger_body_to_index = {}
+            raise RuntimeError("index_mappings not provided to ObservationEncoder. These mappings are required for tensor indexing.")
         
         # Initialize previous actions tensor if needed
         if "prev_actions" in self.observation_keys:
