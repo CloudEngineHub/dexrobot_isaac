@@ -309,22 +309,22 @@ class ActionProcessor:
                     # Base targets from actions (position control)
                     base_pos_targets = None
 
-                    # Scale base actions based on control mode
-                    scaled_base_actions = torch.zeros_like(base_actions)
-                    for i in range(min(self.NUM_BASE_DOFS, base_actions.shape[1])):
-                        if self.action_control_mode == "position":
-                            # Position mode: map action from [-1, +1] to [dof_min, dof_max]
-                            dof_min = self.dof_lower_limits[i]
-                            dof_max = self.dof_upper_limits[i]
-                            scaled_base_actions[:, i] = (base_actions[:, i] + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
-                        elif self.action_control_mode == "position_delta":
-                            # Position delta mode: map action from [-1, +1] to [-max_pos_delta, +max_pos_delta]
-                            # where max_pos_delta = control_dt * max_velocity
-                            if i < 3:  # Translation DOFs (x, y, z)
-                                max_pos_delta = self.control_dt * self.policy_base_lin_velocity_limit
-                            else:  # Rotation DOFs (rx, ry, rz)
-                                max_pos_delta = self.control_dt * self.policy_base_ang_velocity_limit
-                            scaled_base_actions[:, i] = base_actions[:, i] * max_pos_delta
+                    # Scale base actions based on control mode - vectorized operations
+                    num_dofs = min(self.NUM_BASE_DOFS, base_actions.shape[1])
+                    
+                    if self.action_control_mode == "position":
+                        # Vectorized position scaling: broadcast operations across all DOFs
+                        dof_mins = self.dof_lower_limits[:num_dofs]  # (num_dofs,)
+                        dof_maxs = self.dof_upper_limits[:num_dofs]  # (num_dofs,)
+                        scaled_base_actions = (base_actions[:, :num_dofs] + 1.0) * 0.5 * (dof_maxs - dof_mins) + dof_mins
+                        
+                    elif self.action_control_mode == "position_delta":
+                        # Create velocity limits tensor for vectorized operation
+                        velocity_limits = torch.zeros(num_dofs, device=self.device)
+                        velocity_limits[:3] = self.control_dt * self.policy_base_lin_velocity_limit  # Translation
+                        if num_dofs > 3:
+                            velocity_limits[3:] = self.control_dt * self.policy_base_ang_velocity_limit  # Rotation
+                        scaled_base_actions = base_actions[:, :num_dofs] * velocity_limits
 
                     if self.action_control_mode == "position":
                         # Direct position targets
@@ -524,11 +524,8 @@ class ActionProcessor:
                 # CRITICAL: Directly set the base DOF targets from prev_active_targets
                 # This skips all the target tensor transformations that might zero things out
                 if self.policy_controls_hand_base:
-                    for env_idx in range(self.num_envs):
-                        for dof_idx in range(min(self.NUM_BASE_DOFS, direct_targets.shape[1])):
-                            if dof_idx < self.prev_active_targets.shape[1]:
-                                # Just copy directly from prev_active_targets which is known good
-                                direct_targets[env_idx, dof_idx] = self.prev_active_targets[env_idx, dof_idx]
+                    num_dofs_to_copy = min(self.NUM_BASE_DOFS, direct_targets.shape[1], self.prev_active_targets.shape[1])
+                    direct_targets[:, :num_dofs_to_copy] = self.prev_active_targets[:, :num_dofs_to_copy]
 
                 # Note: Finger targets are already correctly processed above with action scaling
                 # No need to reprocess them here as that would overwrite the scaled values

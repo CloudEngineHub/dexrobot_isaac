@@ -22,6 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Configuration: Use Hydra with YAML files in cfg/ directory
 - Error handling: Use try/except with specific exceptions and informative messages
 - Tensors: Always make assertions on shape when defining new tensors to catch shape issues early
+- Vectorization: Prefer vectorized tensor operations over for-loops and if-else for efficiency and code aesthetics
 
 ## Development Philosophy
 - IMPORTANT: This is research codebase, not production-environment code, so always prefer failing fast over suppressing the error and using a fallback.
@@ -117,6 +118,49 @@ targets = self.action_processor.current_targets
 - Debugging is easier when failures happen at the source of the problem
 - Magic numbers and fallback values make debugging nearly impossible
 - **Don't write defensive code for states that should never occur - let it crash and fix the root cause**
+
+## Tensor Operations and Vectorization
+
+### Prefer Vectorized Operations Over Loops
+
+For tensor operations, always prefer vectorized operations over explicit loops and conditionals:
+
+❌ WRONG - Explicit loops:
+```python
+for env_idx in range(self.num_envs):
+    for finger_idx in range(5):
+        start_idx = finger_idx * 7
+        poses[env_idx, start_idx:start_idx+3] = rigid_body_states[env_idx, tip_idx, :3]
+```
+
+✅ CORRECT - Vectorized operations:
+```python
+# Process all environments and fingers at once
+poses = rigid_body_states[:, fingertip_indices, :7].reshape(self.num_envs, -1)
+```
+
+❌ WRONG - Element-wise conditionals:
+```python
+for i in range(targets.shape[0]):
+    if targets[i] > limits[i]:
+        targets[i] = limits[i]
+```
+
+✅ CORRECT - Vectorized clamping:
+```python
+targets = torch.clamp(targets, min_limits, max_limits)
+```
+
+**Benefits:**
+- **Performance**: GPU/CPU optimization for batch operations
+- **Readability**: Clear intent without loop boilerplate
+- **Maintainability**: Less error-prone than index manipulation
+- **Scalability**: Automatically handles different batch sizes
+
+**When loops are acceptable:**
+- Small, fixed-size iterations (e.g., 5 fingers) where vectorization is complex
+- One-time setup/initialization code
+- When readability significantly improves over vectorized equivalent
 
 ## Isaac Gym Version
 - No need to handle different isaac gym versions. Refer to the docs of the current isaac gym version in @reference/isaacgym when necessary.

@@ -467,16 +467,9 @@ class ObservationEncoder:
         if rigid_body_states is None or self.fingertip_indices is None:
             return torch.zeros((self.num_envs, 35), device=self.device)
         
-        poses = torch.zeros((self.num_envs, 35), device=self.device)
-        
-        for env_idx in range(self.num_envs):
-            if env_idx < len(self.fingertip_indices):
-                for finger_idx, tip_idx in enumerate(self.fingertip_indices[env_idx]):
-                    if finger_idx < 5:  # 5 fingers
-                        start_idx = finger_idx * 7
-                        # Position (3) + quaternion (4) = 7 dimensions per fingertip
-                        poses[env_idx, start_idx:start_idx+3] = rigid_body_states[env_idx, tip_idx, :3]  # Position
-                        poses[env_idx, start_idx+3:start_idx+7] = rigid_body_states[env_idx, tip_idx, 3:7]  # Quaternion
+        # Extract all fingertip poses at once - fingertip_indices should be shape (5,)
+        fingertip_poses = rigid_body_states[:, self.fingertip_indices, :7]  # (num_envs, 5, 7)
+        poses = fingertip_poses.reshape(self.num_envs, 35)
         
         return poses
     
@@ -491,17 +484,9 @@ class ObservationEncoder:
         if rigid_body_states is None:
             return torch.zeros((self.num_envs, 35), device=self.device)
         
-        poses = torch.zeros((self.num_envs, 35), device=self.device)
-        
-        # Get fingerpad body indices from hand initializer if available
-        if hasattr(self, 'fingerpad_indices') and self.fingerpad_indices is not None:
-            for env_idx in range(self.num_envs):
-                if env_idx < len(self.fingerpad_indices):
-                    for finger_idx, pad_idx in enumerate(self.fingerpad_indices[env_idx]):
-                        if finger_idx < 5:  # 5 fingers
-                            start_idx = finger_idx * 7
-                            poses[env_idx, start_idx:start_idx+3] = rigid_body_states[env_idx, pad_idx, :3]  # Position
-                            poses[env_idx, start_idx+3:start_idx+7] = rigid_body_states[env_idx, pad_idx, 3:7]  # Quaternion
+        # Extract all fingerpad poses at once - fingerpad_indices should be shape (5,)
+        fingerpad_poses = rigid_body_states[:, self.fingerpad_indices, :7]  # (num_envs, 5, 7)
+        poses = fingerpad_poses.reshape(self.num_envs, 35)
         
         return poses
     
@@ -562,28 +547,30 @@ class ObservationEncoder:
         # Reshape poses for vectorized transformation
         # poses_world shape: (num_envs, 35) = (num_envs, 5 fingers * 7)
         poses_world_reshaped = poses_world.view(self.num_envs, 5, 7)
-        poses_hand = torch.zeros_like(poses_world_reshaped)
         
-        # Transform all finger poses to hand frame using vectorized operations
-        for finger_idx in range(5):
-            # Extract finger pose in world frame for all envs
-            finger_pos_world = poses_world_reshaped[:, finger_idx, :3]  # (num_envs, 3)
-            finger_quat_world = poses_world_reshaped[:, finger_idx, 3:7]  # (num_envs, 4)
-            
-            # Transform position to hand frame using existing utility (already vectorized)
-            finger_pos_hand = point_in_hand_frame(
-                finger_pos_world,  # (num_envs, 3)
-                hand_pos,          # (num_envs, 3)
-                hand_quat          # (num_envs, 4)
-            )
-            
-            # Transform quaternion to hand frame using Isaac Gym utilities
-            hand_quat_conj = quat_conjugate(hand_quat)  # (num_envs, 4)
-            finger_quat_hand = quat_mul(hand_quat_conj, finger_quat_world)  # (num_envs, 4)
-            
-            # Store transformed pose
-            poses_hand[:, finger_idx, :3] = finger_pos_hand
-            poses_hand[:, finger_idx, 3:7] = finger_quat_hand
+        # Extract all finger positions and quaternions at once
+        finger_pos_world = poses_world_reshaped[:, :, :3]  # (num_envs, 5, 3)
+        finger_quat_world = poses_world_reshaped[:, :, 3:7]  # (num_envs, 5, 4)
+        
+        # Reshape for batch processing: flatten fingers into batch dimension
+        finger_pos_world_flat = finger_pos_world.reshape(-1, 3)  # (num_envs * 5, 3)
+        finger_quat_world_flat = finger_quat_world.reshape(-1, 4)  # (num_envs * 5, 4)
+        
+        # Expand hand pose for all fingers
+        hand_pos_expanded = hand_pos.unsqueeze(1).expand(-1, 5, -1).reshape(-1, 3)  # (num_envs * 5, 3)
+        hand_quat_expanded = hand_quat.unsqueeze(1).expand(-1, 5, -1).reshape(-1, 4)  # (num_envs * 5, 4)
+        
+        # Transform all positions and orientations at once
+        finger_pos_hand_flat = point_in_hand_frame(finger_pos_world_flat, hand_pos_expanded, hand_quat_expanded)
+        hand_quat_conj_expanded = quat_conjugate(hand_quat_expanded)
+        finger_quat_hand_flat = quat_mul(hand_quat_conj_expanded, finger_quat_world_flat)
+        
+        # Reshape back to (num_envs, 5, 3) and (num_envs, 5, 4)
+        finger_pos_hand = finger_pos_hand_flat.reshape(self.num_envs, 5, 3)
+        finger_quat_hand = finger_quat_hand_flat.reshape(self.num_envs, 5, 4)
+        
+        # Combine into final poses tensor
+        poses_hand = torch.cat([finger_pos_hand, finger_quat_hand], dim=2)  # (num_envs, 5, 7)
         
         # Reshape back to (num_envs, 35)
         return poses_hand.view(self.num_envs, -1)
