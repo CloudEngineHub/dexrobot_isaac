@@ -170,10 +170,13 @@ targets = torch.clamp(targets, min_limits, max_limits)
 
 ## Simulation Architecture Notes
 
-### ⚠️ CRITICAL: Read Design Caveats First
-**Before modifying physics or model configuration, read:**
-- `docs/IMPORTANT_DESIGN_DECISIONS.md` - Quick reference of critical caveats
-- `docs/physics_caveats.md` - Detailed explanations and troubleshooting
+### ⚠️ CRITICAL: Read Design Documentation First
+**Essential documentation for understanding the system:**
+- [`docs/design_decisions.md`](docs/design_decisions.md) - Critical design caveats (READ FIRST!)
+- [`docs/api_dof_control.md`](docs/api_dof_control.md) - DOF indices, joint names, and action mapping reference
+- [`docs/guide_observation_system.md`](docs/guide_observation_system.md) - Observation system design and usage
+- [`docs/guide_physics_tuning.md`](docs/guide_physics_tuning.md) - How to tune physics parameters
+- [`docs/reference_physics_implementation.md`](docs/reference_physics_implementation.md) - Technical implementation details
 
 ### Hand Base Configuration
 - The hand model uses a fixed base link (`asset_options.fix_base_link = True`) to anchor the hand to the world

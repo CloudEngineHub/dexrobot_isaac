@@ -22,6 +22,13 @@ from isaacgym import gymtorch
 # Then import PyTorch
 import torch
 
+# Global variables for velocity integration tracking
+arr_integrated_pos = None
+arr_initial_pos = None
+physics_dt = None
+finger_integrated_pos = None
+finger_initial_pos = None
+
 # Import factory
 from dex_hand_env.factory import create_dex_env
 import math
@@ -184,15 +191,15 @@ def setup_rerun_logging():
     """Initialize Rerun logging."""
     if not RERUN_AVAILABLE:
         return False
-    
+
     # Initialize the main Rerun application
     rr.init("dexhand_test", spawn=True)
-    
+
     # Create 14 separate plots using different entity paths that will appear as separate plots
     # Use the root level and separate recording IDs for each plot type
     plot_configs = [
         ("Plot_1_ARTx", "ARTx position and target"),
-        ("Plot_2_ART_vels", "ART velocities"), 
+        ("Plot_2_ART_vels", "ART velocities"),
         ("Plot_3_ARRx", "ARRx position and target"),
         ("Plot_4_ARR_vels", "ARR velocities"),
         ("Plot_5_finger_DOFs", "Active finger DOFs"),
@@ -201,36 +208,38 @@ def setup_rerun_logging():
         ("Plot_8_contact", "Contact forces"),
         ("Plot_9_actions", "Actions comparison"),
         ("Plot_10_world_pos", "World frame positions"),
-        ("Plot_11_world_quat", "World frame quaternions"), 
+        ("Plot_11_world_quat", "World frame quaternions"),
         ("Plot_12_hand_pos", "Hand frame positions"),
         ("Plot_13_hand_quat", "Hand frame quaternions"),
-        ("Plot_14_raw_DOFs", "Raw vs active DOFs")
+        ("Plot_14_raw_DOFs", "Raw vs active DOFs"),
+        ("Plot_15_ARR_integration", "ARR velocity integration check (Issue #1)"),
+        ("Plot_16_finger_integration", "Finger joint velocity integration check")
     ]
-    
+
     # Set up each plot with a clear structure
     for plot_name, description in plot_configs:
         # Log a text description for each plot
         rr.log(f"{plot_name}/description", rr.TextLog(description))
-    
+
     return True
 
 
-def log_observation_data(env, step, env_idx=0):
+def log_observation_data(env, step, cfg, env_idx=0):
     """Log observation data to Rerun for visualization."""
     if not RERUN_AVAILABLE:
         return
-    
+
     try:
         # Get observation dictionary for convenient access
         obs_dict = env.get_observations_dict()
         obs_encoder = env.observation_encoder
-        
+
         # Plot 1: ARTx pos, ARTx target
         artx_pos = obs_encoder.get_base_dof_value("ARTx", "pos", obs_dict, env_idx)
         artx_target = obs_encoder.get_base_dof_value("ARTx", "target", obs_dict, env_idx)
         rr.log("Plot_1_ARTx/pos", rr.Scalar(float(artx_pos)))
         rr.log("Plot_1_ARTx/target", rr.Scalar(float(artx_target)))
-        
+
         # Plot 2: ARTx vel, ARTy vel, ARTz vel
         artx_vel = obs_encoder.get_base_dof_value("ARTx", "vel", obs_dict, env_idx)
         arty_vel = obs_encoder.get_base_dof_value("ARTy", "vel", obs_dict, env_idx)
@@ -238,13 +247,13 @@ def log_observation_data(env, step, env_idx=0):
         rr.log("Plot_2_ART_vels/artx_vel", rr.Scalar(float(artx_vel)))
         rr.log("Plot_2_ART_vels/arty_vel", rr.Scalar(float(arty_vel)))
         rr.log("Plot_2_ART_vels/artz_vel", rr.Scalar(float(artz_vel)))
-        
+
         # Plot 3: ARRx pos, ARRx target
         arrx_pos = obs_encoder.get_base_dof_value("ARRx", "pos", obs_dict, env_idx)
         arrx_target = obs_encoder.get_base_dof_value("ARRx", "target", obs_dict, env_idx)
         rr.log("Plot_3_ARRx/pos", rr.Scalar(float(arrx_pos)))
         rr.log("Plot_3_ARRx/target", rr.Scalar(float(arrx_target)))
-        
+
         # Plot 4: ARRx vel, ARRy vel, ARRz vel
         arrx_vel = obs_encoder.get_base_dof_value("ARRx", "vel", obs_dict, env_idx)
         arry_vel = obs_encoder.get_base_dof_value("ARRy", "vel", obs_dict, env_idx)
@@ -252,7 +261,7 @@ def log_observation_data(env, step, env_idx=0):
         rr.log("Plot_4_ARR_vels/arrx_vel", rr.Scalar(float(arrx_vel)))
         rr.log("Plot_4_ARR_vels/arry_vel", rr.Scalar(float(arry_vel)))
         rr.log("Plot_4_ARR_vels/arrz_vel", rr.Scalar(float(arrz_vel)))
-        
+
         # Plot 5: (active finger dof) th_rot pos, th_rot target, mf_mcp pos, mf_mcp target
         th_rot_pos = obs_encoder.get_active_finger_dof_value("th_rot", "pos", obs_dict, env_idx)
         th_rot_target = obs_encoder.get_active_finger_dof_value("th_rot", "target", obs_dict, env_idx)
@@ -262,14 +271,14 @@ def log_observation_data(env, step, env_idx=0):
         rr.log("Plot_5_finger_DOFs/th_rot_target", rr.Scalar(float(th_rot_target)))
         rr.log("Plot_5_finger_DOFs/mf_mcp_pos", rr.Scalar(float(mf_mcp_pos)))
         rr.log("Plot_5_finger_DOFs/mf_mcp_target", rr.Scalar(float(mf_mcp_target)))
-        
+
         # Plot 6: hand_pose x,y,z
         if "hand_pose" in obs_dict:
             hand_pose = obs_dict["hand_pose"][env_idx]
             rr.log("Plot_6_hand_pos/x", rr.Scalar(float(hand_pose[0])))
             rr.log("Plot_6_hand_pos/y", rr.Scalar(float(hand_pose[1])))
             rr.log("Plot_6_hand_pos/z", rr.Scalar(float(hand_pose[2])))
-        
+
         # Plot 7: hand_pose quat w,x,y,z
         if "hand_pose" in obs_dict:
             hand_quat = obs_dict["hand_pose"][env_idx, 3:7]
@@ -277,7 +286,7 @@ def log_observation_data(env, step, env_idx=0):
             rr.log("Plot_7_hand_quat/x", rr.Scalar(float(hand_quat[0])))
             rr.log("Plot_7_hand_quat/y", rr.Scalar(float(hand_quat[1])))
             rr.log("Plot_7_hand_quat/z", rr.Scalar(float(hand_quat[2])))
-        
+
         # Plot 8: contact_force x,y,z component and magnitude for middle finger (index 2)
         if "contact_forces" in obs_dict:
             middle_finger_force = obs_encoder.get_contact_force_value(2, obs_dict, env_idx)  # Middle finger
@@ -286,7 +295,7 @@ def log_observation_data(env, step, env_idx=0):
             rr.log("Plot_8_contact/z", rr.Scalar(float(middle_finger_force[2])))
             magnitude = np.linalg.norm(middle_finger_force)
             rr.log("Plot_8_contact/magnitude", rr.Scalar(float(magnitude)))
-        
+
         # Plot 9: unscaled previous action corresponding to ARTx, ARTx vel times control_dt
         if "prev_actions" in obs_dict and hasattr(env.action_processor, 'unscale_actions'):
             prev_actions = obs_dict["prev_actions"][env_idx:env_idx+1]  # Keep batch dimension
@@ -296,7 +305,7 @@ def log_observation_data(env, step, env_idx=0):
                 artx_vel_times_dt = float(artx_vel * env.action_processor.control_dt) if env.action_processor.control_dt else 0.0
                 rr.log("Plot_9_actions/unscaled_artx", rr.Scalar(unscaled_artx_action))
                 rr.log("Plot_9_actions/artx_vel_times_dt", rr.Scalar(artx_vel_times_dt))
-        
+
         # Plot 10: middle finger fingerpad and fingertip x,y,z in world frame
         mf_tip_world = obs_encoder.get_finger_pose_value("r_f_link3_tip", "world", obs_dict, env_idx)
         mf_pad_world = obs_encoder.get_finger_pose_value("r_f_link3_pad", "world", obs_dict, env_idx)
@@ -306,7 +315,7 @@ def log_observation_data(env, step, env_idx=0):
         rr.log("Plot_10_world_pos/pad_x", rr.Scalar(float(mf_pad_world['position'][0])))
         rr.log("Plot_10_world_pos/pad_y", rr.Scalar(float(mf_pad_world['position'][1])))
         rr.log("Plot_10_world_pos/pad_z", rr.Scalar(float(mf_pad_world['position'][2])))
-        
+
         # Plot 11: middle finger fingerpad and fingertip quad in world frame
         rr.log("Plot_11_world_quat/tip_x", rr.Scalar(float(mf_tip_world['orientation'][0])))
         rr.log("Plot_11_world_quat/tip_y", rr.Scalar(float(mf_tip_world['orientation'][1])))
@@ -316,7 +325,7 @@ def log_observation_data(env, step, env_idx=0):
         rr.log("Plot_11_world_quat/pad_y", rr.Scalar(float(mf_pad_world['orientation'][1])))
         rr.log("Plot_11_world_quat/pad_z", rr.Scalar(float(mf_pad_world['orientation'][2])))
         rr.log("Plot_11_world_quat/pad_w", rr.Scalar(float(mf_pad_world['orientation'][3])))
-        
+
         # Plot 12: middle finger fingerpad and fingertip x,y,z in hand frame
         mf_tip_hand = obs_encoder.get_finger_pose_value("r_f_link3_tip", "hand", obs_dict, env_idx)
         mf_pad_hand = obs_encoder.get_finger_pose_value("r_f_link3_pad", "hand", obs_dict, env_idx)
@@ -326,7 +335,7 @@ def log_observation_data(env, step, env_idx=0):
         rr.log("Plot_12_hand_pos/pad_x", rr.Scalar(float(mf_pad_hand['position'][0])))
         rr.log("Plot_12_hand_pos/pad_y", rr.Scalar(float(mf_pad_hand['position'][1])))
         rr.log("Plot_12_hand_pos/pad_z", rr.Scalar(float(mf_pad_hand['position'][2])))
-        
+
         # Plot 13: middle finger fingerpad and fingertip quad in hand frame
         rr.log("Plot_13_hand_quat/tip_x", rr.Scalar(float(mf_tip_hand['orientation'][0])))
         rr.log("Plot_13_hand_quat/tip_y", rr.Scalar(float(mf_tip_hand['orientation'][1])))
@@ -336,7 +345,7 @@ def log_observation_data(env, step, env_idx=0):
         rr.log("Plot_13_hand_quat/pad_y", rr.Scalar(float(mf_pad_hand['orientation'][1])))
         rr.log("Plot_13_hand_quat/pad_z", rr.Scalar(float(mf_pad_hand['orientation'][2])))
         rr.log("Plot_13_hand_quat/pad_w", rr.Scalar(float(mf_pad_hand['orientation'][3])))
-        
+
         # Plot 14: r_f_joint5_1 pos and target; active finger ff_spr pos and target
         joint5_1_pos = obs_encoder.get_raw_finger_dof("r_f_joint5_1", "pos", obs_dict, env_idx)
         joint5_1_target = obs_encoder.get_raw_finger_dof("r_f_joint5_1", "target", obs_dict, env_idx)
@@ -346,7 +355,100 @@ def log_observation_data(env, step, env_idx=0):
         rr.log("Plot_14_raw_DOFs/joint5_1_target", rr.Scalar(float(joint5_1_target)))
         rr.log("Plot_14_raw_DOFs/ff_spr_pos", rr.Scalar(float(ff_spr_pos)))
         rr.log("Plot_14_raw_DOFs/ff_spr_target", rr.Scalar(float(ff_spr_target)))
+
+        # Plot 15: ARR Velocity Integration Check - Issue #1
+        # Initialize integration tracking if needed (use global variables)
+        global arr_integrated_pos, arr_initial_pos, physics_dt
+        if arr_integrated_pos is None or physics_dt is None:
+            arr_integrated_pos = np.array([0.0, 0.0, 0.0])
+            arr_initial_pos = None
+            # Get physics_dt from config with fallback
+            if isinstance(cfg, dict):
+                physics_dt = cfg.get("sim", {}).get("dt", 0.0083)
+            else:
+                physics_dt = getattr(cfg, 'sim', {}).get('dt', 0.0083) if hasattr(cfg, 'sim') else 0.0083
+            print(f"Initialized ARR integration tracking with physics_dt = {physics_dt}")
+
+        # Always try to log even if there's an error, to see if the plot appears
+        try:
+            # Get current ARR positions and velocities
+            arrx_pos = obs_encoder.get_base_dof_value("ARRx", "pos", obs_dict, env_idx)
+            arry_pos = obs_encoder.get_base_dof_value("ARRy", "pos", obs_dict, env_idx)
+            arrz_pos = obs_encoder.get_base_dof_value("ARRz", "pos", obs_dict, env_idx)
+            arrx_vel = obs_encoder.get_base_dof_value("ARRx", "vel", obs_dict, env_idx)
+            arry_vel = obs_encoder.get_base_dof_value("ARRy", "vel", obs_dict, env_idx)
+            arrz_vel = obs_encoder.get_base_dof_value("ARRz", "vel", obs_dict, env_idx)
+
+            # Track initial position
+            if arr_initial_pos is None:
+                arr_initial_pos = np.array([arrx_pos, arry_pos, arrz_pos])
+
+            # Integrate velocities
+            if step > 0:
+                arr_integrated_pos[0] += arrx_vel * physics_dt
+                arr_integrated_pos[1] += arry_vel * physics_dt
+                arr_integrated_pos[2] += arrz_vel * physics_dt
+
+            # Calculate actual position change from initial
+            actual_pos_change = np.array([arrx_pos, arry_pos, arrz_pos]) - arr_initial_pos
+
+            # Plot actual vs integrated positions
+            rr.log("Plot_15_ARR_integration/actual_arrx_change", rr.Scalar(float(actual_pos_change[0])))
+            rr.log("Plot_15_ARR_integration/integrated_arrx_change", rr.Scalar(float(arr_integrated_pos[0])))
+            rr.log("Plot_15_ARR_integration/actual_arry_change", rr.Scalar(float(actual_pos_change[1])))
+            rr.log("Plot_15_ARR_integration/integrated_arry_change", rr.Scalar(float(arr_integrated_pos[1])))
+            rr.log("Plot_15_ARR_integration/actual_arrz_change", rr.Scalar(float(actual_pos_change[2])))
+            rr.log("Plot_15_ARR_integration/integrated_arrz_change", rr.Scalar(float(arr_integrated_pos[2])))
+
+            # Plot integration errors
+            error_x = actual_pos_change[0] - arr_integrated_pos[0]
+            error_y = actual_pos_change[1] - arr_integrated_pos[1]
+            error_z = actual_pos_change[2] - arr_integrated_pos[2]
+            rr.log("Plot_15_ARR_integration/error_arrx", rr.Scalar(float(error_x)))
+            rr.log("Plot_15_ARR_integration/error_arry", rr.Scalar(float(error_y)))
+            rr.log("Plot_15_ARR_integration/error_arrz", rr.Scalar(float(error_z)))
+
+        except Exception as plot15_error:
+            print(f"Plot 15 error at step {step}: {plot15_error}")
         
+        # Plot 16: Finger Joint Velocity Integration Check
+        # Initialize finger integration tracking
+        global finger_integrated_pos, finger_initial_pos
+        if step == 0 or finger_integrated_pos is None:
+            finger_integrated_pos = 0.0
+            finger_initial_pos = None
+            print(f"Initialized finger integration tracking")
+        
+        try:
+            # Test thumb rotation joint (r_f_joint1_1) - a finger rotation joint
+            finger_pos = obs_encoder.get_raw_finger_dof("r_f_joint1_1", "pos", obs_dict, env_idx)
+            finger_vel = obs_encoder.get_raw_finger_dof("r_f_joint1_1", "vel", obs_dict, env_idx)
+            
+            # Track initial position
+            if finger_initial_pos is None:
+                finger_initial_pos = finger_pos
+            
+            # Integrate velocity
+            if step > 0:
+                finger_integrated_pos += finger_vel * physics_dt
+            
+            # Calculate actual position change from initial
+            actual_finger_change = finger_pos - finger_initial_pos
+            
+            # Plot actual vs integrated positions for finger joint
+            rr.log("Plot_16_finger_integration/actual_r_f_joint1_1_change", rr.Scalar(float(actual_finger_change)))
+            rr.log("Plot_16_finger_integration/integrated_r_f_joint1_1_change", rr.Scalar(float(finger_integrated_pos)))
+            
+            # Plot integration error
+            finger_error = actual_finger_change - finger_integrated_pos
+            rr.log("Plot_16_finger_integration/error_r_f_joint1_1", rr.Scalar(float(finger_error)))
+            
+            if step == 1:
+                print(f"Plot 16 logged successfully at step {step}")
+                
+        except Exception as plot16_error:
+            print(f"Plot 16 error at step {step}: {plot16_error}")
+
     except Exception as e:
         print(f"Error logging data at step {step}: {e}")
         import traceback
@@ -380,7 +482,7 @@ def main():
     args = parser.parse_args()
 
     print("Starting DexHand test script...")
-    
+
     # Initialize plotting if requested
     plotting_enabled = False
     if args.enable_plotting:
@@ -644,11 +746,11 @@ def main():
         if step < 5:
             print(f"[Test] After step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}, done = {dones[0].item()}")
         env.render()
-        
+
         # Log observation data for plotting
         if plotting_enabled:
             rr.set_time_sequence("step", step)
-            log_observation_data(env, step, args.plot_env_idx)
+            log_observation_data(env, step, cfg, args.plot_env_idx)
 
         # Print progress every 25 steps and at key transitions
         if (step_in_action % 25 == 0 or step_in_action == 49 or step_in_action == 99):
