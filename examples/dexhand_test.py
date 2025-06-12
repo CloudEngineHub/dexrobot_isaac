@@ -33,6 +33,14 @@ finger_initial_pos = None
 from dex_hand_env.factory import create_dex_env
 import math
 
+# Import scipy for quaternion conversion
+try:
+    from scipy.spatial.transform import Rotation
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
+    print("Scipy not available. Install with 'pip install scipy' for quaternion to Euler conversion.")
+
 # Import Rerun for plotting (optional)
 try:
     import rerun as rr
@@ -204,13 +212,13 @@ def setup_rerun_logging():
         ("Plot_4_ARR_vels", "ARR velocities"),
         ("Plot_5_finger_DOFs", "Active finger DOFs"),
         ("Plot_6_hand_pos", "Hand position"),
-        ("Plot_7_hand_quat", "Hand quaternion"),
+        ("Plot_7_hand_quat_euler", "Hand quaternion and Euler angles"),
         ("Plot_8_contact", "Contact forces"),
         ("Plot_9_actions", "Actions comparison"),
         ("Plot_10_world_pos", "World frame positions"),
-        ("Plot_11_world_quat", "World frame quaternions"),
+        ("Plot_11_world_quat", "World frame quaternions and Euler angles"),
         ("Plot_12_hand_pos", "Hand frame positions"),
-        ("Plot_13_hand_quat", "Hand frame quaternions"),
+        ("Plot_13_hand_quat", "Hand frame quaternions and Euler angles"),
         ("Plot_14_raw_DOFs", "Raw vs active DOFs"),
         ("Plot_15_ARR_integration", "ARR velocity integration check (Issue #1)"),
         ("Plot_16_finger_integration", "Finger joint velocity integration check")
@@ -279,13 +287,67 @@ def log_observation_data(env, step, cfg, env_idx=0):
             rr.log("Plot_6_hand_pos/y", rr.Scalar(float(hand_pose[1])))
             rr.log("Plot_6_hand_pos/z", rr.Scalar(float(hand_pose[2])))
 
-        # Plot 7: hand_pose quat w,x,y,z
+        # Plot 7: hand_pose quat w,x,y,z AND Euler angles (both raw and ARR-aligned)
         if "hand_pose" in obs_dict:
             hand_quat = obs_dict["hand_pose"][env_idx, 3:7]
-            rr.log("Plot_7_hand_quat/w", rr.Scalar(float(hand_quat[3])))  # w is last in Isaac Gym
-            rr.log("Plot_7_hand_quat/x", rr.Scalar(float(hand_quat[0])))
-            rr.log("Plot_7_hand_quat/y", rr.Scalar(float(hand_quat[1])))
-            rr.log("Plot_7_hand_quat/z", rr.Scalar(float(hand_quat[2])))
+            
+            # Debug: print quaternion values at first few steps
+            if step < 5:
+                print(f"\nStep {step} - hand_quat raw: {hand_quat}")
+                print(f"  As list: [x={hand_quat[0]:.6f}, y={hand_quat[1]:.6f}, z={hand_quat[2]:.6f}, w={hand_quat[3]:.6f}]")
+            
+            # Log quaternion components - Isaac Gym format is [x, y, z, w]
+            rr.log("Plot_7_hand_quat_euler/quat_x", rr.Scalar(float(hand_quat[0])))
+            rr.log("Plot_7_hand_quat_euler/quat_y", rr.Scalar(float(hand_quat[1])))
+            rr.log("Plot_7_hand_quat_euler/quat_z", rr.Scalar(float(hand_quat[2])))
+            rr.log("Plot_7_hand_quat_euler/quat_w", rr.Scalar(float(hand_quat[3])))
+            
+            # Convert quaternion to Euler angles and log them
+            if SCIPY_AVAILABLE:
+                # Isaac Gym uses [x, y, z, w] format which matches scipy's default
+                quat_numpy = hand_quat.cpu().numpy() if hasattr(hand_quat, 'cpu') else np.array(hand_quat)
+                rotation = Rotation.from_quat(quat_numpy)  # Isaac Gym format matches scipy default [x,y,z,w]
+                
+                # Get Euler angles in radians (roll, pitch, yaw)
+                euler_angles = rotation.as_euler('xyz', degrees=False)
+                
+                # Debug: print Euler angles at first few steps
+                if step < 5:
+                    print(f"  Euler angles (rad): [roll={euler_angles[0]:.6f}, pitch={euler_angles[1]:.6f}, yaw={euler_angles[2]:.6f}]")
+                    euler_degrees = rotation.as_euler('xyz', degrees=True)
+                    print(f"  Euler angles (deg): [roll={euler_degrees[0]:.2f}°, pitch={euler_degrees[1]:.2f}°, yaw={euler_degrees[2]:.2f}°]")
+                
+                rr.log("Plot_7_hand_quat_euler/euler_roll_rad", rr.Scalar(euler_angles[0]))
+                rr.log("Plot_7_hand_quat_euler/euler_pitch_rad", rr.Scalar(euler_angles[1]))
+                rr.log("Plot_7_hand_quat_euler/euler_yaw_rad", rr.Scalar(euler_angles[2]))
+        
+        # Also check ARR-aligned pose if available
+        if "hand_pose_arr_aligned" in obs_dict:
+            arr_aligned_quat = obs_dict["hand_pose_arr_aligned"][env_idx, 3:7]
+            
+            if step < 5:
+                print(f"  ARR-aligned quat: [x={arr_aligned_quat[0]:.6f}, y={arr_aligned_quat[1]:.6f}, z={arr_aligned_quat[2]:.6f}, w={arr_aligned_quat[3]:.6f}]")
+            
+            # Log ARR-aligned quaternion
+            rr.log("Plot_7_hand_quat_euler/arr_quat_x", rr.Scalar(float(arr_aligned_quat[0])))
+            rr.log("Plot_7_hand_quat_euler/arr_quat_y", rr.Scalar(float(arr_aligned_quat[1])))
+            rr.log("Plot_7_hand_quat_euler/arr_quat_z", rr.Scalar(float(arr_aligned_quat[2])))
+            rr.log("Plot_7_hand_quat_euler/arr_quat_w", rr.Scalar(float(arr_aligned_quat[3])))
+            
+            if SCIPY_AVAILABLE:
+                arr_quat_numpy = arr_aligned_quat.cpu().numpy() if hasattr(arr_aligned_quat, 'cpu') else np.array(arr_aligned_quat)
+                arr_rotation = Rotation.from_quat(arr_quat_numpy)
+                arr_euler = arr_rotation.as_euler('xyz', degrees=False)
+                
+                if step < 5:
+                    print(f"  ARR-aligned Euler (rad): [roll={arr_euler[0]:.6f}, pitch={arr_euler[1]:.6f}, yaw={arr_euler[2]:.6f}]")
+                    arr_euler_deg = arr_rotation.as_euler('xyz', degrees=True) 
+                    print(f"  ARR-aligned Euler (deg): [roll={arr_euler_deg[0]:.2f}°, pitch={arr_euler_deg[1]:.2f}°, yaw={arr_euler_deg[2]:.2f}°]")
+                
+                # Log ARR-aligned Euler angles
+                rr.log("Plot_7_hand_quat_euler/arr_euler_roll_rad", rr.Scalar(arr_euler[0]))
+                rr.log("Plot_7_hand_quat_euler/arr_euler_pitch_rad", rr.Scalar(arr_euler[1]))
+                rr.log("Plot_7_hand_quat_euler/arr_euler_yaw_rad", rr.Scalar(arr_euler[2]))
 
         # Plot 8: contact_force x,y,z component and magnitude for middle finger (index 2)
         if "contact_forces" in obs_dict:
@@ -316,15 +378,35 @@ def log_observation_data(env, step, cfg, env_idx=0):
         rr.log("Plot_10_world_pos/pad_y", rr.Scalar(float(mf_pad_world['position'][1])))
         rr.log("Plot_10_world_pos/pad_z", rr.Scalar(float(mf_pad_world['position'][2])))
 
-        # Plot 11: middle finger fingerpad and fingertip quad in world frame
-        rr.log("Plot_11_world_quat/tip_x", rr.Scalar(float(mf_tip_world['orientation'][0])))
-        rr.log("Plot_11_world_quat/tip_y", rr.Scalar(float(mf_tip_world['orientation'][1])))
-        rr.log("Plot_11_world_quat/tip_z", rr.Scalar(float(mf_tip_world['orientation'][2])))
-        rr.log("Plot_11_world_quat/tip_w", rr.Scalar(float(mf_tip_world['orientation'][3])))
-        rr.log("Plot_11_world_quat/pad_x", rr.Scalar(float(mf_pad_world['orientation'][0])))
-        rr.log("Plot_11_world_quat/pad_y", rr.Scalar(float(mf_pad_world['orientation'][1])))
-        rr.log("Plot_11_world_quat/pad_z", rr.Scalar(float(mf_pad_world['orientation'][2])))
-        rr.log("Plot_11_world_quat/pad_w", rr.Scalar(float(mf_pad_world['orientation'][3])))
+        # Plot 11: middle finger fingerpad and fingertip quat in world frame (with Euler)
+        tip_quat = mf_tip_world['orientation']
+        pad_quat = mf_pad_world['orientation']
+        
+        # Log quaternions
+        rr.log("Plot_11_world_quat/tip_quat_x", rr.Scalar(float(tip_quat[0])))
+        rr.log("Plot_11_world_quat/tip_quat_y", rr.Scalar(float(tip_quat[1])))
+        rr.log("Plot_11_world_quat/tip_quat_z", rr.Scalar(float(tip_quat[2])))
+        rr.log("Plot_11_world_quat/tip_quat_w", rr.Scalar(float(tip_quat[3])))
+        rr.log("Plot_11_world_quat/pad_quat_x", rr.Scalar(float(pad_quat[0])))
+        rr.log("Plot_11_world_quat/pad_quat_y", rr.Scalar(float(pad_quat[1])))
+        rr.log("Plot_11_world_quat/pad_quat_z", rr.Scalar(float(pad_quat[2])))
+        rr.log("Plot_11_world_quat/pad_quat_w", rr.Scalar(float(pad_quat[3])))
+        
+        # Convert to Euler if scipy available
+        if SCIPY_AVAILABLE:
+            # Tip Euler angles in radians
+            tip_rotation = Rotation.from_quat(tip_quat)
+            tip_euler_rad = tip_rotation.as_euler('xyz', degrees=False)
+            rr.log("Plot_11_world_quat/tip_euler_roll_rad", rr.Scalar(tip_euler_rad[0]))
+            rr.log("Plot_11_world_quat/tip_euler_pitch_rad", rr.Scalar(tip_euler_rad[1]))
+            rr.log("Plot_11_world_quat/tip_euler_yaw_rad", rr.Scalar(tip_euler_rad[2]))
+            
+            # Pad Euler angles in radians
+            pad_rotation = Rotation.from_quat(pad_quat)
+            pad_euler_rad = pad_rotation.as_euler('xyz', degrees=False)
+            rr.log("Plot_11_world_quat/pad_euler_roll_rad", rr.Scalar(pad_euler_rad[0]))
+            rr.log("Plot_11_world_quat/pad_euler_pitch_rad", rr.Scalar(pad_euler_rad[1]))
+            rr.log("Plot_11_world_quat/pad_euler_yaw_rad", rr.Scalar(pad_euler_rad[2]))
 
         # Plot 12: middle finger fingerpad and fingertip x,y,z in hand frame
         mf_tip_hand = obs_encoder.get_finger_pose_value("r_f_link3_tip", "hand", obs_dict, env_idx)
@@ -336,15 +418,35 @@ def log_observation_data(env, step, cfg, env_idx=0):
         rr.log("Plot_12_hand_pos/pad_y", rr.Scalar(float(mf_pad_hand['position'][1])))
         rr.log("Plot_12_hand_pos/pad_z", rr.Scalar(float(mf_pad_hand['position'][2])))
 
-        # Plot 13: middle finger fingerpad and fingertip quad in hand frame
-        rr.log("Plot_13_hand_quat/tip_x", rr.Scalar(float(mf_tip_hand['orientation'][0])))
-        rr.log("Plot_13_hand_quat/tip_y", rr.Scalar(float(mf_tip_hand['orientation'][1])))
-        rr.log("Plot_13_hand_quat/tip_z", rr.Scalar(float(mf_tip_hand['orientation'][2])))
-        rr.log("Plot_13_hand_quat/tip_w", rr.Scalar(float(mf_tip_hand['orientation'][3])))
-        rr.log("Plot_13_hand_quat/pad_x", rr.Scalar(float(mf_pad_hand['orientation'][0])))
-        rr.log("Plot_13_hand_quat/pad_y", rr.Scalar(float(mf_pad_hand['orientation'][1])))
-        rr.log("Plot_13_hand_quat/pad_z", rr.Scalar(float(mf_pad_hand['orientation'][2])))
-        rr.log("Plot_13_hand_quat/pad_w", rr.Scalar(float(mf_pad_hand['orientation'][3])))
+        # Plot 13: middle finger fingerpad and fingertip quat in hand frame (with Euler)
+        tip_quat_hand = mf_tip_hand['orientation']
+        pad_quat_hand = mf_pad_hand['orientation']
+        
+        # Log quaternions
+        rr.log("Plot_13_hand_quat/tip_quat_x", rr.Scalar(float(tip_quat_hand[0])))
+        rr.log("Plot_13_hand_quat/tip_quat_y", rr.Scalar(float(tip_quat_hand[1])))
+        rr.log("Plot_13_hand_quat/tip_quat_z", rr.Scalar(float(tip_quat_hand[2])))
+        rr.log("Plot_13_hand_quat/tip_quat_w", rr.Scalar(float(tip_quat_hand[3])))
+        rr.log("Plot_13_hand_quat/pad_quat_x", rr.Scalar(float(pad_quat_hand[0])))
+        rr.log("Plot_13_hand_quat/pad_quat_y", rr.Scalar(float(pad_quat_hand[1])))
+        rr.log("Plot_13_hand_quat/pad_quat_z", rr.Scalar(float(pad_quat_hand[2])))
+        rr.log("Plot_13_hand_quat/pad_quat_w", rr.Scalar(float(pad_quat_hand[3])))
+        
+        # Convert to Euler if scipy available
+        if SCIPY_AVAILABLE:
+            # Tip Euler angles in radians
+            tip_rotation_hand = Rotation.from_quat(tip_quat_hand)
+            tip_euler_hand_rad = tip_rotation_hand.as_euler('xyz', degrees=False)
+            rr.log("Plot_13_hand_quat/tip_euler_roll_rad", rr.Scalar(tip_euler_hand_rad[0]))
+            rr.log("Plot_13_hand_quat/tip_euler_pitch_rad", rr.Scalar(tip_euler_hand_rad[1]))
+            rr.log("Plot_13_hand_quat/tip_euler_yaw_rad", rr.Scalar(tip_euler_hand_rad[2]))
+            
+            # Pad Euler angles in radians
+            pad_rotation_hand = Rotation.from_quat(pad_quat_hand)
+            pad_euler_hand_rad = pad_rotation_hand.as_euler('xyz', degrees=False)
+            rr.log("Plot_13_hand_quat/pad_euler_roll_rad", rr.Scalar(pad_euler_hand_rad[0]))
+            rr.log("Plot_13_hand_quat/pad_euler_pitch_rad", rr.Scalar(pad_euler_hand_rad[1]))
+            rr.log("Plot_13_hand_quat/pad_euler_yaw_rad", rr.Scalar(pad_euler_hand_rad[2]))
 
         # Plot 14: r_f_joint5_1 pos and target; active finger ff_spr pos and target
         joint5_1_pos = obs_encoder.get_raw_finger_dof("r_f_joint5_1", "pos", obs_dict, env_idx)

@@ -119,9 +119,19 @@ env:
 - **Position Control**: Actions specify absolute position targets
 - **Position Delta Control**: Actions specify incremental changes from current position
 
+## Related Observations
+
+See [`guide_observation_system.md`](guide_observation_system.md) for complete observation documentation.
+
+Key observations for DOF control:
+- `base_dof_pos/vel/target`: Base DOF states (6D each)
+- `active_finger_dof_pos/vel/target`: Active finger states (12D each)
+- `hand_pose_arr_aligned`: Hand pose with orientation aligned to ARR DOFs (7D)
+
 ## Implementation Locations
 
 - **Action Processing**: `dex_hand_env/components/action_processor.py:380-400`
 - **Coupling Map**: `dex_hand_env/components/action_processor.py:75-88`
 - **DOF Initialization**: `dex_hand_env/components/hand_initializer.py:243-261`
 - **Configuration**: `dex_hand_env/cfg/task/BaseTask.yaml`
+- **Observation System**: `dex_hand_env/components/observation_encoder.py`

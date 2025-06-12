@@ -9,6 +9,12 @@
 - Movement via internal ARTx/y/z/Rx/y/z DOFs, not actor translation
 - **CRITICAL**: All motion is relative to spawn position, not absolute world coordinates
 
+### Floating Hand Coordinate System
+- The floating hand model has a built-in 90° Y-axis rotation
+- When ARRx=ARRy=ARRz=0, hand quaternion is [0, √0.5, 0, √0.5] not [0, 0, 0, 1]
+- Use `hand_pose_arr_aligned` observation for orientation aligned with ARR DOFs
+- This built-in rotation causes gimbal lock issues with Euler angles
+
 ### Relative Motion Control
 - `ARTz = 0.0` → stay at spawn Z position  
 - `ARTz = +0.1` → move +0.1 units from spawn position

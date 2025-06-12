@@ -350,6 +350,14 @@ class ObservationEncoder:
         hand_poses = rigid_body_states[:, hand_base_idx, :7]  # Extract pos(3) + quat(4) for all envs
         obs_dict["hand_pose"] = hand_poses
         
+        # ARR-aligned hand pose (orientation aligned with ARRx/ARRy/ARRz DOFs)
+        # Due to the floating hand model design, the hand is mounted with a built-in 90° Y-axis rotation.
+        # When ARRx=ARRy=ARRz=0, the hand base has quaternion [0, sqrt(0.5), 0, sqrt(0.5)] instead of
+        # identity [0, 0, 0, 1]. This observation compensates for that built-in rotation to provide
+        # orientation values that directly correspond to the ARRx, ARRy, ARRz DOF values.
+        arr_aligned_poses = self._compute_arr_aligned_pose(hand_poses)
+        obs_dict["hand_pose_arr_aligned"] = arr_aligned_poses
+        
         # Contact forces (3D force for each finger)
         # contact_forces should never be None during observation computation
         # If it is None, that indicates a tensor initialization bug that must be fixed
@@ -1004,6 +1012,43 @@ class ObservationEncoder:
             obs_data = obs_tensor[env_idx]
         
         return ObservationParser(obs_data, self, obs_dict)
+    
+    def _compute_arr_aligned_pose(self, hand_poses: torch.Tensor) -> torch.Tensor:
+        """
+        Compute hand pose with orientation aligned to ARR DOFs.
+        
+        Compensates for the built-in 90° Y-axis rotation in the floating hand model.
+        When ARRx=ARRy=ARRz=0, this returns orientation as identity quaternion [0,0,0,1].
+        
+        Args:
+            hand_poses: Hand poses [num_envs, 7] with position (3) + quaternion (4)
+            
+        Returns:
+            ARR-aligned poses [num_envs, 7] with compensated orientation
+        """
+        # The built-in rotation is 90° around Y axis: [0, sqrt(0.5), 0, sqrt(0.5)]
+        # To compensate, we need the inverse rotation (conjugate for unit quaternions)
+        sqrt_half = 0.7071067811865476  # sqrt(0.5)
+        
+        # Create the built-in rotation quaternion for all environments
+        # Note: quat_conjugate of [0, sqrt(0.5), 0, sqrt(0.5)] is [0, -sqrt(0.5), 0, sqrt(0.5)]
+        builtin_rotation = torch.tensor([0.0, sqrt_half, 0.0, sqrt_half], 
+                                       device=hand_poses.device, dtype=hand_poses.dtype)
+        inv_rotation = quat_conjugate(builtin_rotation)
+        
+        # Extract positions and quaternions
+        positions = hand_poses[:, :3]
+        quaternions = hand_poses[:, 3:7]
+        
+        # Apply quaternion multiplication: q_aligned = q_hand * q_inv
+        # Expand inverse rotation to match batch size
+        inv_rotation_batch = inv_rotation.unsqueeze(0).expand(quaternions.shape[0], -1)
+        q_aligned = quat_mul(quaternions, inv_rotation_batch)
+        
+        # Combine position and aligned orientation
+        arr_aligned_poses = torch.cat([positions, q_aligned], dim=1)
+        
+        return arr_aligned_poses
 
 
 class ObservationParser:

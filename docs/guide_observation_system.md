@@ -107,14 +107,15 @@ Each observation component has a defined shape:
 
 ```python
 OBSERVATION_SHAPES = {
-    "hand_pose": 7,           # pos(3) + quat(4)
-    "hand_vel": 6,            # lin(3) + ang(3)
-    "base_dof_pos": 6,        # 6 base DOFs
+    "hand_pose": 7,                # pos(3) + quat(4) - raw pose
+    "hand_pose_arr_aligned": 7,    # pos(3) + quat(4) - aligned to ARR DOFs
+    "hand_vel": 6,                 # lin(3) + ang(3)
+    "base_dof_pos": 6,             # 6 base DOFs
     "base_dof_vel": 6,        
-    "finger_dof_pos": 20,     # 20 finger DOFs
+    "finger_dof_pos": 20,          # 20 finger DOFs
     "finger_dof_vel": 20,
-    "fingertip_poses": 35,    # 5 tips × 7D
-    "contact_forces": 15,     # 5 tips × 3D
+    "fingertip_poses": 35,         # 5 tips × 7D
+    "contact_forces": 15,          # 5 tips × 3D
     # ... more observations
 }
 ```
@@ -213,10 +214,38 @@ env:
 ## Common Observation Types
 
 ### State Observations
-- `hand_pose`: Hand base position and orientation
+- `hand_pose`: Hand base position and orientation (raw from rigid body state)
+- `hand_pose_arr_aligned`: Hand pose with orientation aligned to ARR DOFs (compensates for built-in 90° Y rotation)
 - `hand_vel`: Hand base linear and angular velocity
 - `base_dof_pos/vel`: Base joint positions and velocities
 - `finger_dof_pos/vel`: Finger joint positions and velocities
+
+### ARR-Aligned Pose Details
+
+The `hand_pose_arr_aligned` observation addresses a coordinate system issue in the floating hand model:
+
+**Problem**: Due to the floating hand model design, the hand is mounted with a built-in 90° Y-axis rotation. When ARRx=ARRy=ARRz=0, the raw hand quaternion is approximately [0, 0.707, 0, 0.707] instead of identity [0, 0, 0, 1].
+
+**Solution**: The ARR-aligned pose compensates for this rotation:
+- Position: Same as raw hand pose
+- Orientation: Multiplied by inverse of the built-in rotation
+- Result: Quaternion values that directly correspond to ARRx, ARRy, ARRz DOF values
+
+**Usage Example**:
+```python
+obs_dict = env.get_observations_dict()
+
+# Raw pose - includes built-in 90° Y rotation
+raw_quat = obs_dict["hand_pose"][:, 3:7]  # [0, 0.707, 0, 0.707] when ARR=0
+
+# ARR-aligned pose - compensated orientation  
+aligned_quat = obs_dict["hand_pose_arr_aligned"][:, 3:7]  # [0, 0, 0, 1] when ARR=0
+
+# Convert to Euler angles for intuitive interpretation
+from scipy.spatial.transform import Rotation
+euler = Rotation.from_quat(aligned_quat).as_euler('xyz', degrees=True)
+# euler ≈ [0°, 0°, 0°] when ARRx=ARRy=ARRz=0
+```
 
 ### Contact Observations
 - `contact_forces`: 3D force vectors at fingertips

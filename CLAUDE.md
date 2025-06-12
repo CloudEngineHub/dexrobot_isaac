@@ -306,6 +306,18 @@ This design ensures that **disabling an observation component means excluding it
    - Add safety checks for tensor dimensions
    - Ensure physics stepping works correctly with components
 
+### Open Issues from Observation System Validation
+
+1. **Contact Force Verification Needed** (Issue #4)
+   - Contact forces show zero (expected - no objects in test scene)
+   - Need to add objects to scene to verify contact observation works
+   - Test contact_forces, contact_binary, contact_locations observations
+
+2. **Quaternion to Euler Conversion** (Issue #8 - Enhancement)
+   - Quaternions in observations hard to interpret for debugging
+   - Add conversion utility for plotting/visualization only
+   - Keep quaternions for RL, convert for human inspection
+
 ### Phase 1: Critical Fixes & Core Functionality
 2. **Fix GPU Pipeline Issues** (✅ DONE)
    - Fixed CUDA memory access errors by correcting tensor acquisition order
