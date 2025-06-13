@@ -175,6 +175,7 @@ targets = torch.clamp(targets, min_limits, max_limits)
 - [`docs/design_decisions.md`](docs/design_decisions.md) - Critical design caveats (READ FIRST!)
 - [`docs/api_dof_control.md`](docs/api_dof_control.md) - DOF indices, joint names, and action mapping reference
 - [`docs/guide_observation_system.md`](docs/guide_observation_system.md) - Observation system design and usage
+- [`docs/guide_viewer_controller.md`](docs/guide_viewer_controller.md) - Interactive viewer controls and keyboard shortcuts
 - [`docs/guide_physics_tuning.md`](docs/guide_physics_tuning.md) - How to tune physics parameters
 - [`docs/reference_physics_implementation.md`](docs/reference_physics_implementation.md) - Technical implementation details
 
@@ -369,32 +370,39 @@ This design ensures that **disabling an observation component means excluding it
    - Add configurable verbosity
    - Make error messages more informative
 
-9. **Improve Testing Framework**
-   - Add batched simulation tests (num_envs > 1)
-   - Create validation tests for observations and actions
-   - Add performance benchmarks
-   - Create regression tests for fixed bugs
+9. **Overhaul README Files**
+   - Update main README.md with current architecture and features
+   - Update dex_hand_env/README.md with correct component names (ViewerController not CameraController)
+   - Add proper documentation structure and navigation
+   - Include links to all documentation guides
+   - Add examples and quick start sections
+
+10. **Improve Testing Framework**
+    - Add batched simulation tests (num_envs > 1)
+    - Create validation tests for observations and actions
+    - Add performance benchmarks
+    - Create regression tests for fixed bugs
 
 ### Phase 3: Advanced Features & Validation
-10. **Visualization & Analysis Tools**
+11. **Visualization & Analysis Tools**
     - Add Rerun integration for visualization
     - Implement plotting of observations, actions, and rewards
     - Create tools to visualize DOF positions and targets
     - Add state recording and playback capability
 
-11. **Reward System Implementation**
+12. **Reward System Implementation**
     - Verify reward terms calculation
     - Add reward component visualization
     - Create reward debugging tools
     - Test reward scaling and normalization
 
-12. **RL Algorithm Integration**
+13. **RL Algorithm Integration**
     - Test with PPO implementation
     - Verify learning works correctly
     - Benchmark performance with different configs
     - Create sample training scripts
 
-13. **ROS2 Integration**
+14. **ROS2 Integration**
     - Implement ROS2 interface based on reference implementation
     - Add joint state publishers and subscribers
     - Create services for environment control
