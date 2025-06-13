@@ -41,8 +41,9 @@ class CameraController:
         self.device = device
         
         # Camera control state
-        self.lock_viewer_to_robot = 0  # 0 = free camera, 1 = side view, 2 = top-down view
-        self.follow_robot_index = 0  # Which robot to follow
+        self.camera_view_mode = "rear"  # Options: "free", "rear", "right", "bottom"
+        self.camera_follow_mode = "single"  # Options: "single" (follow one robot), "global" (overview)
+        self.follow_robot_index = 0  # Which robot to follow in single mode
         
         # Track whether keyboard events have been subscribed
         self._keyboard_subscribed = False
@@ -56,15 +57,19 @@ class CameraController:
         Subscribe to keyboard events for interactive control in the viewer.
         
         Sets up keyboard shortcuts for:
-        - Enter: Toggle camera following mode (free, side view, top-down view)
-        - Up/Down arrows: Navigate to previous/next robot to follow
+        - Enter: Toggle camera view mode (free, rear, right, bottom)
+        - G: Toggle between single robot follow and global view
+        - Up/Down arrows: Navigate to previous/next robot to follow (in single mode)
         - P: Reset the currently selected environment
         """
         if self.viewer is None:
             return
             
         self.gym.subscribe_viewer_keyboard_event(
-            self.viewer, gymapi.KEY_ENTER, "toggle camera mode"
+            self.viewer, gymapi.KEY_ENTER, "toggle view mode"
+        )
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_G, "toggle follow mode"
         )
         self.gym.subscribe_viewer_keyboard_event(
             self.viewer, gymapi.KEY_UP, "previous robot"
@@ -101,18 +106,36 @@ class CameraController:
             for evt in self.gym.query_viewer_action_events(self.viewer):
                 events_processed = True
                 
-                if evt.action == "toggle camera mode" and evt.value > 0:
-                    # Cycle through camera modes: free (0) -> side view (1) -> top-down (2) -> free (0)
-                    self.lock_viewer_to_robot = (self.lock_viewer_to_robot + 1) % 3
-                    print(f"Camera mode changed to: {['Free', 'Side View', 'Top-Down'][self.lock_viewer_to_robot]}")
+                if evt.action == "toggle view mode" and evt.value > 0:
+                    # Cycle through view modes: free -> rear -> right -> bottom -> free
+                    view_modes = ["free", "rear", "right", "bottom"]
+                    current_idx = view_modes.index(self.camera_view_mode)
+                    self.camera_view_mode = view_modes[(current_idx + 1) % len(view_modes)]
+                    
+                    # Display current camera state
+                    view_names = {"free": "Free Camera", "rear": "Rear View", "right": "Right View", "bottom": "Bottom View"}
+                    follow_text = f"following robot {self.follow_robot_index}" if self.camera_follow_mode == "single" else "global view"
+                    print(f"Camera: {view_names[self.camera_view_mode]} ({follow_text})")
+                elif evt.action == "toggle follow mode" and evt.value > 0:
+                    # Toggle between single robot follow and global view
+                    self.camera_follow_mode = "global" if self.camera_follow_mode == "single" else "single"
+                    follow_text = f"following robot {self.follow_robot_index}" if self.camera_follow_mode == "single" else "global view"
+                    view_names = {"free": "Free Camera", "rear": "Rear View", "right": "Right View", "bottom": "Bottom View"}
+                    print(f"Camera: {view_names[self.camera_view_mode]} ({follow_text})")
                 elif evt.action == "previous robot" and evt.value > 0:
-                    # Move to previous robot
-                    self.follow_robot_index = (self.follow_robot_index - 1) % self.num_envs
-                    print(f"Following robot {self.follow_robot_index}")
+                    # Move to previous robot (only in single mode)
+                    if self.camera_follow_mode == "single":
+                        self.follow_robot_index = (self.follow_robot_index - 1) % self.num_envs
+                        print(f"Following robot {self.follow_robot_index}")
+                    else:
+                        print("Cannot change robot in global view mode. Press Tab to switch to single robot mode.")
                 elif evt.action == "next robot" and evt.value > 0:
-                    # Move to next robot
-                    self.follow_robot_index = (self.follow_robot_index + 1) % self.num_envs
-                    print(f"Following robot {self.follow_robot_index}")
+                    # Move to next robot (only in single mode)
+                    if self.camera_follow_mode == "single":
+                        self.follow_robot_index = (self.follow_robot_index + 1) % self.num_envs
+                        print(f"Following robot {self.follow_robot_index}")
+                    else:
+                        print("Cannot change robot in global view mode. Press Tab to switch to single robot mode.")
                 elif evt.action == "reset environment" and evt.value > 0 and reset_callback is not None:
                     # Reset only the selected environment
                     print(f"Resetting robot {self.follow_robot_index}")
@@ -133,35 +156,48 @@ class CameraController:
         Returns:
             Boolean indicating whether camera was updated
         """
-        if self.viewer is None or self.lock_viewer_to_robot == 0:
+        if self.viewer is None:
+            return False
+            
+        # Only update camera if we're not in free mode
+        if self.camera_view_mode == "free":
             return False
             
         # Safety check for valid input and index
         if hand_positions is None or hand_positions.shape[0] == 0:
             return False
             
-        # Make sure follow_robot_index is within bounds
-        safe_index = min(self.follow_robot_index, hand_positions.shape[0] - 1)
-        
         # Define different camera positions based on the viewing mode
-        if self.lock_viewer_to_robot == 1:
-            # Side view
-            camera_offset = gymapi.Vec3(-1.0, 0.0, 0.6)
-        else:  # mode 2
-            # Top-down view
-            camera_offset = gymapi.Vec3(0.0, -1.0, 1.0)
+        camera_offsets = {
+            "rear": gymapi.Vec3(-1.0, 0.0, 0.6),     # Behind the hand
+            "right": gymapi.Vec3(0.0, -1.0, 0.6),    # From the right side
+            "bottom": gymapi.Vec3(0.0, 0.3, -1.0),   # Looking up from below
+        }
+        camera_offset = camera_offsets.get(self.camera_view_mode, gymapi.Vec3(-1.0, 0.0, 0.6))
+        
+        # Determine camera target based on follow mode
+        if self.camera_follow_mode == "single":
+            # Follow a specific robot
+            safe_index = min(self.follow_robot_index, hand_positions.shape[0] - 1)
+            target_pos = hand_positions[safe_index].cpu().numpy()
+        else:
+            # Global view - focus on center of all robots
+            target_pos = hand_positions.mean(dim=0).cpu().numpy()
+            # For global view, increase camera distance
+            camera_offset = gymapi.Vec3(
+                camera_offset.x * 2.0,
+                camera_offset.y * 2.0,
+                camera_offset.z + 1.0 if self.camera_view_mode != "bottom" else camera_offset.z - 1.0
+            )
             
         try:
-            # Get position of the hand we're following
-            hand_pos = hand_positions[safe_index].cpu().numpy()
-            
             # Set camera position and target
             cam_pos = gymapi.Vec3(
-                hand_pos[0] + camera_offset.x,
-                hand_pos[1] + camera_offset.y,
-                hand_pos[2] + camera_offset.z
+                target_pos[0] + camera_offset.x,
+                target_pos[1] + camera_offset.y,
+                target_pos[2] + camera_offset.z
             )
-            cam_target = gymapi.Vec3(hand_pos[0], hand_pos[1], hand_pos[2])
+            cam_target = gymapi.Vec3(target_pos[0], target_pos[1], target_pos[2])
             
             # Update camera
             self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)

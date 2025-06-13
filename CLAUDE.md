@@ -313,10 +313,13 @@ This design ensures that **disabling an observation component means excluding it
    - Need to add objects to scene to verify contact observation works
    - Test contact_forces, contact_binary, contact_locations observations
 
-2. **Quaternion to Euler Conversion** (Issue #8 - Enhancement)
+2. **Quaternion to Euler Conversion** (Issue #8 - Enhancement) (✅ DONE)
    - Quaternions in observations hard to interpret for debugging
    - Add conversion utility for plotting/visualization only
    - Keep quaternions for RL, convert for human inspection
+   - Added ARR-aligned pose observation to compensate for floating hand's built-in 90° Y rotation
+   - Implemented Euler angle plotting in examples/dexhand_test.py
+   - Fixed and tested coordinate transformation utilities
 
 ### Phase 1: Critical Fixes & Core Functionality
 2. **Fix GPU Pipeline Issues** (✅ DONE)
