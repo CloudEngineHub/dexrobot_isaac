@@ -1,8 +1,8 @@
 """
-Camera controller component for DexHand environment.
+Viewer controller component for DexHand environment.
 
-This module provides camera control functionality for the DexHand environment,
-including keyboard shortcuts for changing camera views and following specific robots.
+This module provides viewer interaction functionality for the DexHand environment,
+including keyboard shortcuts for camera control, robot selection, and environment resets.
 """
 
 # Import IsaacGym first
@@ -12,12 +12,13 @@ from isaacgym import gymapi
 import torch
 
 
-class CameraController:
+class ViewerController:
     """
-    Handles camera control and keyboard shortcuts for the DexHand environment.
+    Handles viewer interactions and keyboard shortcuts for the DexHand environment.
     
     This component provides functionality to:
-    - Toggle between different camera views (free, side view, top-down)
+    - Toggle between different camera views (free, rear, right, bottom)
+    - Switch between single robot follow and global view modes
     - Navigate between different robots in the environment
     - Reset selected environments
     - Update camera position based on the current mode
@@ -25,7 +26,7 @@ class CameraController:
     
     def __init__(self, gym, viewer, envs, num_envs, device):
         """
-        Initialize the camera controller.
+        Initialize the viewer controller.
         
         Args:
             gym: The isaacgym gym instance

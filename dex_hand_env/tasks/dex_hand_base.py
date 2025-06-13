@@ -24,7 +24,7 @@ from isaacgym.torch_utils import to_torch, tensor_clamp, quat_mul, quat_conjugat
 import torch
 
 # Import components
-from dex_hand_env.components.camera_controller import CameraController
+from dex_hand_env.components.viewer_controller import ViewerController
 from dex_hand_env.components.fingertip_visualizer import FingertipVisualizer
 from dex_hand_env.components.success_failure_tracker import SuccessFailureTracker
 from dex_hand_env.components.reward_calculator import RewardCalculator
@@ -373,7 +373,7 @@ class DexHandBase(VecTask):
         
         # Create camera controller if viewer exists
         if hasattr(self, 'viewer') and self.viewer is not None:
-            self.camera_controller = CameraController(
+            self.viewer_controller = ViewerController(
                 gym=self.gym,
                 viewer=self.viewer,
                 envs=self.envs,
@@ -381,7 +381,7 @@ class DexHandBase(VecTask):
                 device=self.device
             )
         else:
-            self.camera_controller = None
+            self.viewer_controller = None
         
         # Create fingertip visualizer
         self.fingertip_visualizer = FingertipVisualizer(
@@ -605,10 +605,10 @@ class DexHandBase(VecTask):
 
     def pre_physics_step(self, actions):
         """Process actions before physics simulation step."""
-        # Check for keyboard events if camera controller exists
-        if self.camera_controller is not None:
+        # Check for keyboard events if viewer controller exists
+        if self.viewer_controller is not None:
             try:
-                self.camera_controller.check_keyboard_events(
+                self.viewer_controller.check_keyboard_events(
                     reset_callback=lambda env_ids: self.reset_idx(env_ids)
                 )
             except Exception as e:
@@ -700,7 +700,7 @@ class DexHandBase(VecTask):
                 self.fingertip_visualizer.update_fingertip_visualization(self.contact_forces)
             
             # Update camera position if following robot
-            if self.camera_controller is not None:
+            if self.viewer_controller is not None:
                 # Get hand positions for camera following
                 hand_positions = None
                 if self.rigid_body_states is not None and self.hand_indices:
@@ -711,7 +711,7 @@ class DexHandBase(VecTask):
                         # Get position using the correct tensor indexing (root_state_tensor shape is [num_envs, num_bodies, 13])
                         hand_positions[i] = self.rigid_body_states[i, hand_idx, :3]
                 
-                self.camera_controller.update_camera_position(hand_positions)
+                self.viewer_controller.update_camera_position(hand_positions)
             
             # Reset environments that completed episodes
             if torch.any(self.reset_buf):
