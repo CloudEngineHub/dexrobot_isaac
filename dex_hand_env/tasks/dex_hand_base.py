@@ -189,10 +189,8 @@ class DexHandBase(VecTask):
         self._init_components()
 
         # Verify tensors were properly initialized
-        if not hasattr(self, "tensor_manager"):
-            raise RuntimeError(
-                "TensorManager component was not created. The simulation initialization has failed."
-            )
+        # tensor_manager must exist after _init_components()
+        # If it doesn't, that indicates a critical initialization failure
 
         if not self.tensor_manager.tensors_initialized:
             raise RuntimeError(
@@ -216,10 +214,8 @@ class DexHandBase(VecTask):
         """
         logger.debug("Creating components...")
 
-        # Check if simulation exists (should have been created by parent class)
-        if not hasattr(self, "sim") or self.sim is None:
-            logger.warning("Simulation not created by parent class, creating now...")
-            self.sim = self.create_sim()
+        # Create simulation (parent class only defines the method, doesn't call it)
+        self.sim = self.create_sim()
 
         # Create hand initializer
         self.hand_initializer = HandInitializer(
@@ -310,21 +306,18 @@ class DexHandBase(VecTask):
             device=self.device,
             dof_props=self.dof_props,
             hand_asset=self.hand_asset,
+            physics_manager=self.physics_manager,
         )
 
-        # Configure action processor
-        self.action_processor.setup(self.num_dof, self.dof_props)
+        # Set control mode BEFORE setup
+        if "controlMode" not in self.cfg["env"]:
+            raise RuntimeError(
+                "controlMode not specified in config. Must be 'position' or 'position_delta'."
+            )
+        self.action_processor.set_control_mode(self.cfg["env"]["controlMode"])
 
-        # Set control mode
-        if "controlMode" in self.cfg["env"]:
-            self.action_processor.set_control_mode(self.cfg["env"]["controlMode"])
-        elif "controlType" in self.cfg["env"]:
-            # Map old controlType to new controlMode
-            control_type = self.cfg["env"]["controlType"]
-            if control_type == "default":
-                self.action_processor.set_control_mode("position")
-            elif control_type == "relative":
-                self.action_processor.set_control_mode("position_delta")
+        # Basic setup (without action scaling - control_dt not yet determined)
+        self.action_processor.setup(self.num_dof, self.dof_props)
 
         # Set control options - determine which parts are controlled by policy vs rule-based control
         self.action_processor.set_control_options(
@@ -349,8 +342,7 @@ class DexHandBase(VecTask):
             base_ang_vel_limit=self.cfg["env"]["maxBaseAngularVelocity"],
         )
 
-        # Set initial control_dt (will be updated after reset when physics steps are auto-detected)
-        self.action_processor.set_control_dt(self.physics_manager.control_dt)
+        # ActionProcessor now accesses control_dt directly from physics_manager via property decorator
 
         # Create observation encoder with tensor manager reference (will be initialized later)
         self.observation_encoder = ObservationEncoder(
@@ -361,6 +353,7 @@ class DexHandBase(VecTask):
             tensor_manager=self.tensor_manager,
             hand_asset=self.hand_asset,
             hand_initializer=self.hand_initializer,
+            physics_manager=self.physics_manager,
         )
 
         # Create reset manager
@@ -496,23 +489,19 @@ class DexHandBase(VecTask):
         )
 
         # Share buffers with reset manager
-        if hasattr(self, "reset_manager"):
-            self.reset_manager.set_buffers(self.reset_buf, self.progress_buf)
+        # reset_manager must exist after _init_components()
+        self.reset_manager.set_buffers(self.reset_buf, self.progress_buf)
 
         # Set up action space
-        if hasattr(self, "action_processor"):
-            # Calculate action space size
-            if self.action_processor.policy_controls_hand_base:
-                self.num_actions = self.action_processor.NUM_BASE_DOFS
-            else:
-                self.num_actions = 0
-
-            if self.action_processor.policy_controls_fingers:
-                self.num_actions += self.action_processor.NUM_ACTIVE_FINGER_DOFS
+        # action_processor must exist after _init_components()
+        # Calculate action space size
+        if self.action_processor.policy_controls_hand_base:
+            self.num_actions = self.action_processor.NUM_BASE_DOFS
         else:
-            raise RuntimeError(
-                "ActionProcessor not initialized. Cannot determine action space size."
-            )
+            self.num_actions = 0
+
+        if self.action_processor.policy_controls_fingers:
+            self.num_actions += self.action_processor.NUM_ACTIVE_FINGER_DOFS
 
         # Create the action space
         self.actions = torch.zeros(
@@ -549,8 +538,7 @@ class DexHandBase(VecTask):
         # Set observation space dimensions needed by VecTask
         self.num_observations = self.observation_encoder.num_observations
 
-        # Set control timestep for manual velocity computation in observation encoder
-        self.observation_encoder.set_control_dt(self.physics_manager.control_dt)
+        # ObservationEncoder now accesses control_dt directly from physics_manager via property decorator
 
         # Create extras dictionary for additional info
         self.extras = {}
@@ -579,7 +567,8 @@ class DexHandBase(VecTask):
             # Reset progress buffer for the reset environments
             self.progress_buf[env_ids] = 0
 
-            # Create default DOF positions/velocities
+            # Create default DOF positions/velocities if not already set
+            # This is a one-time initialization that persists across resets
             if not hasattr(self, "default_dof_pos"):
                 self.default_dof_pos = torch.zeros(self.num_dof, device=self.device)
                 # All DOFs start at 0.0 (no offset from initial placement)
@@ -643,7 +632,7 @@ class DexHandBase(VecTask):
     def pre_physics_step(self, actions):
         """Process actions before physics simulation step."""
         # Check for keyboard events if viewer controller exists
-        if self.viewer_controller is not None:
+        if self.viewer_controller:
             try:
                 self.viewer_controller.check_keyboard_events(
                     reset_callback=lambda env_ids: self.reset_idx(env_ids)
@@ -741,16 +730,17 @@ class DexHandBase(VecTask):
                 self.reset_buf = self.reset_manager.check_termination()
 
             # Update fingertip visualization
-            if self.fingertip_visualizer is not None:
+            if self.fingertip_visualizer:
                 self.fingertip_visualizer.update_fingertip_visualization(
                     self.contact_forces
                 )
 
             # Update camera position if following robot
-            if self.viewer_controller is not None:
+            if self.viewer_controller:
                 # Get hand positions for camera following
                 hand_positions = None
-                if self.rigid_body_states is not None and self.hand_indices:
+                # rigid_body_states and hand_indices must be initialized
+                if self.hand_indices:
                     hand_positions = torch.zeros((self.num_envs, 3), device=self.device)
                     for i, hand_idx in enumerate(self.hand_indices):
                         if i >= self.num_envs:
@@ -767,10 +757,8 @@ class DexHandBase(VecTask):
             # Physics step count tracking for auto-detecting steps per control
             self.physics_manager.mark_control_step()
 
-            # Update control_dt if it was auto-detected and changed
-            if self.physics_manager.auto_detected_physics_steps:
-                self.action_processor.set_control_dt(self.physics_manager.control_dt)
-                self.observation_encoder.set_control_dt(self.physics_manager.control_dt)
+            # Control_dt is now accessed directly from physics_manager via property decorators
+            # No need to explicitly update components when auto-detection occurs
 
             # Update extras
             self.extras = {
@@ -838,7 +826,8 @@ class DexHandBase(VecTask):
         Returns:
             Dictionary containing all computed observations
         """
-        return self.obs_dict.copy() if hasattr(self, "obs_dict") else {}
+        # obs_dict is initialized in __init__ and should always exist
+        return self.obs_dict.copy()
 
     def set_rule_based_controllers(self, base_controller=None, finger_controller=None):
         """
@@ -886,8 +875,8 @@ class DexHandBase(VecTask):
         Internal method to apply rule-based control using registered controller functions.
         Called automatically during pre_physics_step.
         """
-        if not hasattr(self, "action_processor") or not hasattr(self, "dof_pos"):
-            return
+        # action_processor and dof_pos must be initialized by this point
+        # If they're not, that indicates an initialization bug
 
         # Apply base controller if available and base is not policy-controlled
         if (
@@ -977,17 +966,14 @@ class DexHandBase(VecTask):
 
         # 2. Control name to active finger DOF index mapping (th_dip, etc. -> 0-11)
         self.control_name_to_index = {}
-        if hasattr(self, "hand_initializer") and hasattr(
-            self.hand_initializer, "active_joint_names"
-        ):
-            for i, control_name in enumerate(self.hand_initializer.active_joint_names):
-                self.control_name_to_index[control_name] = i
+        # hand_initializer must exist and have active_joint_names after _init_components()
+        for i, control_name in enumerate(self.hand_initializer.active_joint_names):
+            self.control_name_to_index[control_name] = i
 
         # 3. Raw finger DOF name to raw DOF tensor index mapping (r_f_joint1_1, etc. -> 0-25)
         self.raw_dof_name_to_index = {}
-        if hasattr(self, "observation_encoder") and hasattr(
-            self.observation_encoder, "dof_names"
-        ):
+        # observation_encoder must exist but might not have dof_names yet
+        if self.observation_encoder.dof_names:
             for i, dof_name in enumerate(self.observation_encoder.dof_names):
                 self.raw_dof_name_to_index[dof_name] = i
 

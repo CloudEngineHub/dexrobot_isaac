@@ -49,6 +49,7 @@ class ObservationEncoder:
         tensor_manager,
         hand_initializer,
         hand_asset,
+        physics_manager,
     ):
         """
         Initialize the observation encoder.
@@ -61,6 +62,7 @@ class ObservationEncoder:
             tensor_manager: Reference to tensor manager for accessing tensors
             hand_initializer: Reference to hand initializer for accessing rigid body indices
             hand_asset: Hand asset for getting DOF names
+            physics_manager: PhysicsManager instance for accessing control_dt
         """
         self.gym = gym
         self.sim = sim
@@ -69,6 +71,9 @@ class ObservationEncoder:
         self.tensor_manager = tensor_manager
         self.hand_asset = hand_asset
         self.hand_initializer = hand_initializer
+
+        # Reference to physics manager for accessing control_dt (single source of truth)
+        self.physics_manager = physics_manager
 
         # Store DOF names if asset is provided
         self.dof_names = []
@@ -96,7 +101,14 @@ class ObservationEncoder:
 
         # Manual velocity computation (to replace unreliable Isaac Gym velocities)
         self.prev_dof_pos = None
-        self.control_dt = None  # Will be set during initialization
+        # control_dt is accessed via property decorator from physics_manager
+
+    @property
+    def control_dt(self):
+        """Access control_dt from physics manager (single source of truth)."""
+        if self.physics_manager is None:
+            raise RuntimeError("physics_manager not set. Cannot access control_dt.")
+        return self.physics_manager.control_dt
 
     def initialize(
         self,
@@ -224,17 +236,7 @@ class ObservationEncoder:
             raise RuntimeError("hand_initializer not set in ObservationEncoder")
         return self.hand_initializer.fingerpad_indices
 
-    def set_control_dt(self, control_dt: float):
-        """
-        Set the control timestep for manual velocity computation.
-
-        Args:
-            control_dt: Control timestep in seconds
-        """
-        self.control_dt = control_dt
-        logger.info(
-            f"ObservationEncoder: Manual velocity computation enabled with dt={control_dt}"
-        )
+    # set_control_dt method removed - control_dt now accessed via property decorator from physics_manager
 
     def update_prev_actions(self, actions: torch.Tensor):
         """
@@ -243,12 +245,9 @@ class ObservationEncoder:
         Args:
             actions: Current action tensor
         """
-        if (
-            actions is not None
-            and hasattr(actions, "shape")
-            and self.prev_actions is not None
-        ):
-            self.prev_actions = actions.clone()
+        # prev_actions is initialized in initialize() and should never be None
+        # actions parameter is required and should be a valid tensor
+        self.prev_actions = actions.clone()
 
     def _compute_manual_velocities(self, current_dof_pos: torch.Tensor) -> torch.Tensor:
         """
@@ -392,12 +391,20 @@ class ObservationEncoder:
         rigid_body_states = self.tensor_manager.rigid_body_states
         contact_forces = self.tensor_manager.contact_forces
 
-        # Safety check
-        if dof_pos is None or isaac_dof_vel is None or actor_root_state_tensor is None:
-            logger.warning(
-                "Tensor handles not initialized. Cannot compute observations."
+        # Tensors should never be None during observation computation
+        # If they are, that indicates a tensor initialization bug that must be fixed
+        if dof_pos is None:
+            raise RuntimeError(
+                "dof_pos tensor is None. This indicates tensor_manager was not properly initialized."
             )
-            return obs_dict
+        if isaac_dof_vel is None:
+            raise RuntimeError(
+                "dof_vel tensor is None. This indicates tensor_manager was not properly initialized."
+            )
+        if actor_root_state_tensor is None:
+            raise RuntimeError(
+                "actor_root_state_tensor is None. This indicates tensor_manager was not properly initialized."
+            )
 
         # Compute manual velocities to replace unreliable Isaac Gym velocities
         dof_vel = self._compute_manual_velocities(dof_pos)
@@ -461,14 +468,11 @@ class ObservationEncoder:
         obs_dict["prev_actions"] = self.prev_actions
 
         # Base DOF targets (6 DOFs: x, y, z, rx, ry, rz)
-        # action_processor should never be None during observation computation
-        # If it is, that indicates an initialization bug that must be fixed
-        if (
-            not hasattr(self.action_processor, "current_targets")
-            or self.action_processor.current_targets is None
-        ):
+        # action_processor and its current_targets must be initialized
+        # If they are not, that indicates an initialization bug that must be fixed
+        if self.action_processor.current_targets is None:
             raise RuntimeError(
-                "ActionProcessor current_targets not available. Cannot compute DOF targets."
+                "ActionProcessor current_targets is None. This indicates action_processor was not properly initialized."
             )
 
         obs_dict["base_dof_target"] = self.action_processor.current_targets[

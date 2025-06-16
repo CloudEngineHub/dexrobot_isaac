@@ -6,7 +6,7 @@ including physics stepping, synchronization, and auto-detection of physics steps
 """
 
 # Import IsaacGym first
-from isaacgym import gymapi, gymtorch
+from isaacgym import gymtorch
 
 # Then import PyTorch
 import torch
@@ -112,10 +112,14 @@ class PhysicsManager:
                     self.auto_detected_physics_steps = True
 
                     # Update control_dt to match the actual control frequency
-                    self.control_dt = self.physics_dt * self.physics_steps_per_control_step
+                    self.control_dt = (
+                        self.physics_dt * self.physics_steps_per_control_step
+                    )
 
-                    logger.info(f"Auto-detected physics_steps_per_control_step: {measured_steps}. "
-                          f"This means {measured_steps} physics steps occur between each policy action.")
+                    logger.info(
+                        f"Auto-detected physics_steps_per_control_step: {measured_steps}. "
+                        f"This means {measured_steps} physics steps occur between each policy action."
+                    )
 
             return True
         except Exception as e:
@@ -123,7 +127,9 @@ class PhysicsManager:
             logger.exception("Traceback:")
             return False
 
-    def apply_tensor_states(self, gym, sim, env_ids, dof_state, root_state_tensor, hand_indices=None):
+    def apply_tensor_states(
+        self, gym, sim, env_ids, dof_state, root_state_tensor, hand_indices=None
+    ):
         """
         Apply tensor states to the physics simulation.
 
@@ -147,19 +153,23 @@ class PhysicsManager:
                 self.sim,
                 gymtorch.unwrap_tensor(dof_state),
                 gymtorch.unwrap_tensor(env_ids_int32),
-                len(env_ids)
+                len(env_ids),
             )
 
             # Apply root state - use the right approach based on what we have
             if hand_indices is not None:
                 # Convert environment indices to actor indices
                 # Create actor indices tensor with the same length as env_ids
-                actor_indices = torch.zeros(len(env_ids), dtype=torch.int32, device=self.device)
+                actor_indices = torch.zeros(
+                    len(env_ids), dtype=torch.int32, device=self.device
+                )
                 for i, env_id in enumerate(env_ids):
                     if env_id < len(hand_indices):
                         actor_indices[i] = hand_indices[env_id]
                     else:
-                        logger.warning(f"Environment ID {env_id} out of range for hand_indices")
+                        logger.warning(
+                            f"Environment ID {env_id} out of range for hand_indices"
+                        )
 
                 # Need to extract the specific actor states from the tensor
                 # The root_state_tensor has shape [num_envs, num_bodies, 13]
@@ -178,15 +188,13 @@ class PhysicsManager:
                     self.sim,
                     gymtorch.unwrap_tensor(actor_states),
                     gymtorch.unwrap_tensor(actor_indices),
-                    len(env_ids)
+                    len(env_ids),
                 )
-            else:
-                # Just try to set the entire root state tensor
-                try:
-                    self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(root_state_tensor))
-                except Exception as e:
-                    logger.warning(f"Could not set actor root state tensor: {e}")
-                    # Continue anyway, as DOF state is more important
+            elif root_state_tensor is not None:
+                # Set the entire root state tensor if provided
+                self.gym.set_actor_root_state_tensor(
+                    self.sim, gymtorch.unwrap_tensor(root_state_tensor)
+                )
 
             # Step physics to settle objects
             # This may require multiple physics steps for stability

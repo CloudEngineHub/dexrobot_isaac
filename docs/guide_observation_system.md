@@ -65,22 +65,22 @@ All observations are computed regardless of configuration:
 def compute_observations(self):
     # Compute ALL observations into dictionary
     obs_dict = {}
-    
+
     # Hand state observations
     obs_dict["hand_pose"] = self._compute_hand_pose()
     obs_dict["hand_vel"] = self._compute_hand_velocity()
-    
+
     # DOF observations
     obs_dict["base_dof_pos"] = self._compute_base_dof_pos()
     obs_dict["finger_dof_pos"] = self._compute_finger_dof_pos()
-    
+
     # Contact observations
     obs_dict["contact_forces"] = self._compute_contact_forces()
-    
+
     # Task-specific observations
     task_obs = self._compute_task_observations()
     obs_dict.update(task_obs)
-    
+
     return obs_dict
 ```
 
@@ -91,12 +91,12 @@ Only enabled observations are concatenated:
 ```python
 def _concatenate_observations(self, obs_dict):
     obs_list = []
-    
+
     # Only concatenate enabled keys
     for key in self.observation_keys:
         if key in obs_dict:
             obs_list.append(obs_dict[key])
-    
+
     # Create final observation buffer
     self.obs_buf = torch.cat(obs_list, dim=-1)
 ```
@@ -111,7 +111,7 @@ OBSERVATION_SHAPES = {
     "hand_pose_arr_aligned": 7,    # pos(3) + quat(4) - aligned to ARR DOFs
     "hand_vel": 6,                 # lin(3) + ang(3)
     "base_dof_pos": 6,             # 6 base DOFs
-    "base_dof_vel": 6,        
+    "base_dof_vel": 6,
     "finger_dof_pos": 20,          # 20 finger DOFs
     "finger_dof_vel": 20,
     "fingertip_poses": 35,         # 5 tips × 7D
@@ -173,7 +173,7 @@ dof_positions = encoder.get_dof_positions()
 def _compute_my_observation(self):
     # Compute your observation
     my_obs = some_computation()
-    
+
     # Ensure correct shape: (num_envs, obs_dim)
     return my_obs.view(self.num_envs, -1)
 ```
@@ -183,12 +183,12 @@ def _compute_my_observation(self):
 ```python
 def _compute_default_observations(self):
     obs_dict = {}
-    
+
     # Existing observations...
-    
+
     # Add your observation
     obs_dict["my_observation"] = self._compute_my_observation()
-    
+
     return obs_dict
 ```
 
@@ -238,7 +238,7 @@ obs_dict = env.get_observations_dict()
 # Raw pose - includes built-in 90° Y rotation
 raw_quat = obs_dict["hand_pose"][:, 3:7]  # [0, 0.707, 0, 0.707] when ARR=0
 
-# ARR-aligned pose - compensated orientation  
+# ARR-aligned pose - compensated orientation
 aligned_quat = obs_dict["hand_pose_arr_aligned"][:, 3:7]  # [0, 0, 0, 1] when ARR=0
 
 # Convert to Euler angles for intuitive interpretation
@@ -333,10 +333,17 @@ plot_observation_history(obs_dict["finger_dof_pos"])
 # In your task class
 def _compute_task_observations(self):
     obs_dict = {}
-    
+
     # Task-specific observations
     obs_dict["target_distance"] = self._compute_target_distance()
     obs_dict["grasp_quality"] = self._compute_grasp_quality()
-    
+
     return obs_dict
 ```
+
+## Related Documentation
+
+- **Component Initialization**: [`guide_component_initialization.md`](guide_component_initialization.md) - Dependency management and initialization order
+- **Design Decisions**: [`design_decisions.md`](design_decisions.md) - Critical design caveats
+- **DOF/Action Reference**: [`api_dof_control.md`](api_dof_control.md) - DOF indices and action mapping
+- **Physics Implementation**: [`reference_physics_implementation.md`](reference_physics_implementation.md) - Technical implementation details

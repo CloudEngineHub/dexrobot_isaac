@@ -85,7 +85,7 @@ class PhysicsManager:
         self.physics_steps_count = 0
         self.control_steps_count = 0
         self.physics_steps_per_control_step = None
-    
+
     def _step_physics(self):
         """Wrapper that MUST be used for ALL physics steps"""
         self.physics_steps_count += 1
@@ -101,19 +101,19 @@ The system automatically determines the step ratio during the first control cycl
 def detect_physics_steps_per_control(self):
     # Reset step counter
     initial_physics_steps = self.physics_steps_count
-    
+
     # Perform one control cycle (includes potential resets)
     self.reset_idx(torch.arange(self.num_envs))
     self.compute_observations()
     self.step(torch.zeros_like(self.actions))
-    
+
     # Calculate how many physics steps occurred
     steps_taken = self.physics_steps_count - initial_physics_steps
-    
+
     # Set the detected ratio
     self.physics_steps_per_control_step = steps_taken
     self.control_dt = self.physics_dt * self.physics_steps_per_control_step
-    
+
     print(f"Auto-detected physics_steps_per_control_step: {steps_taken}")
 ```
 
@@ -123,7 +123,7 @@ def detect_physics_steps_per_control(self):
    ```python
    # ❌ WRONG - Bypasses tracking
    self.gym.simulate(self.sim)
-   
+
    # ✅ CORRECT - Properly tracked
    self._step_physics()
    ```
@@ -138,10 +138,10 @@ def detect_physics_steps_per_control(self):
    ```
    # Simple reset without objects
    Auto-detected physics_steps_per_control_step: 2
-   
+
    # Complex reset with penetrations
    Auto-detected physics_steps_per_control_step: 5
-   
+
    # Reset with multiple objects
    Auto-detected physics_steps_per_control_step: 8
    ```
@@ -152,11 +152,11 @@ def detect_physics_steps_per_control(self):
 def reset_idx(self, env_ids):
     # Set initial poses (may penetrate)
     self._set_actor_root_state_tensor_indexed(env_ids)
-    
+
     # Multiple physics steps to resolve penetrations
     for _ in range(self.reset_physics_steps):
         self._step_physics()  # Uses wrapper for tracking
-    
+
     # Now objects are depenetrated and stable
 ```
 
@@ -188,7 +188,7 @@ def acquire_tensor_handles(self):
     self.actor_root_state_tensor = self.gym.acquire_actor_root_state_tensor(self.sim)
     self.dof_state_tensor = self.gym.acquire_dof_state_tensor(self.sim)
     self.rigid_body_state_tensor = self.gym.acquire_rigid_body_state_tensor(self.sim)
-    
+
     # Wrap tensors for GPU access
     self.root_state_tensor = gymtorch.wrap_tensor(self.actor_root_state_tensor)
     self.dof_state_tensor = gymtorch.wrap_tensor(self.dof_state_tensor)
@@ -234,5 +234,6 @@ This difference is critical for GPU pipeline compatibility.
 ## See Also
 
 - [`design_decisions.md`](design_decisions.md) - Critical design caveats
+- [`guide_component_initialization.md`](guide_component_initialization.md) - Component initialization and dependency management
 - [`guide_physics_tuning.md`](guide_physics_tuning.md) - Parameter tuning guide
 - [`api_dof_control.md`](api_dof_control.md) - DOF and action reference

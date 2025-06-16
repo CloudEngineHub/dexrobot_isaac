@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Install: `pip install -e .`
 - Run simple test: `python examples/dexhand_test.py`
 - Run with options: `python examples/dexhand_test.py --episode-length 200 --debug --movement-speed 0.5`
-- Test GPU pipeline: `python examples/dexhand_test.py --use-gpu-pipeline --steps 10`
+- Test with different control modes: `python examples/dexhand_test.py --device cpu --control-mode position_delta --policy-controls-fingers true --policy-controls-base true --enable-plotting`
 
 ## Note on Code Structure
 - The main implementation is in the `dex_hand_env` directory
@@ -45,6 +45,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `value = 0.785 # fallback` → Raise error instead of magic numbers
 - `# Fallback to default` → This comment itself indicates wrong approach
 - `return default_value` → Use `raise RuntimeError("Missing required value")`
+- `hasattr(obj, 'attr')` → If an attribute should exist, access it directly and let AttributeError expose bugs
 
 ### REQUIRED Pattern:
 When something is missing or invalid, ALWAYS:
@@ -188,7 +189,7 @@ targets = torch.clamp(targets, min_limits, max_limits)
   3. The base DOFs still exist and can be controlled, allowing for controlled movement of the hand base
   4. This approach ensures consistent and stable hand positioning during simulation
 
-### DOF Control  
+### DOF Control
 - The ARTx/y/z DOFs control **RELATIVE** translation from initial position
 - The ARRx/y/z DOFs control **RELATIVE** rotation from initial orientation
 - **IMPORTANT**: ARTz=0.0 means "stay at initial Z" (spawn point), NOT "go to world Z=0"
@@ -340,7 +341,7 @@ This design ensures that **disabling an observation component means excluding it
 
 4. **Test Action Modes** (✅ DONE)
    - Verify position control mode works correctly
-   - Verify position_delta control mode works correctly  
+   - Verify position_delta control mode works correctly
    - Test with different control frequencies
    - Ensure action=0 maintains position properly
    - Added CLI flags for testing different control configurations
