@@ -39,6 +39,16 @@ from dex_hand_env.tasks.task_interface import DexTask
 # Import base task class
 from dex_hand_env.tasks.base.vec_task import VecTask
 
+# Import constants
+from dex_hand_env.constants import (
+    NUM_BASE_DOFS,
+    NUM_ACTIVE_FINGER_DOFS,
+    BASE_JOINT_NAMES,
+    FINGER_JOINT_NAMES,
+    FINGERTIP_BODY_NAMES,
+    FINGERPAD_BODY_NAMES,
+)
+
 
 class DexHandBase(VecTask):
     """
@@ -133,53 +143,21 @@ class DexHandBase(VecTask):
             1  # Will be auto-detected by PhysicsManager
         )
 
-        # Define model constants for the hand
-        self.NUM_BASE_DOFS = 6  # 3 translation, 3 rotation
-        self.NUM_ACTIVE_FINGER_DOFS = (
-            12  # 12 finger controls mapping to 19 DOFs with coupling
-        )
+        # Define model constants for the hand (imported from constants.py)
+        self.NUM_BASE_DOFS = NUM_BASE_DOFS
+        self.NUM_ACTIVE_FINGER_DOFS = NUM_ACTIVE_FINGER_DOFS
 
-        # Define joint names
-        self.base_joint_names = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"]
-
+        # Define joint names (imported from constants.py)
+        self.base_joint_names = BASE_JOINT_NAMES
+        # Note: FINGER_JOINT_NAMES in constants.py includes all 20 joints (including fixed joint3_1)
+        # but dex_hand_base.py excludes joint3_1, so we need to filter it out
         self.finger_joint_names = [
-            "r_f_joint1_1",
-            "r_f_joint1_2",
-            "r_f_joint1_3",
-            "r_f_joint1_4",
-            "r_f_joint2_1",
-            "r_f_joint2_2",
-            "r_f_joint2_3",
-            "r_f_joint2_4",
-            "r_f_joint3_2",
-            "r_f_joint3_3",
-            "r_f_joint3_4",  # r_f_joint3_1 is fixed
-            "r_f_joint4_1",
-            "r_f_joint4_2",
-            "r_f_joint4_3",
-            "r_f_joint4_4",
-            "r_f_joint5_1",
-            "r_f_joint5_2",
-            "r_f_joint5_3",
-            "r_f_joint5_4",
+            name for name in FINGER_JOINT_NAMES if name != "r_f_joint3_1"
         ]
 
-        # Define fingertip body names
-        self.fingertip_body_names = [
-            "r_f_link1_tip",
-            "r_f_link2_tip",
-            "r_f_link3_tip",
-            "r_f_link4_tip",
-            "r_f_link5_tip",
-        ]
-
-        self.fingerpad_body_names = [
-            "r_f_link1_pad",
-            "r_f_link2_pad",
-            "r_f_link3_pad",
-            "r_f_link4_pad",
-            "r_f_link5_pad",
-        ]
+        # Define fingertip body names (imported from constants.py)
+        self.fingertip_body_names = FINGERTIP_BODY_NAMES
+        self.fingerpad_body_names = FINGERPAD_BODY_NAMES
 
         # Default hand asset file
         self.hand_asset_file = "dexrobot_mujoco/dexrobot_mujoco/models/dexhand021_right_simplified_floating.xml"

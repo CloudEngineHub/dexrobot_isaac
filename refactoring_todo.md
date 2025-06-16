@@ -4,8 +4,8 @@
 
 ### 1. Replace print() with logger ✅
 - [x] `hand_initializer.py`: ~~11~~ 5 print statements converted to logger.debug/error
-- [ ] `observation_encoder.py`: 9 print statements
-- [ ] `tensor_manager.py`: 25+ print statements
+- [x] `observation_encoder.py`: ~~9~~ 9 print statements converted to logger
+- [x] `tensor_manager.py`: ~~25+~~ 49 print statements converted to logger
 - [ ] `reset_manager.py`: 30+ DEBUG print statements
 - [ ] `dex_hand_base.py`: 20+ print statements
 - [ ] `test_coordinate_transforms.py`: Test output (acceptable for tests)

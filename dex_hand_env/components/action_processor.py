@@ -12,6 +12,13 @@ from loguru import logger
 # Import IsaacGym
 from isaacgym import gymtorch
 
+# Import constants
+from dex_hand_env.constants import (
+    NUM_BASE_DOFS,
+    NUM_ACTIVE_FINGER_DOFS,
+    FINGER_COUPLING_MAP,
+)
+
 
 class ActionProcessor:
     """
@@ -55,45 +62,12 @@ class ActionProcessor:
         self.policy_controls_hand_base = True
         self.policy_controls_fingers = True
 
-        # Constants for action dimensions
-        self.NUM_BASE_DOFS = 6
-        self.NUM_ACTIVE_FINGER_DOFS = (
-            12  # 12 finger controls mapping to 19 DOFs with coupling
-        )
+        # Constants for action dimensions (imported from constants.py)
+        self.NUM_BASE_DOFS = NUM_BASE_DOFS
+        self.NUM_ACTIVE_FINGER_DOFS = NUM_ACTIVE_FINGER_DOFS
 
-        # Finger DOF coupling mapping (12 actions -> 19 DOFs)
-        # Actions map to finger DOFs as follows:
-        # 0: r_f_joint1_1 (thumb spread)
-        # 1: r_f_joint1_2 (thumb MCP)
-        # 2: r_f_joint1_3, r_f_joint1_4 (thumb DIP - coupled)
-        # 3: r_f_joint2_1, r_f_joint4_1, r_f_joint5_1 (finger spread - coupled, 5_1 is 2x)
-        # 4: r_f_joint2_2 (index MCP)
-        # 5: r_f_joint2_3, r_f_joint2_4 (index DIP - coupled)
-        # 6: r_f_joint3_2 (middle MCP)
-        # 7: r_f_joint3_3, r_f_joint3_4 (middle DIP - coupled)
-        # 8: r_f_joint4_2 (ring MCP)
-        # 9: r_f_joint4_3, r_f_joint4_4 (ring DIP - coupled)
-        # 10: r_f_joint5_2 (pinky MCP)
-        # 11: r_f_joint5_3, r_f_joint5_4 (pinky DIP - coupled)
-        # Note: r_f_joint3_1 is fixed at 0 (not controlled)
-        self.finger_coupling_map = {
-            0: ["r_f_joint1_1"],  # thumb spread
-            1: ["r_f_joint1_2"],  # thumb MCP
-            2: ["r_f_joint1_3", "r_f_joint1_4"],  # thumb DIP (coupled)
-            3: [
-                ("r_f_joint2_1", 1.0),
-                ("r_f_joint4_1", 1.0),
-                ("r_f_joint5_1", 2.0),
-            ],  # finger spread (5_1 is 2x)
-            4: ["r_f_joint2_2"],  # index MCP
-            5: ["r_f_joint2_3", "r_f_joint2_4"],  # index DIP (coupled)
-            6: ["r_f_joint3_2"],  # middle MCP
-            7: ["r_f_joint3_3", "r_f_joint3_4"],  # middle DIP (coupled)
-            8: ["r_f_joint4_2"],  # ring MCP
-            9: ["r_f_joint4_3", "r_f_joint4_4"],  # ring DIP (coupled)
-            10: ["r_f_joint5_2"],  # pinky MCP
-            11: ["r_f_joint5_3", "r_f_joint5_4"],  # pinky DIP (coupled)
-        }
+        # Finger DOF coupling mapping (imported from constants.py)
+        self.finger_coupling_map = FINGER_COUPLING_MAP
 
         # DOF limits
         self.dof_props = dof_props

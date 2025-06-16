@@ -19,6 +19,9 @@ from isaacgym.torch_utils import quat_mul, quat_conjugate
 # Import utilities
 from dex_hand_env.utils.coordinate_transforms import point_in_hand_frame
 
+# Import constants
+from dex_hand_env.constants import NUM_BASE_DOFS, NUM_ACTIVE_FINGER_DOFS
+
 
 class ObservationEncoder:
     """
@@ -75,11 +78,9 @@ class ObservationEncoder:
                 f"ObservationEncoder initialized with {len(self.dof_names)} DOF names from asset"
             )
 
-        # Constants for observation dimensions
-        self.NUM_BASE_DOFS = 6
-        self.NUM_ACTIVE_FINGER_DOFS = (
-            12  # 12 finger controls mapping to 19 DOFs with coupling
-        )
+        # Constants for observation dimensions (imported from constants.py)
+        self.NUM_BASE_DOFS = NUM_BASE_DOFS
+        self.NUM_ACTIVE_FINGER_DOFS = NUM_ACTIVE_FINGER_DOFS
         self.NUM_FINGERS = 5
 
         # Configuration - will be set during initialize()
