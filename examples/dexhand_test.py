@@ -57,10 +57,10 @@ def setup_logging(level):
     """Configure loguru based on verbosity level."""
     # Remove default handler
     logger.remove()
-    
+
     # Add new handler with appropriate level
     if level == 'debug':
-        logger.add(sys.stderr, level="DEBUG", 
+        logger.add(sys.stderr, level="DEBUG",
                   format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
     elif level == 'info':
         logger.add(sys.stderr, level="INFO",
@@ -316,60 +316,60 @@ def log_observation_data(env, step, cfg, env_idx=0):
         # Plot 7: hand_pose quat w,x,y,z AND Euler angles (both raw and ARR-aligned)
         if "hand_pose" in obs_dict:
             hand_quat = obs_dict["hand_pose"][env_idx, 3:7]
-            
+
             # Debug: log quaternion values at first few steps
             if step < 5:
                 logger.debug(f"Step {step} - hand_quat raw: {hand_quat}")
                 logger.debug(f"  As list: [x={hand_quat[0]:.6f}, y={hand_quat[1]:.6f}, z={hand_quat[2]:.6f}, w={hand_quat[3]:.6f}]")
-            
+
             # Log quaternion components - Isaac Gym format is [x, y, z, w]
             rr.log("Plot_7_hand_quat_euler/quat_x", rr.Scalar(float(hand_quat[0])))
             rr.log("Plot_7_hand_quat_euler/quat_y", rr.Scalar(float(hand_quat[1])))
             rr.log("Plot_7_hand_quat_euler/quat_z", rr.Scalar(float(hand_quat[2])))
             rr.log("Plot_7_hand_quat_euler/quat_w", rr.Scalar(float(hand_quat[3])))
-            
+
             # Convert quaternion to Euler angles and log them
             if SCIPY_AVAILABLE:
                 # Isaac Gym uses [x, y, z, w] format which matches scipy's default
                 quat_numpy = hand_quat.cpu().numpy() if hasattr(hand_quat, 'cpu') else np.array(hand_quat)
                 rotation = Rotation.from_quat(quat_numpy)  # Isaac Gym format matches scipy default [x,y,z,w]
-                
+
                 # Get Euler angles in radians (roll, pitch, yaw)
                 euler_angles = rotation.as_euler('xyz', degrees=False)
-                
+
                 # Debug: print Euler angles at first few steps
                 if step < 5:
                     print(f"  Euler angles (rad): [roll={euler_angles[0]:.6f}, pitch={euler_angles[1]:.6f}, yaw={euler_angles[2]:.6f}]")
                     euler_degrees = rotation.as_euler('xyz', degrees=True)
                     print(f"  Euler angles (deg): [roll={euler_degrees[0]:.2f}°, pitch={euler_degrees[1]:.2f}°, yaw={euler_degrees[2]:.2f}°]")
-                
+
                 rr.log("Plot_7_hand_quat_euler/euler_roll_rad", rr.Scalar(euler_angles[0]))
                 rr.log("Plot_7_hand_quat_euler/euler_pitch_rad", rr.Scalar(euler_angles[1]))
                 rr.log("Plot_7_hand_quat_euler/euler_yaw_rad", rr.Scalar(euler_angles[2]))
-        
+
         # Also check ARR-aligned pose if available
         if "hand_pose_arr_aligned" in obs_dict:
             arr_aligned_quat = obs_dict["hand_pose_arr_aligned"][env_idx, 3:7]
-            
+
             if step < 5:
                 logger.debug(f"  ARR-aligned quat: [x={arr_aligned_quat[0]:.6f}, y={arr_aligned_quat[1]:.6f}, z={arr_aligned_quat[2]:.6f}, w={arr_aligned_quat[3]:.6f}]")
-            
+
             # Log ARR-aligned quaternion
             rr.log("Plot_7_hand_quat_euler/arr_quat_x", rr.Scalar(float(arr_aligned_quat[0])))
             rr.log("Plot_7_hand_quat_euler/arr_quat_y", rr.Scalar(float(arr_aligned_quat[1])))
             rr.log("Plot_7_hand_quat_euler/arr_quat_z", rr.Scalar(float(arr_aligned_quat[2])))
             rr.log("Plot_7_hand_quat_euler/arr_quat_w", rr.Scalar(float(arr_aligned_quat[3])))
-            
+
             if SCIPY_AVAILABLE:
                 arr_quat_numpy = arr_aligned_quat.cpu().numpy() if hasattr(arr_aligned_quat, 'cpu') else np.array(arr_aligned_quat)
                 arr_rotation = Rotation.from_quat(arr_quat_numpy)
                 arr_euler = arr_rotation.as_euler('xyz', degrees=False)
-                
+
                 if step < 5:
                     print(f"  ARR-aligned Euler (rad): [roll={arr_euler[0]:.6f}, pitch={arr_euler[1]:.6f}, yaw={arr_euler[2]:.6f}]")
-                    arr_euler_deg = arr_rotation.as_euler('xyz', degrees=True) 
+                    arr_euler_deg = arr_rotation.as_euler('xyz', degrees=True)
                     print(f"  ARR-aligned Euler (deg): [roll={arr_euler_deg[0]:.2f}°, pitch={arr_euler_deg[1]:.2f}°, yaw={arr_euler_deg[2]:.2f}°]")
-                
+
                 # Log ARR-aligned Euler angles
                 rr.log("Plot_7_hand_quat_euler/arr_euler_roll_rad", rr.Scalar(arr_euler[0]))
                 rr.log("Plot_7_hand_quat_euler/arr_euler_pitch_rad", rr.Scalar(arr_euler[1]))
@@ -407,7 +407,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
         # Plot 11: middle finger fingerpad and fingertip quat in world frame (with Euler)
         tip_quat = mf_tip_world['orientation']
         pad_quat = mf_pad_world['orientation']
-        
+
         # Log quaternions
         rr.log("Plot_11_world_quat/tip_quat_x", rr.Scalar(float(tip_quat[0])))
         rr.log("Plot_11_world_quat/tip_quat_y", rr.Scalar(float(tip_quat[1])))
@@ -417,7 +417,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
         rr.log("Plot_11_world_quat/pad_quat_y", rr.Scalar(float(pad_quat[1])))
         rr.log("Plot_11_world_quat/pad_quat_z", rr.Scalar(float(pad_quat[2])))
         rr.log("Plot_11_world_quat/pad_quat_w", rr.Scalar(float(pad_quat[3])))
-        
+
         # Convert to Euler if scipy available
         if SCIPY_AVAILABLE:
             # Tip Euler angles in radians
@@ -426,7 +426,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
             rr.log("Plot_11_world_quat/tip_euler_roll_rad", rr.Scalar(tip_euler_rad[0]))
             rr.log("Plot_11_world_quat/tip_euler_pitch_rad", rr.Scalar(tip_euler_rad[1]))
             rr.log("Plot_11_world_quat/tip_euler_yaw_rad", rr.Scalar(tip_euler_rad[2]))
-            
+
             # Pad Euler angles in radians
             pad_rotation = Rotation.from_quat(pad_quat)
             pad_euler_rad = pad_rotation.as_euler('xyz', degrees=False)
@@ -447,7 +447,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
         # Plot 13: middle finger fingerpad and fingertip quat in hand frame (with Euler)
         tip_quat_hand = mf_tip_hand['orientation']
         pad_quat_hand = mf_pad_hand['orientation']
-        
+
         # Log quaternions
         rr.log("Plot_13_hand_quat/tip_quat_x", rr.Scalar(float(tip_quat_hand[0])))
         rr.log("Plot_13_hand_quat/tip_quat_y", rr.Scalar(float(tip_quat_hand[1])))
@@ -457,7 +457,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
         rr.log("Plot_13_hand_quat/pad_quat_y", rr.Scalar(float(pad_quat_hand[1])))
         rr.log("Plot_13_hand_quat/pad_quat_z", rr.Scalar(float(pad_quat_hand[2])))
         rr.log("Plot_13_hand_quat/pad_quat_w", rr.Scalar(float(pad_quat_hand[3])))
-        
+
         # Convert to Euler if scipy available
         if SCIPY_AVAILABLE:
             # Tip Euler angles in radians
@@ -466,7 +466,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
             rr.log("Plot_13_hand_quat/tip_euler_roll_rad", rr.Scalar(tip_euler_hand_rad[0]))
             rr.log("Plot_13_hand_quat/tip_euler_pitch_rad", rr.Scalar(tip_euler_hand_rad[1]))
             rr.log("Plot_13_hand_quat/tip_euler_yaw_rad", rr.Scalar(tip_euler_hand_rad[2]))
-            
+
             # Pad Euler angles in radians
             pad_rotation_hand = Rotation.from_quat(pad_quat_hand)
             pad_euler_hand_rad = pad_rotation_hand.as_euler('xyz', degrees=False)
@@ -538,7 +538,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
 
         except Exception as plot15_error:
             logger.error(f"Plot 15 error at step {step}: {plot15_error}")
-        
+
         # Plot 16: Finger Joint Velocity Integration Check
         # Initialize finger integration tracking
         global finger_integrated_pos, finger_initial_pos
@@ -546,34 +546,34 @@ def log_observation_data(env, step, cfg, env_idx=0):
             finger_integrated_pos = 0.0
             finger_initial_pos = None
             logger.debug(f"Initialized finger integration tracking")
-        
+
         try:
             # Test thumb rotation joint (r_f_joint1_1) - a finger rotation joint
             finger_pos = obs_encoder.get_raw_finger_dof("r_f_joint1_1", "pos", obs_dict, env_idx)
             finger_vel = obs_encoder.get_raw_finger_dof("r_f_joint1_1", "vel", obs_dict, env_idx)
-            
+
             # Track initial position
             if finger_initial_pos is None:
                 finger_initial_pos = finger_pos
-            
+
             # Integrate velocity
             if step > 0:
                 finger_integrated_pos += finger_vel * physics_dt
-            
+
             # Calculate actual position change from initial
             actual_finger_change = finger_pos - finger_initial_pos
-            
+
             # Plot actual vs integrated positions for finger joint
             rr.log("Plot_16_finger_integration/actual_r_f_joint1_1_change", rr.Scalar(float(actual_finger_change)))
             rr.log("Plot_16_finger_integration/integrated_r_f_joint1_1_change", rr.Scalar(float(finger_integrated_pos)))
-            
+
             # Plot integration error
             finger_error = actual_finger_change - finger_integrated_pos
             rr.log("Plot_16_finger_integration/error_r_f_joint1_1", rr.Scalar(float(finger_error)))
-            
+
             if step == 1:
                 logger.debug(f"Plot 16 logged successfully at step {step}")
-                
+
         except Exception as plot16_error:
             logger.error(f"Plot 16 error at step {step}: {plot16_error}")
 
@@ -590,12 +590,12 @@ def create_contact_test_box(gym, sim, env_ptr, env_id):
     box_y = 0.0
     box_z = box_size / 2.0  # Half the box height to place bottom on ground
     box_position = gymapi.Vec3(box_x, box_y, box_z)
-    
+
     asset_options = gymapi.AssetOptions()
     asset_options.fix_base_link = True  # Make the box static
     asset_options.thickness = 0.001
     asset_options.density = 1000.0
-    
+
     box_asset = gym.create_box(
         sim,
         box_size,  # width
@@ -603,16 +603,16 @@ def create_contact_test_box(gym, sim, env_ptr, env_id):
         box_size,  # depth
         asset_options
     )
-    
+
     if box_asset is None:
         logger.warning(f"Failed to create box asset for environment {env_id}")
         return
-    
+
     # Create initial pose for the box
     box_pose = gymapi.Transform()
     box_pose.p = box_position
     box_pose.r = gymapi.Quat(0, 0, 0, 1)  # No rotation
-    
+
     # Create the box actor
     box_actor = gym.create_actor(
         env_ptr,
@@ -622,7 +622,7 @@ def create_contact_test_box(gym, sim, env_ptr, env_id):
         env_id,  # collision group
         1   # collision filter (1 = collide with everything)
     )
-    
+
     if box_actor is None:
         logger.warning(f"Failed to create box actor in environment {env_id}")
     else:
@@ -668,7 +668,7 @@ def main():
 
     # Set up logging
     setup_logging(args.log_level)
-    
+
     logger.info("Starting DexHand test script...")
 
     # Initialize plotting if requested
@@ -694,17 +694,17 @@ def main():
 
     # GPU pipeline is now automatically determined from sim_device
     # No need to set it in config
-    
+
     # Monkey patch BaseTask to add contact test box
     logger.info("Monkey patching BaseTask to add contact test box...")
     original_create_task_objects = BaseTask.create_task_objects
-    
+
     def patched_create_task_objects(self, gym, sim, env_ptr, env_id):
         # Call original method first
         original_create_task_objects(self, gym, sim, env_ptr, env_id)
         # Then add our box
         create_contact_test_box(gym, sim, env_ptr, env_id)
-    
+
     BaseTask.create_task_objects = patched_create_task_objects
 
     if args.debug:

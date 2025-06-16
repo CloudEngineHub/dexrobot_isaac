@@ -20,7 +20,7 @@ def create_dex_env(task_name, cfg, rl_device, sim_device, graphics_device_id, he
                    virtual_screen_capture=False, force_render=False):
     """
     Create a DexHand environment with the specified task.
-    
+
     Args:
         task_name: Name of the task to create
         cfg: Configuration dictionary
@@ -30,12 +30,12 @@ def create_dex_env(task_name, cfg, rl_device, sim_device, graphics_device_id, he
         headless: Whether to run headless
         virtual_screen_capture: Whether to enable virtual screen capture
         force_render: Whether to force rendering
-        
+
     Returns:
         A DexHand environment with the specified task
     """
     logger.info(f"Creating DexHand environment with task: {task_name}")
-    
+
     # Create the task component based on the task name
     try:
         if task_name == "DexGrasp":
@@ -51,9 +51,9 @@ def create_dex_env(task_name, cfg, rl_device, sim_device, graphics_device_id, he
             task = BaseTask(None, None, torch.device(rl_device), cfg["env"]["numEnvs"], cfg)
         else:
             raise ValueError(f"Unknown task: {task_name}")
-        
+
         logger.debug("Task created successfully, creating environment...")
-        
+
         # Create the environment with the task component
         env = DexHandBase(
             cfg,
@@ -65,23 +65,23 @@ def create_dex_env(task_name, cfg, rl_device, sim_device, graphics_device_id, he
             virtual_screen_capture,
             force_render
         )
-        
+
         logger.debug("Environment created, updating task with sim and gym instances...")
-        
+
         # Update the task with the sim and gym instances
         if env.sim is None:
             raise ValueError("Environment simulation is None. Initialization failed.")
-            
+
         task.sim = env.sim
         task.gym = env.gym
-        
+
         # Load task assets now that we have the sim instance
         logger.debug("Loading task-specific assets...")
         task.load_task_assets()
         logger.debug("Task assets loaded successfully")
-        
+
         return env
-        
+
     except Exception as e:
         logger.error(f"ERROR in create_dex_env: {e}")
         import traceback

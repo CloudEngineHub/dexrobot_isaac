@@ -111,7 +111,7 @@ class ActionProcessor:
         self.prev_active_targets = None
         self.current_targets = None
         self.actions = None
-        
+
         # Scaling coefficients for unscaling actions (will be computed during setup)
         self.action_scaling_coeffs = None
 
@@ -162,7 +162,7 @@ class ActionProcessor:
                 raise RuntimeError(f"DOF properties format not recognized: {type(dof_props)}. Expected torch.Tensor or dict with 'lower'/'upper' keys. Cannot proceed without valid DOF limits.")
         else:
             raise RuntimeError("DOF properties not provided to ActionProcessor. Cannot proceed without DOF limits.")
-        
+
         # Compute action scaling coefficients for unscaling
         self._compute_action_scaling_coeffs()
 
@@ -184,13 +184,13 @@ class ActionProcessor:
         Set which parts of the hand are controlled by the policy vs rule-based control.
 
         When policy_controls_hand_base=False, the hand base is controlled by rule-based controllers
-        instead of policy actions. The base DOFs can still move, but their motion is 
+        instead of policy actions. The base DOFs can still move, but their motion is
         determined by programmatic rules rather than learned policy.
 
         Args:
             policy_controls_hand_base: Whether the POLICY controls the hand base (6 DOFs)
                                       If False, use rule-based control for base motion
-            policy_controls_fingers: Whether the POLICY controls the finger joints (12 DOFs)  
+            policy_controls_fingers: Whether the POLICY controls the finger joints (12 DOFs)
                                     If False, use rule-based control for finger motion
         """
         if policy_controls_hand_base is not None:
@@ -226,7 +226,7 @@ class ActionProcessor:
 
         These limits are applied per component (each joint/axis independently):
         - finger_vel_limit: Applied to each finger joint individually
-        - base_lin_vel_limit: Applied to each base linear axis (x, y, z) individually  
+        - base_lin_vel_limit: Applied to each base linear axis (x, y, z) individually
         - base_ang_vel_limit: Applied to each base angular axis (rx, ry, rz) individually
 
         Args:
@@ -312,13 +312,13 @@ class ActionProcessor:
 
                     # Scale base actions based on control mode - vectorized operations
                     num_dofs = min(self.NUM_BASE_DOFS, base_actions.shape[1])
-                    
+
                     if self.action_control_mode == "position":
                         # Vectorized position scaling: broadcast operations across all DOFs
                         dof_mins = self.dof_lower_limits[:num_dofs]  # (num_dofs,)
                         dof_maxs = self.dof_upper_limits[:num_dofs]  # (num_dofs,)
                         scaled_base_actions = (base_actions[:, :num_dofs] + 1.0) * 0.5 * (dof_maxs - dof_mins) + dof_mins
-                        
+
                     elif self.action_control_mode == "position_delta":
                         # Create velocity limits tensor for vectorized operation
                         velocity_limits = torch.zeros(num_dofs, device=self.device)
@@ -428,7 +428,7 @@ class ActionProcessor:
                                 if joint_name in dof_name_to_idx:
                                     dof_idx = dof_name_to_idx[joint_name]
 
-                                   
+
                                     # Scale action based on control mode
                                     if self.action_control_mode == "position":
                                         # Position mode: map action from [-1, +1] to [dof_min, dof_max]
@@ -445,7 +445,7 @@ class ActionProcessor:
                                         # where max_pos_delta = control_dt * max_finger_velocity
                                         max_pos_delta = self.control_dt * self.policy_finger_velocity_limit
                                         scaled_delta = raw_action_value * max_pos_delta * scale
-                                        
+
                                         # CRITICAL: Use previous target + delta, NOT current DOF position + delta
                                         # This ensures that targets accumulate properly and stationary errors don't reset targets
                                         if self.current_targets is not None:
@@ -633,14 +633,14 @@ class ActionProcessor:
             total_actions += self.NUM_BASE_DOFS
         if self.policy_controls_fingers:
             total_actions += self.NUM_ACTIVE_FINGER_DOFS
-        
+
         if total_actions == 0:
             self.action_scaling_coeffs = torch.zeros((0,), device=self.device)
             return
-        
+
         self.action_scaling_coeffs = torch.zeros(total_actions, device=self.device)
         action_idx = 0
-        
+
         # Base DOF scaling coefficients
         if self.policy_controls_hand_base:
             for i in range(self.NUM_BASE_DOFS):
@@ -664,7 +664,7 @@ class ActionProcessor:
                         max_delta = self.policy_base_angular_velocity_limit
                     self.action_scaling_coeffs[action_idx] = max_delta
                 action_idx += 1
-        
+
         # Finger DOF scaling coefficients
         if self.policy_controls_fingers:
             for finger_action_idx in range(self.NUM_ACTIVE_FINGER_DOFS):
@@ -682,14 +682,14 @@ class ActionProcessor:
                             raise RuntimeError(f"Invalid joint spec type in finger coupling map for action {finger_action_idx}: {type(first_joint_spec)}")
                             action_idx += 1
                             continue
-                        
+
                         # Find DOF index
                         dof_idx = None
                         for i, name in enumerate(self.dof_names):
                             if name == joint_name:
                                 dof_idx = i
                                 break
-                        
+
                         if dof_idx is not None and self.dof_lower_limits is not None and self.dof_upper_limits is not None:
                             dof_min = self.dof_lower_limits[dof_idx]
                             dof_max = self.dof_upper_limits[dof_idx]
@@ -715,26 +715,26 @@ class ActionProcessor:
     def unscale_actions(self, actions: torch.Tensor) -> torch.Tensor:
         """
         Convert actions from normalized space [-1, +1] to physical units.
-        
+
         This method applies the EXACT same scaling formula used in process_actions()
         to ensure consistency between action processing and unscaling.
-        
+
         Args:
             actions: Normalized actions in range [-1, +1], shape (num_envs, num_actions)
-            
+
         Returns:
             torch.Tensor: Actions in physical units (meters for base translation,
                          radians for base rotation and finger joints)
         """
         if actions is None or actions.numel() == 0:
             return torch.zeros_like(actions) if actions is not None else torch.zeros((self.num_envs, 0), device=self.device)
-        
+
         if self.dof_lower_limits is None or self.dof_upper_limits is None:
             raise RuntimeError("DOF limits not available for action unscaling. Cannot proceed.")
-        
+
         unscaled_actions = torch.zeros_like(actions)
         action_idx = 0
-        
+
         # Base DOF unscaling
         if self.policy_controls_hand_base:
             for i in range(min(self.NUM_BASE_DOFS, actions.shape[1] - action_idx)):
@@ -753,7 +753,7 @@ class ActionProcessor:
                         max_pos_delta = self.control_dt * self.policy_base_ang_velocity_limit
                     unscaled_actions[:, action_idx] = actions[:, action_idx] * max_pos_delta
                 action_idx += 1
-        
+
         # Finger DOF unscaling
         if self.policy_controls_fingers:
             for finger_action_idx in range(min(self.NUM_ACTIVE_FINGER_DOFS, actions.shape[1] - action_idx)):
@@ -761,7 +761,7 @@ class ActionProcessor:
                     # Find the primary DOF for this action to get limits
                     if finger_action_idx not in self.finger_coupling_map:
                         raise RuntimeError(f"Finger action index {finger_action_idx} not found in coupling map")
-                    
+
                     joint_mapping = self.finger_coupling_map[finger_action_idx]
                     first_joint_spec = joint_mapping[0]
                     if isinstance(first_joint_spec, str):
@@ -771,28 +771,28 @@ class ActionProcessor:
                         joint_name, scale = first_joint_spec
                     else:
                         raise RuntimeError(f"Invalid joint spec type: {type(first_joint_spec)}")
-                    
+
                     # Find DOF index for this joint
                     dof_idx = None
                     for i, name in enumerate(self.dof_names):
                         if name == joint_name:
                             dof_idx = i
                             break
-                    
+
                     if dof_idx is None:
                         raise RuntimeError(f"Joint '{joint_name}' not found in DOF names")
-                    
+
                     # Apply exact same scaling as in process_actions
                     dof_min = self.dof_lower_limits[dof_idx]
                     dof_max = self.dof_upper_limits[dof_idx]
                     scaled_action = (actions[:, action_idx] + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
                     unscaled_actions[:, action_idx] = scaled_action * scale
-                    
+
                 elif self.action_control_mode == "position_delta":
                     # Position delta mode: unscaled = action * control_dt * max_finger_velocity * scale
                     if self.control_dt is None:
                         raise RuntimeError("control_dt not set for position_delta mode")
-                    
+
                     if finger_action_idx in self.finger_coupling_map:
                         joint_mapping = self.finger_coupling_map[finger_action_idx]
                         first_joint_spec = joint_mapping[0]
@@ -805,5 +805,5 @@ class ActionProcessor:
                         max_pos_delta = self.control_dt * self.policy_finger_velocity_limit
                     unscaled_actions[:, action_idx] = actions[:, action_idx] * max_pos_delta
                 action_idx += 1
-        
+
         return unscaled_actions

@@ -32,7 +32,7 @@ SCREEN_CAPTURE_RESOLUTION = (1027, 768)
 
 def _create_sim_once(gym, *args, **kwargs):
     global EXISTING_SIM
-    
+
     # Check if GPU pipeline is enabled - always create a new sim for GPU pipeline
     if len(args) >= 4 and isinstance(args[3], gymapi.SimParams):
         sim_params = args[3]
@@ -40,7 +40,7 @@ def _create_sim_once(gym, *args, **kwargs):
             # With GPU pipeline, always create a new simulation
             logger.info("GPU pipeline enabled, creating new simulation instance")
             return gym.create_sim(*args, **kwargs)
-    
+
     # Without GPU pipeline, can reuse existing simulation
     if EXISTING_SIM is not None:
         return EXISTING_SIM
@@ -77,7 +77,7 @@ class Env(ABC):
                 "GPU pipeline is now automatically determined from sim_device. "
                 "Use sim_device='cuda:0' for GPU pipeline or sim_device='cpu' for CPU pipeline."
             )
-        
+
         # Automatically determine GPU pipeline based on sim_device
         # This provides a single source of truth for device configuration
         if self.device_type.lower() == "cuda" or self.device_type.lower() == "gpu":
@@ -90,7 +90,7 @@ class Env(ABC):
             self.use_gpu_pipeline = False
             self.device = "cpu"
             logger.info("Using CPU pipeline with device cpu")
-        
+
         # Set the internal config for compatibility with existing code
         if "sim" not in config:
             config["sim"] = {}
@@ -122,7 +122,7 @@ class Env(ABC):
     def seed(self, seed=None):
         if seed is None:
             return
-        
+
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
@@ -270,7 +270,7 @@ class VecTask(Env):
                         logger.info(f"Auto-calculated max_gpu_contact_pairs: {pairs_per_env} per env * {num_envs} envs = {total_pairs}")
                     else:
                         setattr(sim_params.physx, opt, config_sim["physx"][opt])
-            
+
             # Critical GPU pipeline parameters (as per troubleshooting guide)
             if config_sim["use_gpu_pipeline"]:
                 # These parameters are essential for GPU pipeline stability
@@ -294,10 +294,10 @@ class VecTask(Env):
     def create_sim(self):
         """Create the simulation."""
         self.sim = _create_sim_once(
-            self.gym, 
-            self.sim_device_id, 
-            self.graphics_device_id, 
-            self.physics_engine, 
+            self.gym,
+            self.sim_device_id,
+            self.graphics_device_id,
+            self.physics_engine,
             self.sim_params
         )
         if self.sim is None:
@@ -401,7 +401,7 @@ class VecTask(Env):
         if self.viewer:
             self.gym.destroy_viewer(self.viewer)
             self.viewer = None
-        
+
         if self.sim:
             self.gym.destroy_sim(self.sim)
             self.sim = None
