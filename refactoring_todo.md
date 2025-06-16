@@ -7,7 +7,7 @@
 - [x] `observation_encoder.py`: ~~9~~ 9 print statements converted to logger
 - [x] `tensor_manager.py`: ~~25+~~ 49 print statements converted to logger
 - [x] `reset_manager.py`: ~~30+~~ 37 print statements cleaned up
-- [ ] `dex_hand_base.py`: 20+ print statements
+- [x] `dex_hand_base.py`: ~~20+~~ 42 print statements converted to logger
 - [ ] `test_coordinate_transforms.py`: Test output (acceptable for tests)
 
 ### 2. Fix single source of truth violations
