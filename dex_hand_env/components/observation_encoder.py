@@ -8,6 +8,7 @@ including proprioceptive states, sensor readings, and task-specific observations
 # Import standard libraries
 import torch
 from typing import Dict, List, Tuple
+from loguru import logger
 
 # Import gym for spaces
 import gym
@@ -70,7 +71,7 @@ class ObservationEncoder:
         self.dof_names = []
         if hand_asset is not None:
             self.dof_names = self.gym.get_asset_dof_names(hand_asset)
-            print(
+            logger.info(
                 f"ObservationEncoder initialized with {len(self.dof_names)} DOF names from asset"
             )
 
@@ -175,8 +176,8 @@ class ObservationEncoder:
         test_task_obs_dict = self._compute_task_observations(test_obs_dict)
         merged_obs_dict = {**test_obs_dict, **test_task_obs_dict}
 
-        # Print dimensions of each observation component
-        print("Observation component dimensions:")
+        # Log dimensions of each observation component
+        logger.debug("Observation component dimensions:")
         total_dim = 0
         for key in self.observation_keys:
             if key in merged_obs_dict:
@@ -185,15 +186,15 @@ class ObservationEncoder:
                     tensor = tensor.reshape(self.num_envs, -1)
                 dim = tensor.shape[1]
                 total_dim += dim
-                print(f"  {key}: {dim}")
+                logger.debug(f"  {key}: {dim}")
             else:
-                print(f"  {key}: MISSING")
+                logger.warning(f"  {key}: MISSING")
 
         test_obs_tensor = self._concat_selected_observations(merged_obs_dict)
 
         self.num_observations = test_obs_tensor.shape[1]
-        print(f"Total observation dimension: {total_dim}")
-        print(
+        logger.debug(f"Total observation dimension: {total_dim}")
+        logger.info(
             f"ObservationEncoder initialized with dynamic observation dimension: {self.num_observations}"
         )
 
@@ -234,7 +235,7 @@ class ObservationEncoder:
             control_dt: Control timestep in seconds
         """
         self.control_dt = control_dt
-        print(
+        logger.info(
             f"ObservationEncoder: Manual velocity computation enabled with dt={control_dt}"
         )
 
@@ -360,7 +361,7 @@ class ObservationEncoder:
                 for i, dof_name in enumerate(self.dof_names[self.NUM_BASE_DOFS :]):
                     if dof_name == primary_joint:
                         active_indices[control_idx] = i + self.NUM_BASE_DOFS
-                        print(
+                        logger.debug(
                             f"Mapped control '{control_name}' -> primary joint '{primary_joint}' -> DOF index {i + self.NUM_BASE_DOFS}"
                         )
                         break
@@ -396,8 +397,8 @@ class ObservationEncoder:
 
         # Safety check
         if dof_pos is None or isaac_dof_vel is None or actor_root_state_tensor is None:
-            print(
-                "Warning: Tensor handles not initialized. Cannot compute observations."
+            logger.warning(
+                "Tensor handles not initialized. Cannot compute observations."
             )
             return obs_dict
 
@@ -570,8 +571,8 @@ class ObservationEncoder:
 
                 obs_tensors.append(tensor)
             else:
-                print(
-                    f"Warning: Observation key '{key}' not found in observation dictionary"
+                logger.warning(
+                    f"Observation key '{key}' not found in observation dictionary"
                 )
 
         if obs_tensors:

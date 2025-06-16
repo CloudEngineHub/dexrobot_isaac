@@ -8,10 +8,10 @@ including tensor acquisition, setup, and synchronization.
 # Import standard libraries
 import torch
 import numpy as np
-from typing import Dict, List, Tuple, Union, Optional
+from loguru import logger
 
 # Import IsaacGym
-from isaacgym import gymapi, gymtorch
+from isaacgym import gymtorch
 
 
 class TensorManager:
@@ -79,44 +79,58 @@ class TensorManager:
         # Reset flags
         self.tensors_initialized = False
 
-        print("Acquiring tensor handles from simulation...")
+        logger.info("Acquiring tensor handles from simulation...")
 
         # NOTE: We don't need to step simulation here when using GPU pipeline
         # The simulation has already been prepared by gym.prepare_sim()
 
         # Get handle for DOF states
-        print("Acquiring DOF state tensor handle...")
+        logger.debug("Acquiring DOF state tensor handle...")
         self._dof_state_tensor_handle = self.gym.acquire_dof_state_tensor(self.sim)
         if self._dof_state_tensor_handle is None:
-            raise RuntimeError("Failed to acquire DOF state tensor handle. Cannot continue.")
-        print("Successfully acquired DOF state tensor handle")
+            raise RuntimeError(
+                "Failed to acquire DOF state tensor handle. Cannot continue."
+            )
+        logger.debug("Successfully acquired DOF state tensor handle")
 
         # Get handle for rigid body states
-        print("Acquiring rigid body state tensor handle...")
-        self._rigid_body_state_tensor_handle = self.gym.acquire_rigid_body_state_tensor(self.sim)
+        logger.debug("Acquiring rigid body state tensor handle...")
+        self._rigid_body_state_tensor_handle = self.gym.acquire_rigid_body_state_tensor(
+            self.sim
+        )
         if self._rigid_body_state_tensor_handle is None:
-            raise RuntimeError("Failed to acquire rigid body state tensor handle. Cannot continue.")
-        print("Successfully acquired rigid body state tensor handle")
+            raise RuntimeError(
+                "Failed to acquire rigid body state tensor handle. Cannot continue."
+            )
+        logger.debug("Successfully acquired rigid body state tensor handle")
 
         # Get handle for contact forces
-        print("Acquiring contact force tensor handle...")
-        self._contact_force_tensor_handle = self.gym.acquire_net_contact_force_tensor(self.sim)
+        logger.debug("Acquiring contact force tensor handle...")
+        self._contact_force_tensor_handle = self.gym.acquire_net_contact_force_tensor(
+            self.sim
+        )
         if self._contact_force_tensor_handle is None:
-            raise RuntimeError("Failed to acquire contact force tensor handle. Cannot continue.")
-        print("Successfully acquired contact force tensor handle")
+            raise RuntimeError(
+                "Failed to acquire contact force tensor handle. Cannot continue."
+            )
+        logger.debug("Successfully acquired contact force tensor handle")
 
         # Get handle for actor root state
-        print("Acquiring actor root state tensor handle...")
-        self._actor_root_state_tensor_handle = self.gym.acquire_actor_root_state_tensor(self.sim)
+        logger.debug("Acquiring actor root state tensor handle...")
+        self._actor_root_state_tensor_handle = self.gym.acquire_actor_root_state_tensor(
+            self.sim
+        )
         if self._actor_root_state_tensor_handle is None:
-            raise RuntimeError("Failed to acquire actor root state tensor handle. Cannot continue.")
-        print("Successfully acquired actor root state tensor handle")
+            raise RuntimeError(
+                "Failed to acquire actor root state tensor handle. Cannot continue."
+            )
+        logger.debug("Successfully acquired actor root state tensor handle")
 
         return {
             "dof_state": self._dof_state_tensor_handle,
             "rigid_body_state": self._rigid_body_state_tensor_handle,
             "contact_force": self._contact_force_tensor_handle,
-            "actor_root_state": self._actor_root_state_tensor_handle
+            "actor_root_state": self._actor_root_state_tensor_handle,
         }
 
     def setup_tensors(self, fingertip_indices=None):
@@ -132,32 +146,42 @@ class TensorManager:
         Raises:
             RuntimeError: If any tensor setup fails
         """
-        print("Setting up tensors from handles...")
+        logger.info("Setting up tensors from handles...")
 
         # Verify tensor handles exist
         if self._dof_state_tensor_handle is None:
-            raise RuntimeError("DOF state tensor handle is None. Cannot set up tensors.")
+            raise RuntimeError(
+                "DOF state tensor handle is None. Cannot set up tensors."
+            )
 
         if self._rigid_body_state_tensor_handle is None:
-            raise RuntimeError("Rigid body state tensor handle is None. Cannot set up tensors.")
+            raise RuntimeError(
+                "Rigid body state tensor handle is None. Cannot set up tensors."
+            )
 
         if self._contact_force_tensor_handle is None:
-            raise RuntimeError("Contact force tensor handle is None. Cannot set up tensors.")
+            raise RuntimeError(
+                "Contact force tensor handle is None. Cannot set up tensors."
+            )
 
         # Wrap DOF state tensor
-        print("Wrapping DOF state tensor...")
+        logger.debug("Wrapping DOF state tensor...")
         try:
             self.dof_state = gymtorch.wrap_tensor(self._dof_state_tensor_handle)
-            print(f"DOF state tensor handle type: {type(self._dof_state_tensor_handle)}")
+            logger.debug(
+                f"DOF state tensor handle type: {type(self._dof_state_tensor_handle)}"
+            )
 
             if self.dof_state is None:
                 raise RuntimeError("DOF state tensor is None after wrapping")
 
             # This line is causing the error if the tensor exists but is empty
             # Let's check what's actually in the tensor before assuming it's empty
-            print(f"DOF state tensor type: {type(self.dof_state)}")
-            print(f"DOF state tensor device: {self.dof_state.device}")
-            print(f"DOF state tensor shape exists: {'shape' in dir(self.dof_state)}")
+            logger.debug(f"DOF state tensor type: {type(self.dof_state)}")
+            logger.debug(f"DOF state tensor device: {self.dof_state.device}")
+            logger.debug(
+                f"DOF state tensor shape exists: {'shape' in dir(self.dof_state)}"
+            )
 
             # Verify device matches expectation
             actual_device = self.dof_state.device
@@ -169,27 +193,33 @@ class TensorManager:
                 )
 
             # Check if the tensor has elements before accessing shape
-            if hasattr(self.dof_state, 'numel') and self.dof_state.numel() == 0:
-                raise RuntimeError("DOF state tensor is empty (zero elements) after wrapping")
+            if hasattr(self.dof_state, "numel") and self.dof_state.numel() == 0:
+                raise RuntimeError(
+                    "DOF state tensor is empty (zero elements) after wrapping"
+                )
 
         except Exception as e:
-            print(f"Error while wrapping DOF state tensor: {e}")
-            print(f"DOF state tensor handle: {self._dof_state_tensor_handle}")
+            logger.error(f"Error while wrapping DOF state tensor: {e}")
+            logger.error(f"DOF state tensor handle: {self._dof_state_tensor_handle}")
             raise RuntimeError(f"Failed to wrap DOF state tensor: {e}")
 
-        print(f"DOF state tensor shape: {self.dof_state.shape}")
+        logger.debug(f"DOF state tensor shape: {self.dof_state.shape}")
 
         # Get number of DOFs per environment
         # DOF state is shaped (num_envs * num_dofs_per_env, 2)
         # where 2 is (position, velocity)
         # We need to reshape to (num_envs, num_dofs_per_env, 2)
         if self.dof_state.shape[0] % self.num_envs != 0:
-            raise RuntimeError(f"DOF state tensor shape {self.dof_state.shape[0]} is not divisible by num_envs {self.num_envs}")
+            raise RuntimeError(
+                f"DOF state tensor shape {self.dof_state.shape[0]} is not divisible by num_envs {self.num_envs}"
+            )
 
         dofs_per_env = self.dof_state.shape[0] // self.num_envs
         self.num_dof = dofs_per_env
 
-        print(f"Total DOFs: {self.dof_state.shape[0]}, Environments: {self.num_envs}, DOFs per env: {self.num_dof}")
+        logger.info(
+            f"Total DOFs: {self.dof_state.shape[0]}, Environments: {self.num_envs}, DOFs per env: {self.num_dof}"
+        )
 
         # Reshape DOF state to (num_envs, num_dofs_per_env, 2)
         reshaped_dof_state = self.dof_state.view(self.num_envs, self.num_dof, 2)
@@ -198,15 +228,15 @@ class TensorManager:
         self.dof_pos = reshaped_dof_state[..., 0]
         self.dof_vel = reshaped_dof_state[..., 1]
 
-        print(f"DOF position tensor shape: {self.dof_pos.shape}")
-        print(f"DOF velocity tensor shape: {self.dof_vel.shape}")
+        logger.debug(f"DOF position tensor shape: {self.dof_pos.shape}")
+        logger.debug(f"DOF velocity tensor shape: {self.dof_vel.shape}")
 
         # Get DOF properties
-        print("Getting DOF properties...")
+        logger.debug("Getting DOF properties...")
 
         # Check if we have DOF properties from the asset
         if self.dof_props_from_asset is not None:
-            print("Using DOF properties from asset")
+            logger.debug("Using DOF properties from asset")
             self.dof_props = self.dof_props_from_asset
         else:
             # Following the pattern from reference implementations, create a default DOF properties tensor
@@ -214,63 +244,88 @@ class TensorManager:
             # We'll create this directly without trying to use acquire_dof_attribute_tensor
             # which is not available in all Isaac Gym versions
 
-            print("Creating default DOF properties tensor")
+            logger.debug("Creating default DOF properties tensor")
             # Create properties tensor based on the dof_state shape
             self.dof_props = torch.zeros((self.num_dof, 6), device=self.device)
             # Set reasonable defaults
             self.dof_props[:, 0] = 100.0  # stiffness
-            self.dof_props[:, 1] = 5.0    # damping
-            self.dof_props[:, 4] = -1.0   # min
-            self.dof_props[:, 5] = 1.0    # max
+            self.dof_props[:, 1] = 5.0  # damping
+            self.dof_props[:, 4] = -1.0  # min
+            self.dof_props[:, 5] = 1.0  # max
 
-        print(f"DOF properties tensor shape: {self.dof_props.shape}")
+        logger.debug(f"DOF properties tensor shape: {self.dof_props.shape}")
 
         # Wrap rigid body state tensor
-        print("Wrapping rigid body state tensor...")
-        rigid_body_states_flat = gymtorch.wrap_tensor(self._rigid_body_state_tensor_handle)
+        logger.debug("Wrapping rigid body state tensor...")
+        rigid_body_states_flat = gymtorch.wrap_tensor(
+            self._rigid_body_state_tensor_handle
+        )
 
         if rigid_body_states_flat is None or rigid_body_states_flat.numel() == 0:
-            raise RuntimeError("Rigid body state tensor is empty or None after wrapping")
+            raise RuntimeError(
+                "Rigid body state tensor is empty or None after wrapping"
+            )
 
-        print(f"Rigid body states flat tensor shape: {rigid_body_states_flat.shape}")
+        logger.debug(
+            f"Rigid body states flat tensor shape: {rigid_body_states_flat.shape}"
+        )
 
         # Reshape rigid body states to (num_envs, num_bodies_per_env, 13)
         if rigid_body_states_flat.shape[0] % self.num_envs != 0:
-            raise RuntimeError(f"Rigid body tensor shape {rigid_body_states_flat.shape[0]} is not divisible by num_envs {self.num_envs}")
+            raise RuntimeError(
+                f"Rigid body tensor shape {rigid_body_states_flat.shape[0]} is not divisible by num_envs {self.num_envs}"
+            )
 
         num_bodies_per_env = rigid_body_states_flat.shape[0] // self.num_envs
-        self.rigid_body_states = rigid_body_states_flat.view(self.num_envs, num_bodies_per_env, 13)
-        print(f"Rigid body states tensor reshaped to: {self.rigid_body_states.shape}")
+        self.rigid_body_states = rigid_body_states_flat.view(
+            self.num_envs, num_bodies_per_env, 13
+        )
+        logger.debug(
+            f"Rigid body states tensor reshaped to: {self.rigid_body_states.shape}"
+        )
 
         # Wrap actor root state tensor (correct Isaac Gym API)
-        print("Wrapping actor root state tensor...")
-        self.actor_root_state_tensor = gymtorch.wrap_tensor(self._actor_root_state_tensor_handle)
+        logger.debug("Wrapping actor root state tensor...")
+        self.actor_root_state_tensor = gymtorch.wrap_tensor(
+            self._actor_root_state_tensor_handle
+        )
 
-        if self.actor_root_state_tensor is None or self.actor_root_state_tensor.numel() == 0:
-            raise RuntimeError("Actor root state tensor is empty or None after wrapping")
+        if (
+            self.actor_root_state_tensor is None
+            or self.actor_root_state_tensor.numel() == 0
+        ):
+            raise RuntimeError(
+                "Actor root state tensor is empty or None after wrapping"
+            )
 
-        print(f"Actor root state tensor shape: {self.actor_root_state_tensor.shape}")
+        logger.debug(
+            f"Actor root state tensor shape: {self.actor_root_state_tensor.shape}"
+        )
 
         # Wrap contact force tensor
-        print("Wrapping contact force tensor...")
+        logger.debug("Wrapping contact force tensor...")
         contact_forces_flat = gymtorch.wrap_tensor(self._contact_force_tensor_handle)
 
         if contact_forces_flat is None or contact_forces_flat.numel() == 0:
             raise RuntimeError("Contact force tensor is empty or None after wrapping")
 
-        print(f"Contact forces flat tensor shape: {contact_forces_flat.shape}")
+        logger.debug(f"Contact forces flat tensor shape: {contact_forces_flat.shape}")
 
         # Reshape contact forces for fingertips
         if fingertip_indices is None or len(fingertip_indices) == 0:
-            raise RuntimeError("No fingertip indices provided. Cannot set up contact forces.")
+            raise RuntimeError(
+                "No fingertip indices provided. Cannot set up contact forces."
+            )
 
         # Number of fingers
         num_fingers = len(fingertip_indices[0])
-        print(f"Number of fingers: {num_fingers}")
+        logger.debug(f"Number of fingers: {num_fingers}")
 
         # Create tensor for contact forces
-        self.contact_forces = torch.zeros((self.num_envs, num_fingers, 3), device=self.device)
-        print(f"Contact forces tensor shape: {self.contact_forces.shape}")
+        self.contact_forces = torch.zeros(
+            (self.num_envs, num_fingers, 3), device=self.device
+        )
+        logger.debug(f"Contact forces tensor shape: {self.contact_forces.shape}")
 
         # Copy contact forces for each fingertip
         for i in range(self.num_envs):
@@ -285,7 +340,7 @@ class TensorManager:
 
         # Mark tensors as initialized
         self.tensors_initialized = True
-        print("Tensors initialized successfully")
+        logger.info("Tensors initialized successfully")
 
         return {
             "dof_state": self.dof_state,
@@ -295,7 +350,7 @@ class TensorManager:
             "num_dof": self.num_dof,
             "dof_props": self.dof_props,
             "rigid_body_states": self.rigid_body_states,
-            "contact_forces": self.contact_forces
+            "contact_forces": self.contact_forces,
         }
 
     def refresh_tensors(self, fingertip_indices=None):
@@ -322,7 +377,9 @@ class TensorManager:
 
             expected_size = self.num_envs * self.num_dof * 2
             if self.dof_state.numel() != expected_size:
-                raise RuntimeError(f"DOF state tensor size mismatch. Expected {expected_size} elements, got {self.dof_state.numel()}")
+                raise RuntimeError(
+                    f"DOF state tensor size mismatch. Expected {expected_size} elements, got {self.dof_state.numel()}"
+                )
 
             # Reshape to [num_envs, num_dof, 2] and extract position and velocity
             self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
@@ -330,11 +387,17 @@ class TensorManager:
 
             # Refresh contact forces
             if fingertip_indices is None or len(fingertip_indices) == 0:
-                raise RuntimeError("No fingertip indices provided. Cannot refresh contact forces.")
+                raise RuntimeError(
+                    "No fingertip indices provided. Cannot refresh contact forces."
+                )
 
-            contact_forces_flat = gymtorch.wrap_tensor(self._contact_force_tensor_handle)
+            contact_forces_flat = gymtorch.wrap_tensor(
+                self._contact_force_tensor_handle
+            )
             if contact_forces_flat is None or contact_forces_flat.numel() == 0:
-                raise RuntimeError("Contact force tensor is empty or None during refresh")
+                raise RuntimeError(
+                    "Contact force tensor is empty or None during refresh"
+                )
 
             # Number of fingers
             num_fingers = len(fingertip_indices[0])
@@ -346,13 +409,17 @@ class TensorManager:
 
                 for j in range(num_fingers):
                     if j >= len(fingertip_indices[i]):
-                        raise RuntimeError(f"Fingertip index {j} missing for environment {i}")
+                        raise RuntimeError(
+                            f"Fingertip index {j} missing for environment {i}"
+                        )
 
                     # Get the rigid body index for this fingertip
                     finger_idx = fingertip_indices[i][j]
 
                     if finger_idx >= contact_forces_flat.shape[0]:
-                        raise RuntimeError(f"Fingertip index {finger_idx} exceeds contact forces size {contact_forces_flat.shape[0]}")
+                        raise RuntimeError(
+                            f"Fingertip index {finger_idx} exceeds contact forces size {contact_forces_flat.shape[0]}"
+                        )
 
                     # Copy contact force (x, y, z)
                     self.contact_forces[i, j, :] = contact_forces_flat[finger_idx]
@@ -361,11 +428,12 @@ class TensorManager:
                 "dof_pos": self.dof_pos,
                 "dof_vel": self.dof_vel,
                 "actor_root_state_tensor": self.actor_root_state_tensor,
-                "contact_forces": self.contact_forces
+                "contact_forces": self.contact_forces,
             }
         except Exception as e:
-            print(f"CRITICAL ERROR in refresh_tensors: {e}")
+            logger.critical(f"CRITICAL ERROR in refresh_tensors: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
@@ -419,78 +487,113 @@ class TensorManager:
 
                 # Map dictionary keys to tensor columns
                 if "stiffness" in dof_props:
-                    props_tensor[:, 0] = torch.tensor(dof_props["stiffness"], device=self.device)
+                    props_tensor[:, 0] = torch.tensor(
+                        dof_props["stiffness"], device=self.device
+                    )
                 if "damping" in dof_props:
-                    props_tensor[:, 1] = torch.tensor(dof_props["damping"], device=self.device)
+                    props_tensor[:, 1] = torch.tensor(
+                        dof_props["damping"], device=self.device
+                    )
                 if "friction" in dof_props:
-                    props_tensor[:, 2] = torch.tensor(dof_props["friction"], device=self.device)
+                    props_tensor[:, 2] = torch.tensor(
+                        dof_props["friction"], device=self.device
+                    )
                 if "armature" in dof_props:
-                    props_tensor[:, 3] = torch.tensor(dof_props["armature"], device=self.device)
+                    props_tensor[:, 3] = torch.tensor(
+                        dof_props["armature"], device=self.device
+                    )
                 if "lower" in dof_props:
-                    props_tensor[:, 4] = torch.tensor(dof_props["lower"], device=self.device)
+                    props_tensor[:, 4] = torch.tensor(
+                        dof_props["lower"], device=self.device
+                    )
                 if "upper" in dof_props:
-                    props_tensor[:, 5] = torch.tensor(dof_props["upper"], device=self.device)
+                    props_tensor[:, 5] = torch.tensor(
+                        dof_props["upper"], device=self.device
+                    )
 
                 self.dof_props_from_asset = props_tensor
             elif isinstance(dof_props, np.ndarray):
                 # Handle structured arrays from Isaac Gym's get_asset_dof_properties or get_actor_dof_properties
                 if dof_props.dtype.names is not None:
                     # Structured array - extract relevant fields
-                    print(f"Processing structured array with fields: {dof_props.dtype.names}")
+                    logger.debug(
+                        f"Processing structured array with fields: {dof_props.dtype.names}"
+                    )
                     num_dof = len(dof_props)
                     props_tensor = torch.zeros((num_dof, 6), device=self.device)
 
                     # Map field names to tensor columns
                     field_mapping = {
-                        'stiffness': 0,
-                        'damping': 1,
-                        'friction': 2,
-                        'armature': 3,
-                        'lower': 4,
-                        'upper': 5
+                        "stiffness": 0,
+                        "damping": 1,
+                        "friction": 2,
+                        "armature": 3,
+                        "lower": 4,
+                        "upper": 5,
                     }
 
                     # Extract fields that exist in the array
-                    print(f"Extracting DOF properties fields:")
+                    logger.debug("Extracting DOF properties fields:")
                     for field_name, col_idx in field_mapping.items():
                         if field_name in dof_props.dtype.names:
                             try:
                                 field_data = dof_props[field_name]
                                 # Convert to tensor safely
-                                field_tensor = torch.tensor(field_data.astype(np.float32), device=self.device)
+                                field_tensor = torch.tensor(
+                                    field_data.astype(np.float32), device=self.device
+                                )
                                 props_tensor[:, col_idx] = field_tensor
-                                print(f"  {field_name}: min={field_tensor.min():.3f}, max={field_tensor.max():.3f}")
+                                logger.debug(
+                                    f"  {field_name}: min={field_tensor.min():.3f}, max={field_tensor.max():.3f}"
+                                )
 
                                 # Debug: Print limits for base joints
-                                if field_name in ['lower', 'upper']:
-                                    print(f"    First 6 DOFs ({field_name}):")
+                                if field_name in ["lower", "upper"]:
+                                    logger.debug(f"    First 6 DOFs ({field_name}):")
                                     for i in range(min(6, len(field_data))):
-                                        print(f"      DOF {i}: {field_data[i]:.6f}")
+                                        logger.debug(
+                                            f"      DOF {i}: {field_data[i]:.6f}"
+                                        )
                             except Exception as e:
-                                print(f"Error converting field {field_name}: {e}")
+                                logger.error(
+                                    f"Error converting field {field_name}: {e}"
+                                )
                         else:
-                            print(f"  {field_name}: MISSING from structured array")
+                            logger.warning(
+                                f"  {field_name}: MISSING from structured array"
+                            )
 
                     # Also check hasLimits field to debug why limits are 0
-                    if 'hasLimits' in dof_props.dtype.names:
-                        has_limits = dof_props['hasLimits']
-                        print(f"  hasLimits field: {has_limits} (shape: {has_limits.shape})")
-                        print(f"  Number of joints with hasLimits=True: {np.sum(has_limits)}")
-                        print(f"  Joints without limits: {np.where(~has_limits)[0]}")
+                    if "hasLimits" in dof_props.dtype.names:
+                        has_limits = dof_props["hasLimits"]
+                        logger.debug(
+                            f"  hasLimits field: {has_limits} (shape: {has_limits.shape})"
+                        )
+                        logger.debug(
+                            f"  Number of joints with hasLimits=True: {np.sum(has_limits)}"
+                        )
+                        logger.debug(
+                            f"  Joints without limits: {np.where(~has_limits)[0]}"
+                        )
 
                     self.dof_props_from_asset = props_tensor
                 else:
                     # Regular numpy array - convert directly
-                    self.dof_props_from_asset = torch.tensor(dof_props, device=self.device)
+                    self.dof_props_from_asset = torch.tensor(
+                        dof_props, device=self.device
+                    )
             elif isinstance(dof_props, torch.Tensor):
                 # Already a tensor, just move to device if needed
                 self.dof_props_from_asset = self.to_device(dof_props)
             else:
-                print(f"Unsupported DOF properties type: {type(dof_props)}")
+                logger.error(f"Unsupported DOF properties type: {type(dof_props)}")
                 return
 
-            print(f"DOF properties set from external source with shape: {self.dof_props_from_asset.shape}")
+            logger.info(
+                f"DOF properties set from external source with shape: {self.dof_props_from_asset.shape}"
+            )
         except Exception as e:
-            print(f"Error setting DOF properties: {e}")
+            logger.error(f"Error setting DOF properties: {e}")
             import traceback
+
             traceback.print_exc()
