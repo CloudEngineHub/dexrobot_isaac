@@ -7,10 +7,9 @@ including environment resets, randomization, and initialization.
 
 # Import standard libraries
 import torch
-import numpy as np
+from loguru import logger
 
 # Import IsaacGym
-from isaacgym import gymapi, gymtorch
 
 
 class ResetManager:
@@ -70,9 +69,15 @@ class ResetManager:
         """
         self.max_episode_length = max_episode_length
 
-    def set_randomization(self, randomize_positions=False, randomize_orientations=False,
-                        randomize_dofs=False, position_range=None, orientation_range=None,
-                        dof_range=None):
+    def set_randomization(
+        self,
+        randomize_positions=False,
+        randomize_orientations=False,
+        randomize_dofs=False,
+        position_range=None,
+        orientation_range=None,
+        dof_range=None,
+    ):
         """
         Configure randomization settings for resets.
 
@@ -158,9 +163,7 @@ class ResetManager:
             condition = self.progress_buf >= self.max_episode_length - 1
 
             self.reset_buf = torch.where(
-                condition,
-                torch.ones_like(self.reset_buf),
-                self.reset_buf
+                condition, torch.ones_like(self.reset_buf), self.reset_buf
             )
 
             # Apply task-specific reset conditions if provided
@@ -172,8 +175,9 @@ class ResetManager:
 
             return self.reset_buf
         except Exception as e:
-            print(f"CRITICAL ERROR in reset_manager.check_termination: {e}")
+            logger.critical(f"CRITICAL ERROR in reset_manager.check_termination: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
@@ -193,13 +197,21 @@ class ResetManager:
             self.progress_buf += 1
             return self.progress_buf
         except Exception as e:
-            print(f"ERROR in increment_progress: {e}")
+            logger.error(f"ERROR in increment_progress: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
-    def reset_idx(self, env_ids, physics_manager=None, dof_state=None, root_state_tensor=None,
-                hand_indices=None, task_reset_func=None):
+    def reset_idx(
+        self,
+        env_ids,
+        physics_manager=None,
+        dof_state=None,
+        root_state_tensor=None,
+        hand_indices=None,
+        task_reset_func=None,
+    ):
         """
         Reset specified environments.
 
@@ -215,42 +227,47 @@ class ResetManager:
             Boolean indicating success
         """
         try:
-            print(f"DEBUG: reset_manager.reset_idx - Start with env_ids: {env_ids}")
+            # Removed excessive DEBUG logging - env_ids already validated
             if len(env_ids) == 0:
-                print("DEBUG: reset_manager.reset_idx - No environments to reset")
+                # No environments to reset
                 return True
 
             # Validate inputs
             if dof_state is None or root_state_tensor is None:
-                print("ERROR: dof_state and root_state_tensor must be provided")
+                logger.error("ERROR: dof_state and root_state_tensor must be provided")
                 return False
 
-            print(f"DEBUG: reset_manager.reset_idx - DOF state shape: {dof_state.shape}, device: {dof_state.device}")
-            print(f"DEBUG: reset_manager.reset_idx - Root state tensor shape: {root_state_tensor.shape}, device: {root_state_tensor.device}")
-            print(f"DEBUG: reset_manager.reset_idx - Hand indices: {hand_indices}")
-            print(f"DEBUG: reset_manager.reset_idx - Progress buffer: {self.progress_buf}")
+            # Removed excessive DEBUG logging - tensor shapes and devices
 
             # Reset progress buffer for reset environments
-            print("DEBUG: reset_manager.reset_idx - Resetting progress buffer")
+            # Reset progress buffer
             self.progress_buf[env_ids] = 0
-            print(f"DEBUG: reset_manager.reset_idx - Progress buffer after reset: {self.progress_buf}")
+            # Progress buffer reset
 
             # Reset DOF states
             if self.default_dof_pos is not None:
-                print("DEBUG: reset_manager.reset_idx - Resetting DOF states")
+                # Reset DOF states
                 # Use default DOF positions
                 dof_pos = self.default_dof_pos.clone()
-                print(f"DEBUG: reset_manager.reset_idx - Default DOF pos shape: {dof_pos.shape}, device: {dof_pos.device}")
+                # Default DOF positions initialized
 
                 # Apply randomization if enabled
-                if self.randomize_dof_positions and self.dof_position_randomization_range > 0:
+                if (
+                    self.randomize_dof_positions
+                    and self.dof_position_randomization_range > 0
+                ):
                     print("DEBUG: reset_manager.reset_idx - Applying DOF randomization")
-                    dof_pos = dof_pos + torch.rand(
-                        dof_pos.shape, device=self.device
-                    ) * self.dof_position_randomization_range - self.dof_position_randomization_range/2
+                    dof_pos = (
+                        dof_pos
+                        + torch.rand(dof_pos.shape, device=self.device)
+                        * self.dof_position_randomization_range
+                        - self.dof_position_randomization_range / 2
+                    )
 
                 # Set DOF positions for reset environments
-                print(f"DEBUG: reset_manager.reset_idx - Setting DOF positions for env_ids: {env_ids}")
+                print(
+                    f"DEBUG: reset_manager.reset_idx - Setting DOF positions for env_ids: {env_ids}"
+                )
                 dof_state[env_ids, :, 0] = dof_pos
 
                 # Zero DOF velocities
@@ -259,60 +276,83 @@ class ResetManager:
                 print("DEBUG: reset_manager.reset_idx - DOF states reset")
 
             # Reset hand pose in root state tensor
-            print("DEBUG: reset_manager.reset_idx - Resetting hand pose")
+            # Reset hand pose
             if hand_indices is not None and len(hand_indices) > 0:
-                print(f"DEBUG: reset_manager.reset_idx - Hand indices: {hand_indices}")
+                # Process hand indices
                 # Validate input parameters
                 if len(hand_indices) != self.num_envs:
-                    raise RuntimeError(f"hand_indices length {len(hand_indices)} doesn't match num_envs {self.num_envs}")
+                    raise RuntimeError(
+                        f"hand_indices length {len(hand_indices)} doesn't match num_envs {self.num_envs}"
+                    )
 
                 # Check if any env_ids are out of bounds
                 max_env_id = env_ids.max().item() if len(env_ids) > 0 else -1
                 if max_env_id >= self.num_envs:
-                    raise RuntimeError(f"Environment ID {max_env_id} exceeds number of environments {self.num_envs}")
+                    raise RuntimeError(
+                        f"Environment ID {max_env_id} exceeds number of environments {self.num_envs}"
+                    )
 
                 # Reset each environment
                 for env_id in env_ids:
-                    print(f"DEBUG: reset_manager.reset_idx - Resetting env {env_id}")
+                    # Reset environment (removed per-env debug logging)
                     # Get hand actor index in root_state_tensor
                     hand_idx = hand_indices[env_id]
-                    print(f"DEBUG: reset_manager.reset_idx - Hand index for env {env_id}: {hand_idx}")
+                    # Process hand index (removed per-env debug logging)
 
                     # Safety check that hand_idx is valid for the tensor - FAIL FAST
                     if hand_idx >= root_state_tensor.shape[1]:
-                        raise RuntimeError(f"Hand index {hand_idx} exceeds root_state_tensor bodies dimension {root_state_tensor.shape[1]}")
+                        raise RuntimeError(
+                            f"Hand index {hand_idx} exceeds root_state_tensor bodies dimension {root_state_tensor.shape[1]}"
+                        )
 
                     # Set position
                     pos = self.default_hand_pos.clone()
-                    print(f"DEBUG: reset_manager.reset_idx - Default hand pos: {pos}")
+                    # Default hand position
 
                     # Apply position randomization if enabled
                     if self.randomize_initial_positions:
-                        print("DEBUG: reset_manager.reset_idx - Applying position randomization")
-                        pos = pos + torch.tensor([
-                            (torch.rand(1, device=self.device).item() * 2 - 1) * self.position_randomization_range[0],
-                            (torch.rand(1, device=self.device).item() * 2 - 1) * self.position_randomization_range[1],
-                            (torch.rand(1, device=self.device).item() * 2 - 1) * self.position_randomization_range[2]
-                        ], device=self.device)
+                        # Apply position randomization
+                        pos = pos + torch.tensor(
+                            [
+                                (torch.rand(1, device=self.device).item() * 2 - 1)
+                                * self.position_randomization_range[0],
+                                (torch.rand(1, device=self.device).item() * 2 - 1)
+                                * self.position_randomization_range[1],
+                                (torch.rand(1, device=self.device).item() * 2 - 1)
+                                * self.position_randomization_range[2],
+                            ],
+                            device=self.device,
+                        )
 
                     # Set position (root_state_tensor has shape [num_envs, num_bodies, 13])
-                    print(f"DEBUG: reset_manager.reset_idx - Setting position for env {env_id}, hand {hand_idx}: {pos}")
+                    # Set position (removed per-env debug logging)
                     root_state_tensor[env_id, hand_idx, 0:3] = pos
 
                     # Set rotation (quaternion)
                     rot = self.default_hand_rot.clone()
-                    print(f"DEBUG: reset_manager.reset_idx - Default hand rot: {rot}")
+                    # Default hand rotation
 
                     # Apply orientation randomization if enabled
-                    if self.randomize_initial_orientations and self.orientation_randomization_range > 0:
-                        print("DEBUG: reset_manager.reset_idx - Applying orientation randomization")
+                    if (
+                        self.randomize_initial_orientations
+                        and self.orientation_randomization_range > 0
+                    ):
+                        # Apply orientation randomization
                         # Generate random rotation around z-axis
-                        rand_angle = (torch.rand(1, device=self.device).item() * 2 - 1) * self.orientation_randomization_range
-                        cos_angle = torch.cos(torch.tensor(rand_angle/2, device=self.device))
-                        sin_angle = torch.sin(torch.tensor(rand_angle/2, device=self.device))
+                        rand_angle = (
+                            torch.rand(1, device=self.device).item() * 2 - 1
+                        ) * self.orientation_randomization_range
+                        cos_angle = torch.cos(
+                            torch.tensor(rand_angle / 2, device=self.device)
+                        )
+                        sin_angle = torch.sin(
+                            torch.tensor(rand_angle / 2, device=self.device)
+                        )
 
                         # Create quaternion for z-axis rotation [x, y, z, w]
-                        rand_quat = torch.tensor([0, 0, sin_angle, cos_angle], device=self.device)
+                        rand_quat = torch.tensor(
+                            [0, 0, sin_angle, cos_angle], device=self.device
+                        )
 
                         # Apply random rotation using quaternion multiplication
                         # For simplicity, we're only applying a rotation around z
@@ -320,44 +360,56 @@ class ResetManager:
                         rot = rand_quat
 
                     # Set rotation
-                    print(f"DEBUG: reset_manager.reset_idx - Setting rotation for env {env_id}, hand {hand_idx}: {rot}")
+                    # Set rotation (removed per-env debug logging)
                     root_state_tensor[env_id, hand_idx, 3:7] = rot
 
                     # Zero velocities
-                    print(f"DEBUG: reset_manager.reset_idx - Zeroing velocities for env {env_id}, hand {hand_idx}")
-                    root_state_tensor[env_id, hand_idx, 7:13] = torch.zeros(6, device=self.device)
+                    # Zero velocities (removed per-env debug logging)
+                    root_state_tensor[env_id, hand_idx, 7:13] = torch.zeros(
+                        6, device=self.device
+                    )
             else:
-                print("DEBUG: reset_manager.reset_idx - No hand indices provided, skipping hand pose reset")
+                # No hand indices provided, skipping hand pose reset
+                pass
 
             # Call task-specific reset function if provided
             if task_reset_func is not None:
-                print("DEBUG: reset_manager.reset_idx - Calling task reset function")
+                # Call task reset function
                 task_reset_func(env_ids)
-                print("DEBUG: reset_manager.reset_idx - Task reset function completed")
+                # Task reset function completed
             else:
-                print("DEBUG: reset_manager.reset_idx - No task reset function provided")
+                # No task reset function provided
+                pass
 
             # Apply tensor states to simulation
-            if physics_manager is not None:
-                print("DEBUG: reset_manager.reset_idx - Applying tensor states to simulation")
-                physics_manager.apply_tensor_states(
-                    self.gym, self.sim, env_ids, dof_state, root_state_tensor
+            if physics_manager is None:
+                raise RuntimeError(
+                    "physics_manager is None. Cannot apply tensor states during reset."
                 )
-                print("DEBUG: reset_manager.reset_idx - Tensor states applied")
-            else:
-                print("DEBUG: reset_manager.reset_idx - No physics manager provided, skipping apply_tensor_states")
 
-            print("DEBUG: reset_manager.reset_idx - Reset completed successfully")
+            # Apply tensor states to simulation
+            physics_manager.apply_tensor_states(
+                self.gym, self.sim, env_ids, dof_state, root_state_tensor
+            )
+
+            # Reset completed successfully
             return True
 
         except Exception as e:
-            print(f"CRITICAL ERROR in reset_manager.reset_idx: {e}")
+            logger.critical(f"CRITICAL ERROR in reset_manager.reset_idx: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
-    def reset_all(self, physics_manager=None, dof_state=None, root_state_tensor=None,
-                hand_indices=None, task_reset_func=None):
+    def reset_all(
+        self,
+        physics_manager=None,
+        dof_state=None,
+        root_state_tensor=None,
+        hand_indices=None,
+        task_reset_func=None,
+    ):
         """
         Reset all environments.
 
@@ -373,6 +425,10 @@ class ResetManager:
         """
         env_ids = torch.arange(self.num_envs, device=self.device)
         return self.reset_idx(
-            env_ids, physics_manager, dof_state, root_state_tensor,
-            hand_indices, task_reset_func
+            env_ids,
+            physics_manager,
+            dof_state,
+            root_state_tensor,
+            hand_indices,
+            task_reset_func,
         )
