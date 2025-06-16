@@ -6,7 +6,7 @@ without adding any specific task behavior. It can be used as a starting point fo
 or for testing the basic environment functionality.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 # Import PyTorch
 import torch
@@ -41,6 +41,31 @@ class BaseTask(DexTask):
         self.device = device
         self.num_envs = num_envs
         self.cfg = cfg
+    
+    def compute_task_rewards(self, obs_dict: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """
+        Compute task rewards.
+        
+        Args:
+            obs_dict: Dictionary of observations
+            
+        Returns:
+            Tuple of (reward tensor, reward terms dictionary)
+        """
+        # Base task returns zero rewards
+        rewards = torch.zeros(self.num_envs, device=self.device)
+        reward_terms = {}
+        return rewards, reward_terms
+    
+    def check_task_reset(self) -> torch.Tensor:
+        """
+        Check if task-specific reset conditions are met.
+        
+        Returns:
+            Boolean tensor indicating which environments should reset
+        """
+        # Base task has no specific reset conditions
+        return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
     
     def compute_task_reward_terms(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
@@ -90,14 +115,16 @@ class BaseTask(DexTask):
         """
         pass
     
-    def create_task_actors(self, env_ptr, env_id: int):
+    def create_task_objects(self, gym, sim, env_ptr, env_id: int):
         """
-        Add task-specific actors to the environment.
+        Add task-specific objects to the environment.
         
-        The base task doesn't add any specific actors.
+        The base task doesn't add any specific objects.
         
         Args:
-            env_ptr: Pointer to the environment to add actors to
+            gym: Gym instance
+            sim: Simulation instance
+            env_ptr: Pointer to the environment to add objects to
             env_id: Index of the environment being created
         """
         pass

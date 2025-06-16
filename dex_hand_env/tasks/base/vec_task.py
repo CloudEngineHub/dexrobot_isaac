@@ -22,6 +22,7 @@ import torch
 import operator
 import random
 from isaacgym import gymtorch, gymapi
+from loguru import logger
 
 
 # Global variable to store the simulation instance
@@ -37,7 +38,7 @@ def _create_sim_once(gym, *args, **kwargs):
         sim_params = args[3]
         if hasattr(sim_params, 'use_gpu_pipeline') and sim_params.use_gpu_pipeline:
             # With GPU pipeline, always create a new simulation
-            print("GPU pipeline enabled, creating new simulation instance")
+            logger.info("GPU pipeline enabled, creating new simulation instance")
             return gym.create_sim(*args, **kwargs)
     
     # Without GPU pipeline, can reuse existing simulation
@@ -69,15 +70,31 @@ class Env(ABC):
         self.device_type = split_device[0]
         self.device_id = int(split_device[1]) if len(split_device) > 1 else 0
 
-        self.device = "cpu"
-        if config["sim"]["use_gpu_pipeline"]:
-            if self.device_type.lower() == "cuda" or self.device_type.lower() == "gpu":
-                self.device = "cuda" + ":" + str(self.device_id)
-            else:
-                print("GPU Pipeline is enabled but the device is not CUDA. Using CPU instead.")
-                self.device = "cpu"
+        # Fail fast if deprecated use_gpu_pipeline key is present
+        if "use_gpu_pipeline" in config.get("sim", {}):
+            raise RuntimeError(
+                "The 'use_gpu_pipeline' config key is deprecated and must be removed. "
+                "GPU pipeline is now automatically determined from sim_device. "
+                "Use sim_device='cuda:0' for GPU pipeline or sim_device='cpu' for CPU pipeline."
+            )
+        
+        # Automatically determine GPU pipeline based on sim_device
+        # This provides a single source of truth for device configuration
+        if self.device_type.lower() == "cuda" or self.device_type.lower() == "gpu":
+            # Enable GPU pipeline for CUDA devices
+            self.use_gpu_pipeline = True
+            self.device = sim_device
+            logger.info(f"Using GPU pipeline with device {sim_device}")
         else:
+            # Disable GPU pipeline for CPU devices
+            self.use_gpu_pipeline = False
             self.device = "cpu"
+            logger.info("Using CPU pipeline with device cpu")
+        
+        # Set the internal config for compatibility with existing code
+        if "sim" not in config:
+            config["sim"] = {}
+        config["sim"]["use_gpu_pipeline"] = self.use_gpu_pipeline
 
         self.rl_device = rl_device
         self.graphics_device_id = graphics_device_id
@@ -216,7 +233,7 @@ class VecTask(Env):
         # check correct up-axis
         if config_sim["up_axis"] not in ["z", "y"]:
             msg = f"Invalid up axis: {config_sim['up_axis']}"
-            print(msg)
+            logger.warning(msg)
             raise ValueError(msg)
 
         # assign general sim parameters
@@ -250,7 +267,7 @@ class VecTask(Env):
                         pairs_per_env = config_sim["physx"][opt]
                         total_pairs = pairs_per_env * num_envs
                         setattr(sim_params.physx, "max_gpu_contact_pairs", total_pairs)
-                        print(f"Auto-calculated max_gpu_contact_pairs: {pairs_per_env} per env * {num_envs} envs = {total_pairs}")
+                        logger.info(f"Auto-calculated max_gpu_contact_pairs: {pairs_per_env} per env * {num_envs} envs = {total_pairs}")
                     else:
                         setattr(sim_params.physx, opt, config_sim["physx"][opt])
             
@@ -284,7 +301,7 @@ class VecTask(Env):
             self.sim_params
         )
         if self.sim is None:
-            print("*** Failed to create sim")
+            logger.error("Failed to create sim")
             quit()
 
         return self.sim

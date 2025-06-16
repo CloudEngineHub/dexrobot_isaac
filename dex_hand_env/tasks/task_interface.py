@@ -21,6 +21,29 @@ class DexTask(ABC):
     """
     
     @abstractmethod
+    def compute_task_rewards(self, obs_dict: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """
+        Compute task rewards.
+        
+        Args:
+            obs_dict: Dictionary of observations
+            
+        Returns:
+            Tuple of (reward tensor, reward terms dictionary)
+        """
+        pass
+    
+    @abstractmethod
+    def check_task_reset(self) -> torch.Tensor:
+        """
+        Check if task-specific reset conditions are met.
+        
+        Returns:
+            Boolean tensor indicating which environments should reset
+        """
+        pass
+    
+    @abstractmethod
     def compute_task_reward_terms(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
         Compute task-specific reward components.
@@ -64,12 +87,17 @@ class DexTask(ABC):
         pass
     
     @abstractmethod
-    def create_task_actors(self, env_ptr, env_id: int):
+    def create_task_objects(self, gym, sim, env_ptr, env_id: int):
         """
-        Add task-specific actors to the environment.
+        Add task-specific objects to the environment.
+        
+        This method is called during environment setup to allow tasks to add
+        their own actors/objects (like targets, obstacles, etc.).
         
         Args:
-            env_ptr: Pointer to the environment to add actors to
+            gym: Gym instance
+            sim: Simulation instance
+            env_ptr: Pointer to the environment to add objects to
             env_id: Index of the environment being created
         """
         pass

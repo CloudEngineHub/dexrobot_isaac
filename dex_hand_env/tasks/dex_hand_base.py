@@ -115,7 +115,11 @@ class DexHandBase(VecTask):
         self.asset_root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets")
         
         # Set device early for tensor creation
+        # Note: This will be updated after parent class initialization to match actual tensor device
         self.device = rl_device
+        
+        # Update task device to match environment device
+        self.task.device = self.device
         
         # Task specific parameters
         self.max_episode_length = self.cfg["env"]["episodeLength"]
@@ -237,9 +241,6 @@ class DexHandBase(VecTask):
         self.hand_handles = handles["hand_handles"]
         self.fingertip_body_handles = handles["fingertip_body_handles"]
         self.fingerpad_body_handles = handles["fingerpad_body_handles"]
-        self.hand_indices = handles["hand_indices"]
-        self.fingertip_indices = handles["fingertip_indices"]
-        self.fingerpad_indices = handles.get("fingerpad_indices", [])
         self.dof_properties_from_asset = handles.get("dof_properties", None)
         
         # Set up viewer
@@ -247,6 +248,10 @@ class DexHandBase(VecTask):
         print("Creating viewer...")
         self.set_viewer()
         print("Viewer created")
+        
+        # Initialize rigid body indices after all actors have been created
+        # This must happen after task objects are created but before tensor manager
+        indices = self.hand_initializer.initialize_rigid_body_indices(self.envs)
         
         # Create tensor manager after environment setup
         self.tensor_manager = TensorManager(
@@ -348,7 +353,8 @@ class DexHandBase(VecTask):
             num_envs=self.num_envs,
             device=self.device,
             tensor_manager=self.tensor_manager,
-            hand_asset=self.hand_asset
+            hand_asset=self.hand_asset,
+            hand_initializer=self.hand_initializer
         )
         
         # Create reset manager
@@ -512,9 +518,6 @@ class DexHandBase(VecTask):
         
         self.observation_encoder.initialize(
             observation_keys=observation_keys,
-            hand_indices=self.hand_indices,
-            fingertip_indices=self.fingertip_indices,
-            fingerpad_indices=self.fingerpad_indices,
             joint_to_control=self.hand_initializer.joint_to_control,
             active_joint_names=self.hand_initializer.active_joint_names,
             num_actions=self.num_actions,
@@ -535,6 +538,21 @@ class DexHandBase(VecTask):
         
         # Create extras dictionary for additional info
         self.extras = {}
+
+    @property
+    def hand_indices(self):
+        """Access hand indices from hand_initializer (single source of truth)."""
+        return self.hand_initializer.hand_indices
+
+    @property
+    def fingertip_indices(self):
+        """Access fingertip indices from hand_initializer (single source of truth)."""
+        return self.hand_initializer.fingertip_indices
+
+    @property
+    def fingerpad_indices(self):
+        """Access fingerpad indices from hand_initializer (single source of truth)."""
+        return self.hand_initializer.fingerpad_indices
 
     def reset_idx(self, env_ids):
         """Reset environments at specified indices."""

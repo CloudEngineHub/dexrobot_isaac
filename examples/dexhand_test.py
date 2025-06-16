@@ -17,10 +17,13 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import IsaacGym first
-from isaacgym import gymtorch
+from isaacgym import gymapi, gymtorch
 
 # Then import PyTorch
 import torch
+
+# Import loguru
+from loguru import logger
 
 # Global variables for velocity integration tracking
 arr_integrated_pos = None
@@ -29,8 +32,9 @@ physics_dt = None
 finger_integrated_pos = None
 finger_initial_pos = None
 
-# Import factory
+# Import factory and task
 from dex_hand_env.factory import create_dex_env
+from dex_hand_env.tasks.base_task import BaseTask
 import math
 
 # Import scipy for quaternion conversion
@@ -39,7 +43,7 @@ try:
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
-    print("Scipy not available. Install with 'pip install scipy' for quaternion to Euler conversion.")
+    logger.info("Scipy not available. Install with 'pip install scipy' for quaternion to Euler conversion.")
 
 # Import Rerun for plotting (optional)
 try:
@@ -47,7 +51,29 @@ try:
     RERUN_AVAILABLE = True
 except ImportError:
     RERUN_AVAILABLE = False
-    print("Rerun not available. Install with 'pip install rerun-sdk' for real-time plotting.")
+    logger.info("Rerun not available. Install with 'pip install rerun-sdk' for real-time plotting.")
+
+def setup_logging(level):
+    """Configure loguru based on verbosity level."""
+    # Remove default handler
+    logger.remove()
+    
+    # Add new handler with appropriate level
+    if level == 'debug':
+        logger.add(sys.stderr, level="DEBUG", 
+                  format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
+    elif level == 'info':
+        logger.add(sys.stderr, level="INFO",
+                  format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>")
+    elif level == 'warning':
+        logger.add(sys.stderr, level="WARNING",
+                  format="<level>{level: <8}</level> | <level>{message}</level>")
+    elif level == 'error':
+        logger.add(sys.stderr, level="ERROR",
+                  format="<level>{level: <8}</level> | <level>{message}</level>")
+    else:
+        logger.add(sys.stderr, level="INFO",
+                  format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>")
 
 def load_config(config_path=None):
     """Load config from YAML file or use default path."""
@@ -57,7 +83,7 @@ def load_config(config_path=None):
             "dex_hand_env/cfg/task/BaseTask.yaml"
         )
 
-    print(f"Loading config from {config_path}")
+    logger.info(f"Loading config from {config_path}")
 
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Config file not found: {config_path}")
@@ -143,12 +169,12 @@ def create_rule_based_finger_controller():
         # Use 2π for 0.5 second period for grasping (2 Hz)
         t = sim_time * 2.0 * math.pi * 2.0  # 2 Hz for faster finger motion
 
-        # Debug: Print time info when progress_buf changes or first few calls
+        # Debug: Log time info when progress_buf changes or first few calls
         last_progress = getattr(finger_controller, 'last_progress', -1)
         current_progress = env.progress_buf[0].item()
 
         if state['call_count'] < 5 or current_progress != last_progress:
-            print(f"[Finger Controller] Call #{state['call_count']}, progress_buf: {current_progress}, sim_time: {sim_time:.6f}, t: {t:.6f}, sin(t): {math.sin(t):.6f}")
+            logger.debug(f"[Finger Controller] Call #{state['call_count']}, progress_buf: {current_progress}, sim_time: {sim_time:.6f}, t: {t:.6f}, sin(t): {math.sin(t):.6f}")
 
         finger_controller.last_progress = current_progress
         state['call_count'] += 1
@@ -291,10 +317,10 @@ def log_observation_data(env, step, cfg, env_idx=0):
         if "hand_pose" in obs_dict:
             hand_quat = obs_dict["hand_pose"][env_idx, 3:7]
             
-            # Debug: print quaternion values at first few steps
+            # Debug: log quaternion values at first few steps
             if step < 5:
-                print(f"\nStep {step} - hand_quat raw: {hand_quat}")
-                print(f"  As list: [x={hand_quat[0]:.6f}, y={hand_quat[1]:.6f}, z={hand_quat[2]:.6f}, w={hand_quat[3]:.6f}]")
+                logger.debug(f"Step {step} - hand_quat raw: {hand_quat}")
+                logger.debug(f"  As list: [x={hand_quat[0]:.6f}, y={hand_quat[1]:.6f}, z={hand_quat[2]:.6f}, w={hand_quat[3]:.6f}]")
             
             # Log quaternion components - Isaac Gym format is [x, y, z, w]
             rr.log("Plot_7_hand_quat_euler/quat_x", rr.Scalar(float(hand_quat[0])))
@@ -326,7 +352,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
             arr_aligned_quat = obs_dict["hand_pose_arr_aligned"][env_idx, 3:7]
             
             if step < 5:
-                print(f"  ARR-aligned quat: [x={arr_aligned_quat[0]:.6f}, y={arr_aligned_quat[1]:.6f}, z={arr_aligned_quat[2]:.6f}, w={arr_aligned_quat[3]:.6f}]")
+                logger.debug(f"  ARR-aligned quat: [x={arr_aligned_quat[0]:.6f}, y={arr_aligned_quat[1]:.6f}, z={arr_aligned_quat[2]:.6f}, w={arr_aligned_quat[3]:.6f}]")
             
             # Log ARR-aligned quaternion
             rr.log("Plot_7_hand_quat_euler/arr_quat_x", rr.Scalar(float(arr_aligned_quat[0])))
@@ -469,7 +495,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
                 physics_dt = cfg.get("sim", {}).get("dt", 0.0083)
             else:
                 physics_dt = getattr(cfg, 'sim', {}).get('dt', 0.0083) if hasattr(cfg, 'sim') else 0.0083
-            print(f"Initialized ARR integration tracking with physics_dt = {physics_dt}")
+            logger.debug(f"Initialized ARR integration tracking with physics_dt = {physics_dt}")
 
         # Always try to log even if there's an error, to see if the plot appears
         try:
@@ -511,7 +537,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
             rr.log("Plot_15_ARR_integration/error_arrz", rr.Scalar(float(error_z)))
 
         except Exception as plot15_error:
-            print(f"Plot 15 error at step {step}: {plot15_error}")
+            logger.error(f"Plot 15 error at step {step}: {plot15_error}")
         
         # Plot 16: Finger Joint Velocity Integration Check
         # Initialize finger integration tracking
@@ -519,7 +545,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
         if step == 0 or finger_integrated_pos is None:
             finger_integrated_pos = 0.0
             finger_initial_pos = None
-            print(f"Initialized finger integration tracking")
+            logger.debug(f"Initialized finger integration tracking")
         
         try:
             # Test thumb rotation joint (r_f_joint1_1) - a finger rotation joint
@@ -546,15 +572,69 @@ def log_observation_data(env, step, cfg, env_idx=0):
             rr.log("Plot_16_finger_integration/error_r_f_joint1_1", rr.Scalar(float(finger_error)))
             
             if step == 1:
-                print(f"Plot 16 logged successfully at step {step}")
+                logger.debug(f"Plot 16 logged successfully at step {step}")
                 
         except Exception as plot16_error:
-            print(f"Plot 16 error at step {step}: {plot16_error}")
+            logger.error(f"Plot 16 error at step {step}: {plot16_error}")
 
     except Exception as e:
-        print(f"Error logging data at step {step}: {e}")
+        logger.error(f"Error logging data at step {step}: {e}")
         import traceback
         traceback.print_exc()
+
+def create_contact_test_box(gym, sim, env_ptr, env_id):
+    """Create a box for contact testing."""
+    # Create box asset
+    box_size = 0.05  # 5cm cube
+    box_x = 0.25  # Position beneath middle finger
+    box_y = 0.0
+    box_z = box_size / 2.0  # Half the box height to place bottom on ground
+    box_position = gymapi.Vec3(box_x, box_y, box_z)
+    
+    asset_options = gymapi.AssetOptions()
+    asset_options.fix_base_link = True  # Make the box static
+    asset_options.thickness = 0.001
+    asset_options.density = 1000.0
+    
+    box_asset = gym.create_box(
+        sim,
+        box_size,  # width
+        box_size,  # height
+        box_size,  # depth
+        asset_options
+    )
+    
+    if box_asset is None:
+        logger.warning(f"Failed to create box asset for environment {env_id}")
+        return
+    
+    # Create initial pose for the box
+    box_pose = gymapi.Transform()
+    box_pose.p = box_position
+    box_pose.r = gymapi.Quat(0, 0, 0, 1)  # No rotation
+    
+    # Create the box actor
+    box_actor = gym.create_actor(
+        env_ptr,
+        box_asset,
+        box_pose,
+        f"contact_test_box_{env_id}",
+        env_id,  # collision group
+        1   # collision filter (1 = collide with everything)
+    )
+    
+    if box_actor is None:
+        logger.warning(f"Failed to create box actor in environment {env_id}")
+    else:
+        # Set box color to red for visibility
+        gym.set_rigid_body_color(
+            env_ptr,
+            box_actor,
+            0,  # rigid body index (box only has one)
+            gymapi.MESH_VISUAL,
+            gymapi.Vec3(1.0, 0.0, 0.0)  # Red color
+        )
+        logger.info(f"Added contact test box to environment {env_id}: size={box_size}m, center at ({box_position.x}, {box_position.y}, {box_position.z})")
 
 def main():
     """Main function to test the DexHand environment."""
@@ -568,8 +648,9 @@ def main():
     parser.add_argument("--steps", type=int, default=1200, help="Number of steps to run")
     parser.add_argument("--movement-speed", type=float, default=0.05, help="Speed of DOF movement")
     parser.add_argument("--sleep", type=float, default=0.01, help="Sleep time between steps")
-    parser.add_argument("--use-gpu-pipeline", action="store_true", help="Enable GPU pipeline for PhysX")
-    parser.add_argument("--no-gpu-pipeline", action="store_true", help="Disable GPU pipeline for PhysX")
+    # GPU pipeline is now automatically determined from device
+    # parser.add_argument("--use-gpu-pipeline", action="store_true", help="Enable GPU pipeline for PhysX")
+    # parser.add_argument("--no-gpu-pipeline", action="store_true", help="Disable GPU pipeline for PhysX")
     parser.add_argument("--device", type=str, default="cuda:0", help="Device to run simulation on (cuda:0 or cpu)")
 
     # Action mode control arguments
@@ -581,18 +662,23 @@ def main():
                        help="Include fingers in policy action space (default: true)")
     parser.add_argument("--enable-plotting", action="store_true", help="Enable real-time plotting with Rerun")
     parser.add_argument("--plot-env-idx", type=int, default=0, help="Environment index to plot (default: 0)")
+    parser.add_argument("--log-level", type=str, default="info", choices=["debug", "info", "warning", "error"],
+                       help="Set logging verbosity level (default: info)")
     args = parser.parse_args()
 
-    print("Starting DexHand test script...")
+    # Set up logging
+    setup_logging(args.log_level)
+    
+    logger.info("Starting DexHand test script...")
 
     # Initialize plotting if requested
     plotting_enabled = False
     if args.enable_plotting:
         plotting_enabled = setup_rerun_logging()
         if plotting_enabled:
-            print(f"Real-time plotting enabled for environment index {args.plot_env_idx}")
+            logger.info(f"Real-time plotting enabled for environment index {args.plot_env_idx}")
         else:
-            print("Plotting requested but Rerun not available")
+            logger.warning("Plotting requested but Rerun not available")
 
     # Load configuration
     cfg = load_config(args.config)
@@ -606,37 +692,42 @@ def main():
     cfg["env"]["policyControlsHandBase"] = args.policy_controls_base.lower() == "true"
     cfg["env"]["policyControlsFingers"] = args.policy_controls_fingers.lower() == "true"
 
-    # Handle GPU pipeline setting
-    if args.use_gpu_pipeline and args.no_gpu_pipeline:
-        print("Warning: Both --use-gpu-pipeline and --no-gpu-pipeline specified. Using GPU pipeline.")
-        cfg["sim"]["use_gpu_pipeline"] = True
-    elif args.use_gpu_pipeline:
-        print("Using GPU pipeline for PhysX")
-        cfg["sim"]["use_gpu_pipeline"] = True
-    elif args.no_gpu_pipeline:
-        print("Disabling GPU pipeline for PhysX")
-        cfg["sim"]["use_gpu_pipeline"] = False
+    # GPU pipeline is now automatically determined from sim_device
+    # No need to set it in config
+    
+    # Monkey patch BaseTask to add contact test box
+    logger.info("Monkey patching BaseTask to add contact test box...")
+    original_create_task_objects = BaseTask.create_task_objects
+    
+    def patched_create_task_objects(self, gym, sim, env_ptr, env_id):
+        # Call original method first
+        original_create_task_objects(self, gym, sim, env_ptr, env_id)
+        # Then add our box
+        create_contact_test_box(gym, sim, env_ptr, env_id)
+    
+    BaseTask.create_task_objects = patched_create_task_objects
 
     if args.debug:
-        print("Configuration loaded:")
-        print(yaml.dump(cfg))
+        logger.debug("Configuration loaded:")
+        logger.debug(yaml.dump(cfg))
 
     # Create the environment
-    print("Creating environment...")
+    logger.info("Creating environment...")
 
     # Set simulation device based on command line arguments
     sim_device = args.device
     rl_device = args.device
 
-    # Use -1 for graphics_device_id if headless or using CPU
-    graphics_device_id = -1 if args.headless or sim_device == "cpu" else 0
+    # Use -1 for graphics_device_id only if headless
+    # CPU physics can still use GPU graphics for rendering
+    graphics_device_id = -1 if args.headless else 0
 
     # Add debug information if requested
     if args.debug:
-        print(f"Simulation device: {sim_device}")
-        print(f"RL device: {rl_device}")
-        print(f"Graphics device ID: {graphics_device_id}")
-        print(f"GPU pipeline: {cfg['sim'].get('use_gpu_pipeline', 'not specified')}")
+        logger.debug(f"Simulation device: {sim_device}")
+        logger.debug(f"RL device: {rl_device}")
+        logger.debug(f"Graphics device ID: {graphics_device_id}")
+        # GPU pipeline is automatically determined from sim_device
 
         # Set physics debugging options
         if "physx" not in cfg["sim"]:
@@ -654,19 +745,21 @@ def main():
             force_render=not args.headless,
             virtual_screen_capture=False
         )
-        print("Environment created successfully!")
+        logger.info("Environment created successfully!")
     except Exception as e:
-        print(f"Error creating environment: {e}")
+        logger.error(f"Error creating environment: {e}")
         import traceback
         traceback.print_exc()
         return
 
-    print(f"Environment created with {env.num_envs} environments")
-    print(f"Observation space: {env.num_observations}")
-    print(f"Action space: {env.num_actions}")
-    print(f"Control mode: {env.action_control_mode}")
-    print(f"Policy controls hand base: {env.policy_controls_hand_base}")
-    print(f"Policy controls fingers: {env.policy_controls_fingers}")
+    # Box creation now happens automatically through the monkey-patched create_task_objects
+
+    logger.info(f"Environment created with {env.num_envs} environments")
+    logger.info(f"Observation space: {env.num_observations}")
+    logger.info(f"Action space: {env.num_actions}")
+    logger.info(f"Control mode: {env.action_control_mode}")
+    logger.info(f"Policy controls hand base: {env.policy_controls_hand_base}")
+    logger.info(f"Policy controls fingers: {env.policy_controls_fingers}")
 
     # Calculate expected action space size
     expected_actions = 0
@@ -676,11 +769,11 @@ def main():
         expected_actions += 12  # finger controls
 
     if env.num_actions != expected_actions:
-        print(f"ERROR: Expected {expected_actions} actions, got {env.num_actions}")
+        logger.error(f"Expected {expected_actions} actions, got {env.num_actions}")
         return
 
     if env.action_control_mode != args.control_mode:
-        print(f"ERROR: Expected {args.control_mode} control mode, got {env.action_control_mode}")
+        logger.error(f"Expected {args.control_mode} control mode, got {env.action_control_mode}")
         return
 
     # Set up rule-based controllers for uncontrolled DOFs
@@ -688,11 +781,11 @@ def main():
     finger_controller = None if env.policy_controls_fingers else create_rule_based_finger_controller()
 
     if base_controller or finger_controller:
-        print("\nSetting up rule-based controllers:")
+        logger.info("Setting up rule-based controllers:")
         if base_controller:
-            print("- Base controller: Active (circular motion)")
+            logger.info("- Base controller: Active (circular motion)")
         if finger_controller:
-            print("- Finger controller: Active (adaptive grasping with 5x speed)")
+            logger.info("- Finger controller: Active (adaptive grasping with 5x speed)")
         env.set_rule_based_controllers(
             base_controller=base_controller,
             finger_controller=finger_controller
@@ -718,37 +811,37 @@ def main():
         ("pinky_dip", "Pinky DIP (→ r_f_joint5_3+5_4 coupled)"),
     ]
 
-    print(f"\n===== ACTION MODE VERIFICATION =====")
-    print(f"Control Mode: {env.action_control_mode}")
-    print(f"Policy controls base: {env.policy_controls_hand_base}")
-    print(f"Policy controls fingers: {env.policy_controls_fingers}")
-    print(f"Action space size: {env.num_actions}")
+    logger.info("\n===== ACTION MODE VERIFICATION =====")
+    logger.info(f"Control Mode: {env.action_control_mode}")
+    logger.info(f"Policy controls base: {env.policy_controls_hand_base}")
+    logger.info(f"Policy controls fingers: {env.policy_controls_fingers}")
+    logger.info(f"Action space size: {env.num_actions}")
 
     if not env.policy_controls_hand_base:
-        print("- Hand base will use RULE-BASED control (circular motion)")
+        logger.info("- Hand base will use RULE-BASED control (circular motion)")
     if not env.policy_controls_fingers:
-        print("- Fingers will use RULE-BASED control (grasping motion)")
+        logger.info("- Fingers will use RULE-BASED control (grasping motion)")
 
     if env.policy_controls_fingers:
-        print(f"Testing {len(action_to_dof_map)} finger actions:")
+        logger.info(f"Testing {len(action_to_dof_map)} finger actions:")
         for i, (dof_name, description) in enumerate(action_to_dof_map):
-            print(f"  Action {i:2d}: {dof_name:<15} - {description}")
-    print("=" * 50)
+            logger.info(f"  Action {i:2d}: {dof_name:<15} - {description}")
+    logger.info("=" * 50)
 
     # Get initial DOF positions for reference
     obs = env.reset()
     initial_dof_pos = env.dof_pos.clone() if hasattr(env, 'dof_pos') else None
 
-    print(f"\nStarting action-to-DOF verification test...")
-    print(f"Movement magnitude: {args.movement_speed}")
-    print(f"Steps per action: 100")
-    print(f"Total test duration: {12 * 100} steps")
-    print("=" * 50)
+    logger.info(f"\nStarting action-to-DOF verification test...")
+    logger.info(f"Movement magnitude: {args.movement_speed}")
+    logger.info(f"Steps per action: 100")
+    logger.info(f"Total test duration: {12 * 100} steps")
+    logger.info("=" * 50)
 
     # Sequential action testing: each action goes from -1 → 1 → -1 over 100 steps
-    print(f"\n>>> Testing Sequential Action Movement")
-    print("Each action will move from -1 → 1 → -1 over 100 steps")
-    print("Starting with all actions at -1, then testing each action individually")
+    logger.info(f"\n>>> Testing Sequential Action Movement")
+    logger.info("Each action will move from -1 → 1 → -1 over 100 steps")
+    logger.info("Starting with all actions at -1, then testing each action individually")
 
     # Reset to initial state
     env.reset()
@@ -756,7 +849,7 @@ def main():
     # Get initial DOF positions for reference
     if hasattr(env, 'dof_pos'):
         initial_dof_pos = env.dof_pos[0].clone()
-        print(f"Initial finger DOF positions:")
+        logger.debug(f"Initial finger DOF positions:")
         finger_dofs = ["r_f_joint1_1", "r_f_joint1_2", "r_f_joint1_3", "r_f_joint1_4",
                       "r_f_joint2_1", "r_f_joint2_2", "r_f_joint2_3", "r_f_joint2_4",
                       "r_f_joint3_1", "r_f_joint3_2", "r_f_joint3_3", "r_f_joint3_4",
@@ -764,16 +857,16 @@ def main():
                       "r_f_joint5_1", "r_f_joint5_2", "r_f_joint5_3", "r_f_joint5_4"]
         for i, name in enumerate(finger_dofs):
             dof_idx = 6 + i  # finger DOFs start at index 6
-            print(f"  {name}: {initial_dof_pos[dof_idx].item():.6f}")
+            logger.debug(f"  {name}: {initial_dof_pos[dof_idx].item():.6f}")
 
     # Total steps: 12 actions × 100 steps each = 1200 steps
     total_steps = 12 * 100
     steps_per_action = 100
 
-    print(f"\nStarting sequential action test:")
-    print(f"Total steps: {total_steps}")
-    print(f"Steps per action: {steps_per_action}")
-    print("=" * 60)
+    logger.info(f"\nStarting sequential action test:")
+    logger.info(f"Total steps: {total_steps}")
+    logger.info(f"Steps per action: {steps_per_action}")
+    logger.info("=" * 60)
 
     for step in range(total_steps):
         # Exit early if we've reached the requested number of steps
@@ -843,10 +936,10 @@ def main():
 
         # Step the simulation (rule-based control is applied automatically in pre_physics_step)
         if step < 5:
-            print(f"[Test] Before step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}")
+            logger.debug(f"[Test] Before step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}")
         obs, rewards, dones, info = env.step(actions)
         if step < 5:
-            print(f"[Test] After step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}, done = {dones[0].item()}")
+            logger.debug(f"[Test] After step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}, done = {dones[0].item()}")
         env.render()
 
         # Log observation data for plotting
@@ -860,16 +953,16 @@ def main():
                 base_action_names = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"]
                 action_name = base_action_names[current_action_idx]
                 action_sent = actions[0, current_action_idx].item() if current_action_idx < actions.shape[1] else action_value
-                print(f"  Step {step+1:4d}: Base Action {current_action_idx} ({action_name:>13}) = {action_sent:+6.3f} (substep {step_in_action+1:2d}/100)")
+                logger.info(f"  Step {step+1:4d}: Base Action {current_action_idx} ({action_name:>13}) = {action_sent:+6.3f} (substep {step_in_action+1:2d}/100)")
             elif env.policy_controls_fingers and current_action_idx < finger_actions_count:
                 action_name = action_to_dof_map[current_action_idx][0]
-                print(f"  Step {step+1:4d}: Finger Action {current_action_idx} ({action_name:>13}) = {action_value:+6.3f} (substep {step_in_action+1:2d}/100)")
+                logger.info(f"  Step {step+1:4d}: Finger Action {current_action_idx} ({action_name:>13}) = {action_value:+6.3f} (substep {step_in_action+1:2d}/100)")
             elif not env.policy_controls_fingers:
-                print(f"  Step {step+1:4d}: RULE-BASED finger control (substep {step_in_action+1:2d}/100)")
+                logger.info(f"  Step {step+1:4d}: RULE-BASED finger control (substep {step_in_action+1:2d}/100)")
             elif not env.policy_controls_hand_base:
-                print(f"  Step {step+1:4d}: RULE-BASED base control (substep {step_in_action+1:2d}/100)")
+                logger.info(f"  Step {step+1:4d}: RULE-BASED base control (substep {step_in_action+1:2d}/100)")
             else:
-                print(f"  Step {step+1:4d}: Test completed (substep {step_in_action+1:2d}/100)")
+                logger.info(f"  Step {step+1:4d}: Test completed (substep {step_in_action+1:2d}/100)")
 
             # At transitions, show DOF changes for the current action
             if hasattr(env, 'dof_pos') and (step_in_action == 0 or step_in_action == 49 or step_in_action == 99):
@@ -879,7 +972,7 @@ def main():
                 # Show changes for the joints controlled by this action
                 if current_action_idx < 12:
                     action_name, description = action_to_dof_map[current_action_idx]
-                    print(f"    {description}")
+                    logger.debug(f"    {description}")
 
                     # Show finger DOF changes
                     finger_changes = dof_change[6:]  # Skip base DOFs
@@ -890,34 +983,34 @@ def main():
                         max_finger_idx = torch.argmax(torch.abs(finger_changes)).item()
                         finger_dof_name = finger_dofs[max_finger_idx]
                         finger_change_value = finger_changes[max_finger_idx].item()
-                        print(f"    Max finger DOF change: {finger_dof_name} = {finger_change_value:+.6f}")
+                        logger.debug(f"    Max finger DOF change: {finger_dof_name} = {finger_change_value:+.6f}")
 
                     # Show coupling verification for specific actions
                     if current_action_idx == 2:  # thumb_dip (should affect joints 1_3 and 1_4)
                         joint1_3_change = finger_changes[2].item()  # r_f_joint1_3 (index 8-6=2)
                         joint1_4_change = finger_changes[3].item()  # r_f_joint1_4 (index 9-6=3)
-                        print(f"    Coupling check: r_f_joint1_3={joint1_3_change:+.6f}, r_f_joint1_4={joint1_4_change:+.6f}")
+                        logger.debug(f"    Coupling check: r_f_joint1_3={joint1_3_change:+.6f}, r_f_joint1_4={joint1_4_change:+.6f}")
                         if abs(joint1_3_change - joint1_4_change) < 1e-5:
-                            print(f"    ✓ Coupling verified: both joints move together")
+                            logger.debug(f"    ✓ Coupling verified: both joints move together")
                         else:
-                            print(f"    ⚠ Coupling issue: joints should move together")
+                            logger.warning(f"    ⚠ Coupling issue: joints should move together")
 
                     elif current_action_idx == 3:  # finger_spread (should affect 2_1, 4_1, 5_1 with 5_1=2x)
                         joint2_1_change = finger_changes[4].item()   # r_f_joint2_1 (index 10-6=4)
                         joint4_1_change = finger_changes[12].item()  # r_f_joint4_1 (index 18-6=12)
                         joint5_1_change = finger_changes[16].item()  # r_f_joint5_1 (index 22-6=16)
                         joint3_1_change = finger_changes[8].item()   # r_f_joint3_1 (index 14-6=8, should stay 0)
-                        print(f"    Spread coupling: 2_1={joint2_1_change:+.6f}, 4_1={joint4_1_change:+.6f}, 5_1={joint5_1_change:+.6f}")
-                        print(f"    Fixed joint 3_1: {joint3_1_change:+.6f} (should be 0)")
+                        logger.debug(f"    Spread coupling: 2_1={joint2_1_change:+.6f}, 4_1={joint4_1_change:+.6f}, 5_1={joint5_1_change:+.6f}")
+                        logger.debug(f"    Fixed joint 3_1: {joint3_1_change:+.6f} (should be 0)")
                         if abs(joint5_1_change - 2.0 * joint2_1_change) < 1e-5 and abs(joint4_1_change - joint2_1_change) < 1e-5:
-                            print(f"    ✓ Spread coupling verified: 5_1 ≈ 2×(2_1,4_1)")
+                            logger.debug(f"    ✓ Spread coupling verified: 5_1 ≈ 2×(2_1,4_1)")
                         else:
-                            print(f"    ⚠ Spread coupling issue")
+                            logger.warning(f"    ⚠ Spread coupling issue")
 
         time.sleep(args.sleep)
 
-    print(f"\nSequential action test completed!")
-    print(f"All 12 actions have been tested with the -1 → 1 → -1 pattern.")
+    logger.info(f"\nSequential action test completed!")
+    logger.info(f"All 12 actions have been tested with the -1 → 1 → -1 pattern.")
 
     # Final DOF state summary
     if hasattr(env, 'dof_pos'):
@@ -926,18 +1019,18 @@ def main():
         final_finger_changes = final_dof_change[6:]
         max_final_change = torch.max(torch.abs(final_finger_changes)).item()
 
-        print(f"\nFinal finger DOF changes from initial state:")
+        logger.info(f"\nFinal finger DOF changes from initial state:")
         for i, name in enumerate(finger_dofs):
             change = final_finger_changes[i].item()
-            print(f"  {name}: {change:+.6f}")
+            logger.info(f"  {name}: {change:+.6f}")
 
-        print(f"Maximum final change: {max_final_change:.6f}")
+        logger.info(f"Maximum final change: {max_final_change:.6f}")
         if max_final_change < 0.1:
-            print("✓ Hand returned close to initial position (good)")
+            logger.info("✓ Hand returned close to initial position (good)")
         else:
-            print("⚠ Hand position significantly changed from initial")
+            logger.warning("⚠ Hand position significantly changed from initial")
 
-    print("Test completed")
+    logger.info("Test completed")
 
 if __name__ == "__main__":
     main()

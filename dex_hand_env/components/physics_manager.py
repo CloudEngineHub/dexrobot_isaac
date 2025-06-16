@@ -11,6 +11,9 @@ from isaacgym import gymapi, gymtorch
 # Then import PyTorch
 import torch
 
+# Import loguru
+from loguru import logger
+
 
 class PhysicsManager:
     """
@@ -96,7 +99,7 @@ class PhysicsManager:
                     self.gym.refresh_rigid_body_state_tensor(self.sim)
                     self.gym.refresh_net_contact_force_tensor(self.sim)
                 except Exception as refresh_err:
-                    print(f"WARNING: Error refreshing tensors: {refresh_err}")
+                    logger.warning(f"Error refreshing tensors: {refresh_err}")
             
             # Auto-detect physics_steps_per_control_step
             if not self.auto_detected_physics_steps:
@@ -111,14 +114,13 @@ class PhysicsManager:
                     # Update control_dt to match the actual control frequency
                     self.control_dt = self.physics_dt * self.physics_steps_per_control_step
                     
-                    print(f"Auto-detected physics_steps_per_control_step: {measured_steps}. "
+                    logger.info(f"Auto-detected physics_steps_per_control_step: {measured_steps}. "
                           f"This means {measured_steps} physics steps occur between each policy action.")
             
             return True
         except Exception as e:
-            print(f"Error in step_physics: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Error in step_physics: {e}")
+            logger.exception("Traceback:")
             return False
     
     def apply_tensor_states(self, gym, sim, env_ids, dof_state, root_state_tensor, hand_indices=None):
@@ -157,7 +159,7 @@ class PhysicsManager:
                     if env_id < len(hand_indices):
                         actor_indices[i] = hand_indices[env_id]
                     else:
-                        print(f"WARNING: Environment ID {env_id} out of range for hand_indices")
+                        logger.warning(f"Environment ID {env_id} out of range for hand_indices")
                 
                 # Need to extract the specific actor states from the tensor
                 # The root_state_tensor has shape [num_envs, num_bodies, 13]
@@ -183,7 +185,7 @@ class PhysicsManager:
                 try:
                     self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(root_state_tensor))
                 except Exception as e:
-                    print(f"WARNING: Could not set actor root state tensor: {e}")
+                    logger.warning(f"Could not set actor root state tensor: {e}")
                     # Continue anyway, as DOF state is more important
             
             # Step physics to settle objects
@@ -191,9 +193,8 @@ class PhysicsManager:
             success = self.step_physics()
             return success
         except Exception as e:
-            print(f"CRITICAL ERROR in physics_manager.apply_tensor_states: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.critical(f"Error in physics_manager.apply_tensor_states: {e}")
+            logger.exception("Traceback:")
             return False
     
     def mark_control_step(self):
@@ -222,7 +223,6 @@ class PhysicsManager:
             self.gym.refresh_net_contact_force_tensor(self.sim)
             return True
         except Exception as e:
-            print(f"Error refreshing tensors: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Error refreshing tensors: {e}")
+            logger.exception("Traceback:")
             return False

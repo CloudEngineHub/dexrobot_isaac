@@ -159,6 +159,15 @@ class TensorManager:
             print(f"DOF state tensor device: {self.dof_state.device}")
             print(f"DOF state tensor shape exists: {'shape' in dir(self.dof_state)}")
             
+            # Verify device matches expectation
+            actual_device = self.dof_state.device
+            if actual_device != self.device:
+                raise RuntimeError(
+                    f"Device mismatch: TensorManager initialized with device '{self.device}' "
+                    f"but Isaac Gym created tensors on device '{actual_device}'. "
+                    f"This indicates a configuration error that must be fixed."
+                )
+            
             # Check if the tensor has elements before accessing shape
             if hasattr(self.dof_state, 'numel') and self.dof_state.numel() == 0:
                 raise RuntimeError("DOF state tensor is empty (zero elements) after wrapping")

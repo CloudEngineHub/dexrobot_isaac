@@ -8,6 +8,7 @@ including action scaling, mapping, and PD control.
 # Import standard libraries
 import torch
 import numpy as np
+from loguru import logger
 
 # Import IsaacGym
 from isaacgym import gymapi, gymtorch
@@ -46,7 +47,7 @@ class ActionProcessor:
         self.dof_names = []
         if hand_asset is not None:
             self.dof_names = self.gym.get_asset_dof_names(hand_asset)
-            print(f"ActionProcessor initialized with {len(self.dof_names)} DOF names from asset")
+            logger.info(f"ActionProcessor initialized with {len(self.dof_names)} DOF names from asset")
 
         # Control settings
         self.action_control_mode = "position"  # position or position_delta
@@ -148,7 +149,7 @@ class ActionProcessor:
 
             # Check if it's a tensor (from TensorManager) or a dictionary
             if isinstance(dof_props, torch.Tensor):
-                print(f"DOF props is a tensor with shape: {dof_props.shape}")
+                logger.debug(f"DOF props is a tensor with shape: {dof_props.shape}")
                 # Format is [stiffness, damping, friction, armature, min, max]
                 # Extract limits from the tensor (indices 4 and 5 are min and max)
                 self.dof_lower_limits = dof_props[:, 4].clone().to(device=self.device)
@@ -267,7 +268,7 @@ class ActionProcessor:
         """
         try:
             if actions is None:
-                print("Warning: Actions is None, skipping action processing")
+                logger.warning("Actions is None, skipping action processing")
                 return False
 
             # Validate control_dt is set for position_delta mode
@@ -281,12 +282,12 @@ class ActionProcessor:
             # Validate joint mappings
             if (self.policy_controls_fingers and
                 (joint_to_control is None or active_joint_names is None)):
-                print("Error: joint_to_control and active_joint_names must be provided when controlling fingers")
+                logger.error("joint_to_control and active_joint_names must be provided when controlling fingers")
                 return False
 
             # Fail fast on invalid tensor shapes
             if self.dof_pos.shape[1] == 0:
-                print(f"Error: DOF position tensor has invalid shape {self.dof_pos.shape}")
+                logger.error(f"DOF position tensor has invalid shape {self.dof_pos.shape}")
                 return False
 
             # Initialize targets with previous targets (maintain position unless commanded)
@@ -364,7 +365,7 @@ class ActionProcessor:
                     if targets[:, :self.NUM_BASE_DOFS].shape == task_targets['base_targets'].shape:
                         targets[:, :self.NUM_BASE_DOFS] = task_targets['base_targets']
                     else:
-                        print(f"Error: Cannot assign task_targets['base_targets'] to targets[:, :self.NUM_BASE_DOFS]")
+                        logger.error(f"Cannot assign task_targets['base_targets'] to targets[:, :self.NUM_BASE_DOFS]")
                 else:
                     # Expand default_base_targets to match batch dimension
                     if len(self.default_base_targets.shape) == 1:
@@ -375,7 +376,7 @@ class ActionProcessor:
                     if targets[:, :self.NUM_BASE_DOFS].shape == expanded_targets.shape:
                         targets[:, :self.NUM_BASE_DOFS] = expanded_targets
                     else:
-                        print(f"Error: Cannot assign default_base_targets to targets[:, :self.NUM_BASE_DOFS]")
+                        logger.error(f"Cannot assign default_base_targets to targets[:, :self.NUM_BASE_DOFS]")
 
             # Apply finger actions
             if self.policy_controls_fingers:
@@ -394,7 +395,7 @@ class ActionProcessor:
                         # Incremental position changes
                         finger_pos_targets = self.prev_active_targets[:, self.NUM_BASE_DOFS:] + finger_actions
                     else:
-                        print(f"Unknown control mode: {self.action_control_mode}")
+                        logger.error(f"Unknown control mode: {self.action_control_mode}")
 
                     # Apply targets to the finger DOFs using coupling logic
                     if finger_pos_targets is not None and finger_pos_targets.shape[1] >= 12:
@@ -481,13 +482,13 @@ class ActionProcessor:
                                     finger_dof_idx = i + self.NUM_BASE_DOFS
                                     targets[:, finger_dof_idx] = task_targets['finger_targets'][:, control_idx]
                                 except (ValueError, IndexError) as e:
-                                    print(f"Warning: Error mapping task targets for {name}: {e}")
+                                    logger.warning(f"Error mapping task targets for {name}: {e}")
                             except KeyError:
-                                print(f"Warning: Joint {name} not found in joint_to_control mapping")
+                                logger.warning(f"Joint {name} not found in joint_to_control mapping")
                     else:
                         # Use stored DOF names if available
                         if not self.dof_names:
-                            print("Warning: DOF names not available from asset. Cannot set default finger targets.")
+                            logger.warning("DOF names not available from asset. Cannot set default finger targets.")
                             return False
 
                         for i, name in enumerate(self.dof_names[self.NUM_BASE_DOFS:]):
@@ -505,15 +506,15 @@ class ActionProcessor:
                                     if control_idx < len(self.default_finger_targets):
                                         targets[:, finger_dof_idx] = self.default_finger_targets[control_idx]
                                 except (ValueError, IndexError) as e:
-                                    print(f"Warning: Error setting default target for {name}: {e}")
+                                    logger.warning(f"Error setting default target for {name}: {e}")
                             except KeyError:
-                                print(f"Warning: Joint {name} not found in joint_to_control mapping")
+                                logger.warning(f"Joint {name} not found in joint_to_control mapping")
 
             # Apply target positions with PD control
             try:
                 # Make sure DOF limits have the right shape
                 if self.dof_lower_limits is None or self.dof_lower_limits.shape[0] != self.num_dof:
-                    print(f"Resizing DOF limits from {0 if self.dof_lower_limits is None else self.dof_lower_limits.shape[0]} to {self.num_dof}")
+                    logger.debug(f"Resizing DOF limits from {0 if self.dof_lower_limits is None else self.dof_lower_limits.shape[0]} to {self.num_dof}")
                     self.dof_lower_limits = torch.full((self.num_dof,), -1.0, device=self.device)
                     self.dof_upper_limits = torch.full((self.num_dof,), 1.0, device=self.device)
 
@@ -549,28 +550,26 @@ class ActionProcessor:
                 # Debug: Check if any targets are non-zero AND print actual DOF positions
                 non_zero_targets = torch.nonzero(self.current_targets[0])
                 if len(non_zero_targets) > 0:
-                    print(f"DEBUG: Setting {len(non_zero_targets)} non-zero targets:")
+                    logger.debug(f"Setting {len(non_zero_targets)} non-zero targets:")
                     for idx in non_zero_targets[:3]:  # Show first 3
                         dof_idx = idx.item()
                         target_val = self.current_targets[0, dof_idx].item()
                         actual_pos = self.dof_pos[0, dof_idx].item()
                         joint_name = self.dof_names[dof_idx] if dof_idx < len(self.dof_names) else f"DOF_{dof_idx}"
-                        print(f"  {joint_name} (DOF {dof_idx}): target = {target_val:.6f}, actual = {actual_pos:.6f}")
+                        logger.debug(f"  {joint_name} (DOF {dof_idx}): target = {target_val:.6f}, actual = {actual_pos:.6f}")
                 else:
-                    print("DEBUG: All targets are zero")
+                    logger.debug("All targets are zero")
 
                 return True
 
             except Exception as e:
-                print(f"Error setting DOF targets: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"Error setting DOF targets: {e}")
+                logger.exception("Traceback:")
                 return False
 
         except Exception as e:
-            print(f"Error in process_actions: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Error in process_actions: {e}")
+            logger.exception("Traceback:")
             return False
 
     def _apply_raw_finger_targets(self, finger_targets, dof_pos):
@@ -582,7 +581,7 @@ class ActionProcessor:
             dof_pos: current DOF positions tensor
         """
         if finger_targets.shape[1] != self.NUM_ACTIVE_FINGER_DOFS:
-            print(f"Warning: Expected {self.NUM_ACTIVE_FINGER_DOFS} finger targets, got {finger_targets.shape[1]}")
+            logger.warning(f"Expected {self.NUM_ACTIVE_FINGER_DOFS} finger targets, got {finger_targets.shape[1]}")
             return
 
         # Create DOF name to index mapping

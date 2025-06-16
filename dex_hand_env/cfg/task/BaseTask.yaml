@@ -78,7 +78,6 @@ sim:
     bounce_threshold_velocity: 0.1  # Reduced for more stable contact behavior
     max_depenetration_velocity: 5.0  # Further reduced to minimize aggressive corrections
     num_threads: 4                # Standard CPU threads
-  use_gpu_pipeline: true          # Whether to use GPU pipeline
 
 # These parameters are passed to training algorithms
 task:

@@ -38,7 +38,7 @@ class ObservationEncoder:
     4. Concat tensors with selected keys into final observation buffer
     """
     
-    def __init__(self, gym, sim, num_envs, device, tensor_manager, hand_asset=None):
+    def __init__(self, gym, sim, num_envs, device, tensor_manager, hand_asset=None, hand_initializer=None):
         """
         Initialize the observation encoder.
         
@@ -49,6 +49,7 @@ class ObservationEncoder:
             device: PyTorch device
             tensor_manager: Reference to tensor manager for accessing tensors
             hand_asset: Hand asset for getting DOF names (optional)
+            hand_initializer: Reference to hand initializer for accessing rigid body indices
         """
         self.gym = gym
         self.sim = sim
@@ -56,6 +57,7 @@ class ObservationEncoder:
         self.device = device
         self.tensor_manager = tensor_manager
         self.hand_asset = hand_asset
+        self.hand_initializer = hand_initializer
         
         # Store DOF names if asset is provided
         self.dof_names = []
@@ -83,31 +85,32 @@ class ObservationEncoder:
         self.prev_dof_pos = None
         self.control_dt = None  # Will be set during initialization
 
-    def initialize(self, observation_keys: List[str], hand_indices: List[int], 
-                  fingertip_indices: List[int], fingerpad_indices: List[int],
+    def initialize(self, observation_keys: List[str], 
                   joint_to_control: Dict[str, str], 
                   active_joint_names: List[str], num_actions: int = None, action_processor=None,
                   index_mappings: Dict = None):
         """
         Initialize the observation encoder with configuration.
         
+        Note: Rigid body indices (hand_indices, fingertip_indices, fingerpad_indices) are
+        now accessed directly from hand_initializer to maintain single source of truth.
+        
         Args:
             observation_keys: List of observation components to include
-            hand_indices: Indices of hand actors
-            fingertip_indices: Indices of fingertips
-            fingerpad_indices: Indices of fingerpads  
             joint_to_control: Mapping from joint names to control names
             active_joint_names: List of active joint names
             num_actions: Actual number of actions in the action space
             action_processor: Reference to action processor for accessing DOF targets
+            index_mappings: Dictionary of index mappings for tensor access
         """
         self.observation_keys = observation_keys
-        self.hand_indices = hand_indices
-        self.fingertip_indices = fingertip_indices
-        self.fingerpad_indices = fingerpad_indices
         self.joint_to_control = joint_to_control
         self.active_joint_names = active_joint_names
         self.action_processor = action_processor
+        
+        # Verify hand_initializer was provided
+        if self.hand_initializer is None:
+            raise RuntimeError("ObservationEncoder requires hand_initializer reference for accessing rigid body indices")
         
         # Pre-compute active finger DOF indices for efficient observation extraction
         self.active_finger_dof_indices = self._compute_active_finger_dof_indices()
@@ -166,6 +169,27 @@ class ObservationEncoder:
         # Initialize observation buffers
         self.obs_buf = torch.zeros((self.num_envs, self.num_observations), device=self.device)
         self.states_buf = torch.zeros((self.num_envs, self.num_observations), device=self.device)
+    
+    @property
+    def hand_indices(self):
+        """Access hand indices from hand_initializer (single source of truth)."""
+        if self.hand_initializer is None:
+            raise RuntimeError("hand_initializer not set in ObservationEncoder")
+        return self.hand_initializer.hand_indices
+    
+    @property
+    def fingertip_indices(self):
+        """Access fingertip indices from hand_initializer (single source of truth)."""
+        if self.hand_initializer is None:
+            raise RuntimeError("hand_initializer not set in ObservationEncoder")
+        return self.hand_initializer.fingertip_indices
+    
+    @property
+    def fingerpad_indices(self):
+        """Access fingerpad indices from hand_initializer (single source of truth)."""
+        if self.hand_initializer is None:
+            raise RuntimeError("hand_initializer not set in ObservationEncoder")
+        return self.hand_initializer.fingerpad_indices
 
     def set_control_dt(self, control_dt: float):
         """
@@ -259,7 +283,8 @@ class ObservationEncoder:
         control_to_idx = {name: idx for idx, name in enumerate(self.active_joint_names)}
         
         # Create array to store DOF indices for each active control
-        active_indices = torch.full((len(self.active_joint_names),), -1, dtype=torch.long, device=self.device)
+        # Use the device from tensor manager's tensors to ensure indices match tensor device
+        active_indices = torch.full((len(self.active_joint_names),), -1, dtype=torch.long, device=self.tensor_manager.device)
         
         # For each control, find the PRIMARY DOF (first joint in the list)
         for control_name in self.active_joint_names:

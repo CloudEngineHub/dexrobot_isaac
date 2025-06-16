@@ -11,6 +11,9 @@ from isaacgym import gymapi
 # Then import PyTorch
 import torch
 
+# Import loguru
+from loguru import logger
+
 
 class ViewerController:
     """
@@ -116,30 +119,30 @@ class ViewerController:
                     # Display current camera state
                     view_names = {"free": "Free Camera", "rear": "Rear View", "right": "Right View", "bottom": "Bottom View"}
                     follow_text = f"following robot {self.follow_robot_index}" if self.camera_follow_mode == "single" else "global view"
-                    print(f"Camera: {view_names[self.camera_view_mode]} ({follow_text})")
+                    logger.info(f"Camera: {view_names[self.camera_view_mode]} ({follow_text})")
                 elif evt.action == "toggle follow mode" and evt.value > 0:
                     # Toggle between single robot follow and global view
                     self.camera_follow_mode = "global" if self.camera_follow_mode == "single" else "single"
                     follow_text = f"following robot {self.follow_robot_index}" if self.camera_follow_mode == "single" else "global view"
                     view_names = {"free": "Free Camera", "rear": "Rear View", "right": "Right View", "bottom": "Bottom View"}
-                    print(f"Camera: {view_names[self.camera_view_mode]} ({follow_text})")
+                    logger.info(f"Camera: {view_names[self.camera_view_mode]} ({follow_text})")
                 elif evt.action == "previous robot" and evt.value > 0:
                     # Move to previous robot (only in single mode)
                     if self.camera_follow_mode == "single":
                         self.follow_robot_index = (self.follow_robot_index - 1) % self.num_envs
-                        print(f"Following robot {self.follow_robot_index}")
+                        logger.info(f"Following robot {self.follow_robot_index}")
                     else:
-                        print("Cannot change robot in global view mode. Press Tab to switch to single robot mode.")
+                        logger.warning("Cannot change robot in global view mode. Press G to switch to single robot mode.")
                 elif evt.action == "next robot" and evt.value > 0:
                     # Move to next robot (only in single mode)
                     if self.camera_follow_mode == "single":
                         self.follow_robot_index = (self.follow_robot_index + 1) % self.num_envs
-                        print(f"Following robot {self.follow_robot_index}")
+                        logger.info(f"Following robot {self.follow_robot_index}")
                     else:
-                        print("Cannot change robot in global view mode. Press Tab to switch to single robot mode.")
+                        logger.warning("Cannot change robot in global view mode. Press G to switch to single robot mode.")
                 elif evt.action == "reset environment" and evt.value > 0 and reset_callback is not None:
                     # Reset only the selected environment
-                    print(f"Resetting robot {self.follow_robot_index}")
+                    logger.info(f"Resetting robot {self.follow_robot_index}")
                     reset_callback(torch.tensor([self.follow_robot_index], device=self.device))
             
             return events_processed

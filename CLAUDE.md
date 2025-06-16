@@ -23,6 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Error handling: Use try/except with specific exceptions and informative messages
 - Tensors: Always make assertions on shape when defining new tensors to catch shape issues early
 - Vectorization: Prefer vectorized tensor operations over for-loops and if-else for efficiency and code aesthetics
+- Logging: Always use loguru logger instead of print statements. Use appropriate log levels (debug, info, warning, error, critical)
 
 ## Development Philosophy
 - IMPORTANT: This is research codebase, not production-environment code, so always prefer failing fast over suppressing the error and using a fallback.

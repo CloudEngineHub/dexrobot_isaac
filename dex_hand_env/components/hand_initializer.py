@@ -258,12 +258,8 @@ class HandInitializer:
             # Set DOF properties
             self.gym.set_actor_dof_properties(env, hand_handle, hand_dof_props)
             
-            # Get hand base rigid body index (this is what actually moves via DOFs)
-            hand_base_idx = self.gym.find_actor_rigid_body_index(env, hand_handle, "right_hand_base", gymapi.DOMAIN_SIM)
-            
-            # Store handles and indices
+            # Store handle (indices will be acquired after all actors are created)
             self.hand_handles.append(hand_handle)
-            self.hand_indices.append(hand_base_idx)
             
             # Get fingertip body handles
             fingertip_body_handles = []
@@ -281,27 +277,12 @@ class HandInitializer:
                 )
             self.fingerpad_body_handles.append(fingerpad_body_handles)
             
-            # Get fingertip indices
-            fingertip_indices = []
-            for name in self.fingertip_body_names:
-                body_idx = self.gym.find_actor_rigid_body_index(env, hand_handle, name, gymapi.DOMAIN_SIM)
-                fingertip_indices.append(body_idx)
-            self.fingertip_indices.append(fingertip_indices)
-            
-            # Get fingerpad indices
-            fingerpad_indices = []
-            for name in self.fingerpad_body_names:
-                body_idx = self.gym.find_actor_rigid_body_index(env, hand_handle, name, gymapi.DOMAIN_SIM)
-                fingerpad_indices.append(body_idx)
-            self.fingerpad_indices.append(fingerpad_indices)
+            # Indices will be acquired after all actors are created
         
         return {
             "hand_handles": self.hand_handles,
             "fingertip_body_handles": self.fingertip_body_handles,
             "fingerpad_body_handles": self.fingerpad_body_handles,
-            "hand_indices": self.hand_indices,
-            "fingertip_indices": self.fingertip_indices,
-            "fingerpad_indices": self.fingerpad_indices,
             "dof_properties": self.original_dof_props  # Add DOF properties to return value
         }
     
@@ -318,4 +299,60 @@ class HandInitializer:
             "active_joint_mapping": self.active_joint_mapping,
             "joint_to_control": self.joint_to_control,
             "active_joint_names": self.active_joint_names
+        }
+    
+    def initialize_rigid_body_indices(self, envs):
+        """
+        Initialize rigid body indices after all actors have been created.
+        
+        This method should be called once after all actors (including task-specific
+        actors) have been added to the simulation. Isaac Gym uses global indices
+        that depend on the total number of actors, so this must happen after
+        environment setup is complete. These indices are immutable once initialized.
+        
+        Args:
+            envs: List of environment instances
+        """
+        from loguru import logger
+        
+        logger.debug("Initializing rigid body indices after all actor creation...")
+        
+        # Ensure we only initialize once
+        if self.hand_indices:
+            raise RuntimeError("Rigid body indices have already been initialized. They should only be initialized once.")
+        
+        # Acquire indices for each environment
+        for i, (env, hand_handle) in enumerate(zip(envs, self.hand_handles)):
+            # Get hand base rigid body index
+            hand_base_idx = self.gym.find_actor_rigid_body_index(
+                env, hand_handle, "right_hand_base", gymapi.DOMAIN_SIM
+            )
+            self.hand_indices.append(hand_base_idx)
+            
+            # Get fingertip indices
+            fingertip_indices = []
+            for name in self.fingertip_body_names:
+                body_idx = self.gym.find_actor_rigid_body_index(
+                    env, hand_handle, name, gymapi.DOMAIN_SIM
+                )
+                fingertip_indices.append(body_idx)
+            self.fingertip_indices.append(fingertip_indices)
+            
+            # Get fingerpad indices
+            fingerpad_indices = []
+            for name in self.fingerpad_body_names:
+                body_idx = self.gym.find_actor_rigid_body_index(
+                    env, hand_handle, name, gymapi.DOMAIN_SIM
+                )
+                fingerpad_indices.append(body_idx)
+            self.fingerpad_indices.append(fingerpad_indices)
+        
+        logger.debug(f"Initialized rigid body indices for {len(envs)} environments")
+        logger.debug(f"Hand indices: {self.hand_indices}")
+        logger.debug(f"First env fingertip indices: {self.fingertip_indices[0] if self.fingertip_indices else 'None'}")
+        
+        return {
+            "hand_indices": self.hand_indices,
+            "fingertip_indices": self.fingertip_indices,
+            "fingerpad_indices": self.fingerpad_indices
         }
