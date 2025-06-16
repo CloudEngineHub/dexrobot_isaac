@@ -7,18 +7,13 @@ to delegate functionality to specialized components.
 
 import os
 import sys
-import time
 import math
 import numpy as np
-from typing import Dict, Any, Tuple, List, Optional, Set
 
 # Import Gym
-import gym
-from gym import spaces
 
 # Import IsaacGym first
 from isaacgym import gymapi, gymtorch
-from isaacgym.torch_utils import to_torch, tensor_clamp, quat_mul, quat_conjugate
 
 # Then import PyTorch
 import torch
@@ -40,6 +35,7 @@ from dex_hand_env.utils.coordinate_transforms import point_in_hand_frame
 
 # Import task interface
 from dex_hand_env.tasks.task_interface import DexTask
+
 # Import base task class
 from dex_hand_env.tasks.base.vec_task import VecTask
 
@@ -101,8 +97,10 @@ class DexHandBase(VecTask):
         self.use_gpu_pipeline = cfg["sim"].get("use_gpu_pipeline", False)
 
         # Ensure we're using a GPU device if GPU pipeline is enabled
-        if self.use_gpu_pipeline and sim_device == 'cpu':
-            print("WARNING: GPU Pipeline is enabled but using CPU device. This may cause errors. Disabling GPU pipeline.")
+        if self.use_gpu_pipeline and sim_device == "cpu":
+            print(
+                "WARNING: GPU Pipeline is enabled but using CPU device. This may cause errors. Disabling GPU pipeline."
+            )
             cfg["sim"]["use_gpu_pipeline"] = False
             self.use_gpu_pipeline = False
 
@@ -112,7 +110,12 @@ class DexHandBase(VecTask):
         # Core initialization variables
         self.cfg = cfg
         self.task = task
-        self.asset_root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "assets")
+        self.asset_root = os.path.join(
+            os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            ),
+            "assets",
+        )
 
         # Set device early for tensor creation
         # Note: This will be updated after parent class initialization to match actual tensor device
@@ -126,36 +129,57 @@ class DexHandBase(VecTask):
 
         # Physics parameters
         self.physics_dt = self.cfg["sim"].get("dt", 0.01)  # Physics simulation timestep
-        self.physics_steps_per_control_step = 1  # Will be auto-detected by PhysicsManager
+        self.physics_steps_per_control_step = (
+            1  # Will be auto-detected by PhysicsManager
+        )
 
         # Define model constants for the hand
         self.NUM_BASE_DOFS = 6  # 3 translation, 3 rotation
-        self.NUM_ACTIVE_FINGER_DOFS = 12  # 12 finger controls mapping to 19 DOFs with coupling
+        self.NUM_ACTIVE_FINGER_DOFS = (
+            12  # 12 finger controls mapping to 19 DOFs with coupling
+        )
 
         # Define joint names
-        self.base_joint_names = [
-            "ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"
-        ]
+        self.base_joint_names = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"]
 
         self.finger_joint_names = [
-            "r_f_joint1_1", "r_f_joint1_2", "r_f_joint1_3", "r_f_joint1_4",
-            "r_f_joint2_1", "r_f_joint2_2", "r_f_joint2_3", "r_f_joint2_4",
-            "r_f_joint3_2", "r_f_joint3_3", "r_f_joint3_4",  # r_f_joint3_1 is fixed
-            "r_f_joint4_1", "r_f_joint4_2", "r_f_joint4_3", "r_f_joint4_4",
-            "r_f_joint5_1", "r_f_joint5_2", "r_f_joint5_3", "r_f_joint5_4"
+            "r_f_joint1_1",
+            "r_f_joint1_2",
+            "r_f_joint1_3",
+            "r_f_joint1_4",
+            "r_f_joint2_1",
+            "r_f_joint2_2",
+            "r_f_joint2_3",
+            "r_f_joint2_4",
+            "r_f_joint3_2",
+            "r_f_joint3_3",
+            "r_f_joint3_4",  # r_f_joint3_1 is fixed
+            "r_f_joint4_1",
+            "r_f_joint4_2",
+            "r_f_joint4_3",
+            "r_f_joint4_4",
+            "r_f_joint5_1",
+            "r_f_joint5_2",
+            "r_f_joint5_3",
+            "r_f_joint5_4",
         ]
 
         # Define fingertip body names
         self.fingertip_body_names = [
-            "r_f_link1_tip", "r_f_link2_tip", "r_f_link3_tip",
-            "r_f_link4_tip", "r_f_link5_tip"
+            "r_f_link1_tip",
+            "r_f_link2_tip",
+            "r_f_link3_tip",
+            "r_f_link4_tip",
+            "r_f_link5_tip",
         ]
 
         self.fingerpad_body_names = [
-            "r_f_link1_pad", "r_f_link2_pad", "r_f_link3_pad",
-            "r_f_link4_pad", "r_f_link5_pad"
+            "r_f_link1_pad",
+            "r_f_link2_pad",
+            "r_f_link3_pad",
+            "r_f_link4_pad",
+            "r_f_link5_pad",
         ]
-
 
         # Default hand asset file
         self.hand_asset_file = "dexrobot_mujoco/dexrobot_mujoco/models/dexhand021_right_simplified_floating.xml"
@@ -184,11 +208,15 @@ class DexHandBase(VecTask):
         self._init_components()
 
         # Verify tensors were properly initialized
-        if not hasattr(self, 'tensor_manager'):
-            raise RuntimeError("TensorManager component was not created. The simulation initialization has failed.")
+        if not hasattr(self, "tensor_manager"):
+            raise RuntimeError(
+                "TensorManager component was not created. The simulation initialization has failed."
+            )
 
         if not self.tensor_manager.tensors_initialized:
-            raise RuntimeError("Tensors were not properly initialized. The simulation initialization has failed.")
+            raise RuntimeError(
+                "Tensors were not properly initialized. The simulation initialization has failed."
+            )
 
         # Initialize observation dict
         self.obs_dict = {}
@@ -208,7 +236,7 @@ class DexHandBase(VecTask):
         print("Creating components...")
 
         # Check if simulation exists (should have been created by parent class)
-        if not hasattr(self, 'sim') or self.sim is None:
+        if not hasattr(self, "sim") or self.sim is None:
             print("Simulation not created by parent class, creating now...")
             self.sim = self.create_sim()
 
@@ -218,7 +246,7 @@ class DexHandBase(VecTask):
             sim=self.sim,
             num_envs=self.num_envs,
             device=self.device,
-            asset_root=self.asset_root
+            asset_root=self.asset_root,
         )
 
         # Joint properties (stiffness/damping) now loaded from MJCF model
@@ -227,7 +255,7 @@ class DexHandBase(VecTask):
         if "initialHandPos" in self.cfg["env"]:
             self.hand_initializer.set_initial_pose(
                 pos=self.cfg["env"].get("initialHandPos", [0.0, 0.0, 0.5]),
-                rot=self.cfg["env"].get("initialHandRot", [0.0, 0.0, 0.0, 1.0])
+                rot=self.cfg["env"].get("initialHandRot", [0.0, 0.0, 0.0, 1.0]),
             )
 
         # Load hand asset
@@ -251,14 +279,11 @@ class DexHandBase(VecTask):
 
         # Initialize rigid body indices after all actors have been created
         # This must happen after task objects are created but before tensor manager
-        indices = self.hand_initializer.initialize_rigid_body_indices(self.envs)
+        self.hand_initializer.initialize_rigid_body_indices(self.envs)
 
         # Create tensor manager after environment setup
         self.tensor_manager = TensorManager(
-            gym=self.gym,
-            sim=self.sim,
-            num_envs=self.num_envs,
-            device=self.device
+            gym=self.gym, sim=self.sim, num_envs=self.num_envs, device=self.device
         )
 
         # Acquire tensor handles BEFORE prepare_sim (critical for GPU pipeline)
@@ -290,7 +315,7 @@ class DexHandBase(VecTask):
             gym=self.gym,
             sim=self.sim,
             device=self.device,
-            use_gpu_pipeline=self.use_gpu_pipeline
+            use_gpu_pipeline=self.use_gpu_pipeline,
         )
 
         # Set physics timestep
@@ -303,7 +328,7 @@ class DexHandBase(VecTask):
             num_envs=self.num_envs,
             device=self.device,
             dof_props=self.dof_props,
-            hand_asset=self.hand_asset
+            hand_asset=self.hand_asset,
         )
 
         # Configure action processor
@@ -323,7 +348,7 @@ class DexHandBase(VecTask):
         # Set control options - determine which parts are controlled by policy vs rule-based control
         self.action_processor.set_control_options(
             policy_controls_hand_base=self.cfg["env"]["policyControlsHandBase"],
-            policy_controls_fingers=self.cfg["env"]["policyControlsFingers"]
+            policy_controls_fingers=self.cfg["env"]["policyControlsFingers"],
         )
 
         # Set default targets
@@ -340,7 +365,7 @@ class DexHandBase(VecTask):
         self.action_processor.set_velocity_limits(
             finger_vel_limit=self.cfg["env"]["maxFingerJointVelocity"],
             base_lin_vel_limit=self.cfg["env"]["maxBaseLinearVelocity"],
-            base_ang_vel_limit=self.cfg["env"]["maxBaseAngularVelocity"]
+            base_ang_vel_limit=self.cfg["env"]["maxBaseAngularVelocity"],
         )
 
         # Set initial control_dt (will be updated after reset when physics steps are auto-detected)
@@ -354,7 +379,7 @@ class DexHandBase(VecTask):
             device=self.device,
             tensor_manager=self.tensor_manager,
             hand_asset=self.hand_asset,
-            hand_initializer=self.hand_initializer
+            hand_initializer=self.hand_initializer,
         )
 
         # Create reset manager
@@ -363,28 +388,34 @@ class DexHandBase(VecTask):
             sim=self.sim,
             num_envs=self.num_envs,
             device=self.device,
-            max_episode_length=self.max_episode_length
+            max_episode_length=self.max_episode_length,
         )
 
         # Configure randomization
         if "randomize" in self.cfg["env"] and self.cfg["env"]["randomize"]:
             self.reset_manager.set_randomization(
                 randomize_positions=self.cfg["env"].get("randomizePositions", False),
-                randomize_orientations=self.cfg["env"].get("randomizeOrientations", False),
+                randomize_orientations=self.cfg["env"].get(
+                    "randomizeOrientations", False
+                ),
                 randomize_dofs=self.cfg["env"].get("randomizeDofs", False),
-                position_range=self.cfg["env"].get("positionRandomizationRange", [0.05, 0.05, 0.05]),
-                orientation_range=self.cfg["env"].get("orientationRandomizationRange", 0.1),
-                dof_range=self.cfg["env"].get("dofRandomizationRange", 0.05)
+                position_range=self.cfg["env"].get(
+                    "positionRandomizationRange", [0.05, 0.05, 0.05]
+                ),
+                orientation_range=self.cfg["env"].get(
+                    "orientationRandomizationRange", 0.1
+                ),
+                dof_range=self.cfg["env"].get("dofRandomizationRange", 0.05),
             )
 
         # Create camera controller if viewer exists
-        if hasattr(self, 'viewer') and self.viewer is not None:
+        if hasattr(self, "viewer") and self.viewer is not None:
             self.viewer_controller = ViewerController(
                 gym=self.gym,
                 viewer=self.viewer,
                 envs=self.envs,
                 num_envs=self.num_envs,
-                device=self.device
+                device=self.device,
             )
         else:
             self.viewer_controller = None
@@ -395,21 +426,17 @@ class DexHandBase(VecTask):
             envs=self.envs,
             hand_indices=self.hand_indices,
             fingerpad_handles=self.fingertip_body_handles,
-            device=self.device
+            device=self.device,
         )
 
         # Create success/failure tracker
         self.success_tracker = SuccessFailureTracker(
-            num_envs=self.num_envs,
-            device=self.device,
-            cfg=self.cfg
+            num_envs=self.num_envs, device=self.device, cfg=self.cfg
         )
 
         # Create reward calculator
         self.reward_calculator = RewardCalculator(
-            num_envs=self.num_envs,
-            device=self.device,
-            cfg=self.cfg
+            num_envs=self.num_envs, device=self.device, cfg=self.cfg
         )
 
         # Mark tensors as initialized
@@ -432,7 +459,6 @@ class DexHandBase(VecTask):
 
         # Set up environment grid
         num_per_row = int(math.sqrt(self.num_envs))
-        env_spacing = 2.0  # Increased spacing to avoid collisions
 
         self.envs = []
 
@@ -449,14 +475,12 @@ class DexHandBase(VecTask):
         # Create environments
         for i in range(self.num_envs):
             # Create environment
-            env = self.gym.create_env(
-                self.sim, env_lower, env_upper, num_per_row
-            )
+            env = self.gym.create_env(self.sim, env_lower, env_upper, num_per_row)
 
             self.envs.append(env)
 
             # Let the task add any task-specific objects
-            if hasattr(self.task, 'create_task_objects'):
+            if hasattr(self.task, "create_task_objects"):
                 self.task.create_task_objects(self.gym, self.sim, env, i)
 
         print(f"Created {self.num_envs} environments.")
@@ -467,18 +491,18 @@ class DexHandBase(VecTask):
         """
         # Create observation buffer
         self.obs_buf = torch.zeros(
-            (self.num_envs, self.observation_encoder.num_observations), device=self.device
+            (self.num_envs, self.observation_encoder.num_observations),
+            device=self.device,
         )
 
         # Create states buffer
         self.states_buf = torch.zeros(
-            (self.num_envs, self.observation_encoder.num_observations), device=self.device
+            (self.num_envs, self.observation_encoder.num_observations),
+            device=self.device,
         )
 
         # Create reward buffer
-        self.rew_buf = torch.zeros(
-            (self.num_envs,), device=self.device
-        )
+        self.rew_buf = torch.zeros((self.num_envs,), device=self.device)
 
         # Create reset buffer
         self.reset_buf = torch.zeros(
@@ -491,11 +515,11 @@ class DexHandBase(VecTask):
         )
 
         # Share buffers with reset manager
-        if hasattr(self, 'reset_manager'):
+        if hasattr(self, "reset_manager"):
             self.reset_manager.set_buffers(self.reset_buf, self.progress_buf)
 
         # Set up action space
-        if hasattr(self, 'action_processor'):
+        if hasattr(self, "action_processor"):
             # Calculate action space size
             if self.action_processor.policy_controls_hand_base:
                 self.num_actions = self.action_processor.NUM_BASE_DOFS
@@ -505,8 +529,9 @@ class DexHandBase(VecTask):
             if self.action_processor.policy_controls_fingers:
                 self.num_actions += self.action_processor.NUM_ACTIVE_FINGER_DOFS
         else:
-            # Fallback
-            self.num_actions = 12  # 12 finger controls only (no base control)
+            raise RuntimeError(
+                "ActionProcessor not initialized. Cannot determine action space size."
+            )
 
         # Create the action space
         self.actions = torch.zeros(
@@ -514,7 +539,17 @@ class DexHandBase(VecTask):
         )
 
         # Initialize observation encoder now that we know the action space size
-        observation_keys = self.cfg["env"].get("observationKeys", ["base_dof_pos", "base_dof_vel", "finger_dof_pos", "finger_dof_vel", "hand_pose", "contact_forces"])
+        observation_keys = self.cfg["env"].get(
+            "observationKeys",
+            [
+                "base_dof_pos",
+                "base_dof_vel",
+                "finger_dof_pos",
+                "finger_dof_vel",
+                "hand_pose",
+                "contact_forces",
+            ],
+        )
 
         self.observation_encoder.initialize(
             observation_keys=observation_keys,
@@ -523,11 +558,11 @@ class DexHandBase(VecTask):
             num_actions=self.num_actions,
             action_processor=self.action_processor,
             index_mappings={
-                'base_joint_to_index': self.base_joint_to_index,
-                'control_name_to_index': self.control_name_to_index,
-                'raw_dof_name_to_index': self.raw_dof_name_to_index,
-                'finger_body_to_index': self.finger_body_to_index
-            }
+                "base_joint_to_index": self.base_joint_to_index,
+                "control_name_to_index": self.control_name_to_index,
+                "raw_dof_name_to_index": self.raw_dof_name_to_index,
+                "finger_body_to_index": self.finger_body_to_index,
+            },
         )
 
         # Set observation space dimensions needed by VecTask
@@ -564,7 +599,7 @@ class DexHandBase(VecTask):
             self.progress_buf[env_ids] = 0
 
             # Create default DOF positions/velocities
-            if not hasattr(self, 'default_dof_pos'):
+            if not hasattr(self, "default_dof_pos"):
                 self.default_dof_pos = torch.zeros(self.num_dof, device=self.device)
                 # All DOFs start at 0.0 (no offset from initial placement)
                 # The hand actor itself is placed at Z=0.5m in world coordinates
@@ -579,7 +614,9 @@ class DexHandBase(VecTask):
                     end_idx = start_idx + self.num_dof
 
                     # Set positions and velocities
-                    self.dof_state[start_idx:end_idx, 0] = self.default_dof_pos  # Positions
+                    self.dof_state[
+                        start_idx:end_idx, 0
+                    ] = self.default_dof_pos  # Positions
                     self.dof_state[start_idx:end_idx, 1] = 0.0  # Velocities
             else:
                 # Already in [num_envs, num_dofs, 2] format
@@ -593,7 +630,7 @@ class DexHandBase(VecTask):
             # The hand base rigid body will move automatically based on the DOF values we set above
 
             # Call task-specific reset if available
-            if hasattr(self.task, 'reset_task'):
+            if hasattr(self.task, "reset_task"):
                 self.task.reset_task(env_ids)
 
             # Apply the updated DOF states to the simulation
@@ -603,11 +640,12 @@ class DexHandBase(VecTask):
                 env_ids=env_ids,
                 dof_state=self.dof_state,
                 root_state_tensor=None,  # Don't modify rigid body states directly
-                hand_indices=None
+                hand_indices=None,
             )
         except Exception as e:
             print(f"CRITICAL ERROR in reset_idx: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
@@ -632,6 +670,7 @@ class DexHandBase(VecTask):
             except Exception as e:
                 print(f"ERROR in check_keyboard_events: {e}")
                 import traceback
+
                 traceback.print_exc()
                 raise
 
@@ -641,12 +680,12 @@ class DexHandBase(VecTask):
         # Process actions using action processor
         try:
             task_targets = None
-            if hasattr(self.task, 'get_task_dof_targets'):
+            if hasattr(self.task, "get_task_dof_targets"):
                 task_targets = self.task.get_task_dof_targets(
                     num_envs=self.num_envs,
                     device=self.device,
                     base_controlled=self.policy_controls_hand_base,
-                    fingers_controlled=self.policy_controls_fingers
+                    fingers_controlled=self.policy_controls_fingers,
                 )
 
             self.action_processor.process_actions(
@@ -654,11 +693,12 @@ class DexHandBase(VecTask):
                 dof_pos=self.dof_pos,
                 joint_to_control=self.hand_initializer.joint_to_control,
                 active_joint_names=self.hand_initializer.active_joint_names,
-                task_targets=task_targets
+                task_targets=task_targets,
             )
         except Exception as e:
             print(f"ERROR in action_processor.process_actions: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
@@ -668,6 +708,7 @@ class DexHandBase(VecTask):
         except Exception as e:
             print(f"ERROR in _apply_rule_based_control: {e}")
             import traceback
+
             traceback.print_exc()
             # Don't re-raise to avoid breaking the simulation
 
@@ -677,9 +718,9 @@ class DexHandBase(VecTask):
         except Exception as e:
             print(f"ERROR in update_prev_actions: {e}")
             import traceback
+
             traceback.print_exc()
             raise
-
 
     def post_physics_step(self):
         """Process state after physics simulation step."""
@@ -688,18 +729,23 @@ class DexHandBase(VecTask):
             self.tensor_manager.refresh_tensors(self.fingertip_indices)
 
             # Compute observations using the new simplified interface
-            self.obs_buf, self.obs_dict = self.observation_encoder.compute_observations()
+            (
+                self.obs_buf,
+                self.obs_dict,
+            ) = self.observation_encoder.compute_observations()
 
             # Task-specific observations are now handled internally by the observation encoder
             # via the _compute_task_observations method
 
             # Get task rewards
-            if hasattr(self.task, 'compute_task_rewards'):
-                self.rew_buf[:], task_rewards = self.task.compute_task_rewards(self.obs_dict)
+            if hasattr(self.task, "compute_task_rewards"):
+                self.rew_buf[:], task_rewards = self.task.compute_task_rewards(
+                    self.obs_dict
+                )
 
                 # Track successes
-                if 'success' in task_rewards:
-                    self.success_tracker.update(task_rewards['success'])
+                if "success" in task_rewards:
+                    self.success_tracker.update(task_rewards["success"])
             else:
                 self.rew_buf[:] = 0
 
@@ -707,7 +753,7 @@ class DexHandBase(VecTask):
             self.reset_manager.increment_progress()
 
             # Check for episode termination
-            if hasattr(self.task, 'check_task_reset'):
+            if hasattr(self.task, "check_task_reset"):
                 task_reset = self.task.check_task_reset()
                 self.reset_buf = self.reset_manager.check_termination(task_reset)
             else:
@@ -715,7 +761,9 @@ class DexHandBase(VecTask):
 
             # Update fingertip visualization
             if self.fingertip_visualizer is not None:
-                self.fingertip_visualizer.update_fingertip_visualization(self.contact_forces)
+                self.fingertip_visualizer.update_fingertip_visualization(
+                    self.contact_forces
+                )
 
             # Update camera position if following robot
             if self.viewer_controller is not None:
@@ -745,7 +793,9 @@ class DexHandBase(VecTask):
 
             # Update extras
             self.extras = {
-                "consecutive_successes": self.success_tracker.consecutive_successes if hasattr(self, 'success_tracker') else 0
+                "consecutive_successes": self.success_tracker.consecutive_successes
+                if hasattr(self, "success_tracker")
+                else 0
             }
 
             return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
@@ -753,6 +803,7 @@ class DexHandBase(VecTask):
         except Exception as e:
             print(f"CRITICAL ERROR in post_physics_step: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
@@ -766,6 +817,7 @@ class DexHandBase(VecTask):
         except Exception as e:
             print(f"ERROR in pre_physics_step: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
@@ -782,6 +834,7 @@ class DexHandBase(VecTask):
         except Exception as e:
             print(f"ERROR in physics step: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
@@ -791,6 +844,7 @@ class DexHandBase(VecTask):
         except Exception as e:
             print(f"ERROR in post_physics_step: {e}")
             import traceback
+
             traceback.print_exc()
             raise
 
@@ -803,7 +857,7 @@ class DexHandBase(VecTask):
         Returns:
             Dictionary containing all computed observations
         """
-        return self.obs_dict.copy() if hasattr(self, 'obs_dict') else {}
+        return self.obs_dict.copy() if hasattr(self, "obs_dict") else {}
 
     def set_rule_based_controllers(self, base_controller=None, finger_controller=None):
         """
@@ -838,62 +892,95 @@ class DexHandBase(VecTask):
 
         # Validate controllers
         if base_controller is not None and self.policy_controls_hand_base:
-            print("Warning: Base controller provided but policy_controls_hand_base=True. Controller will be ignored.")
+            print(
+                "Warning: Base controller provided but policy_controls_hand_base=True. Controller will be ignored."
+            )
         if finger_controller is not None and self.policy_controls_fingers:
-            print("Warning: Finger controller provided but policy_controls_fingers=True. Controller will be ignored.")
+            print(
+                "Warning: Finger controller provided but policy_controls_fingers=True. Controller will be ignored."
+            )
 
     def _apply_rule_based_control(self):
         """
         Internal method to apply rule-based control using registered controller functions.
         Called automatically during pre_physics_step.
         """
-        if not hasattr(self, 'action_processor') or not hasattr(self, 'dof_pos'):
+        if not hasattr(self, "action_processor") or not hasattr(self, "dof_pos"):
             return
 
         # Apply base controller if available and base is not policy-controlled
-        if not self.policy_controls_hand_base and hasattr(self, 'rule_based_base_controller') and self.rule_based_base_controller is not None:
+        if (
+            not self.policy_controls_hand_base
+            and hasattr(self, "rule_based_base_controller")
+            and self.rule_based_base_controller is not None
+        ):
             try:
                 base_targets = self.rule_based_base_controller(self)
-                if base_targets.shape == (self.num_envs, self.action_processor.NUM_BASE_DOFS):
+                if base_targets.shape == (
+                    self.num_envs,
+                    self.action_processor.NUM_BASE_DOFS,
+                ):
                     # Directly set base DOF targets (raw physical values)
-                    self.action_processor.current_targets[:, 0:self.action_processor.NUM_BASE_DOFS] = base_targets
+                    self.action_processor.current_targets[
+                        :, 0 : self.action_processor.NUM_BASE_DOFS
+                    ] = base_targets
                 else:
-                    print(f"Error: Base controller returned shape {base_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_BASE_DOFS})")
+                    print(
+                        f"Error: Base controller returned shape {base_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_BASE_DOFS})"
+                    )
             except Exception as e:
                 print(f"Error in base controller: {e}")
                 import traceback
+
                 traceback.print_exc()
 
         # Apply finger controller if available and fingers are not policy-controlled
-        if not self.policy_controls_fingers and hasattr(self, 'rule_based_finger_controller') and self.rule_based_finger_controller is not None:
+        if (
+            not self.policy_controls_fingers
+            and hasattr(self, "rule_based_finger_controller")
+            and self.rule_based_finger_controller is not None
+        ):
             try:
                 finger_targets = self.rule_based_finger_controller(self)
-                if finger_targets.shape == (self.num_envs, self.action_processor.NUM_ACTIVE_FINGER_DOFS):
+                if finger_targets.shape == (
+                    self.num_envs,
+                    self.action_processor.NUM_ACTIVE_FINGER_DOFS,
+                ):
                     # Process finger targets through action processor to handle coupling
                     self.action_processor._apply_raw_finger_targets(
-                        finger_targets=finger_targets,
-                        dof_pos=self.dof_pos
+                        finger_targets=finger_targets, dof_pos=self.dof_pos
                     )
                 else:
-                    print(f"Error: Finger controller returned shape {finger_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_ACTIVE_FINGER_DOFS})")
+                    print(
+                        f"Error: Finger controller returned shape {finger_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_ACTIVE_FINGER_DOFS})"
+                    )
             except Exception as e:
                 print(f"Error in finger controller: {e}")
                 import traceback
+
                 traceback.print_exc()
 
         # Only apply targets if we actually modified them via rule-based control
         # If only policy controls both base and fingers, don't call set_dof_position_target_tensor
         # as it was already called by process_actions()
-        if (not self.policy_controls_hand_base and hasattr(self, 'rule_based_base_controller') and self.rule_based_base_controller is not None) or \
-           (not self.policy_controls_fingers and hasattr(self, 'rule_based_finger_controller') and self.rule_based_finger_controller is not None):
+        if (
+            not self.policy_controls_hand_base
+            and hasattr(self, "rule_based_base_controller")
+            and self.rule_based_base_controller is not None
+        ) or (
+            not self.policy_controls_fingers
+            and hasattr(self, "rule_based_finger_controller")
+            and self.rule_based_finger_controller is not None
+        ):
             try:
                 self.gym.set_dof_position_target_tensor(
                     self.sim,
-                    gymtorch.unwrap_tensor(self.action_processor.current_targets)
+                    gymtorch.unwrap_tensor(self.action_processor.current_targets),
                 )
             except Exception as e:
                 print(f"Error setting DOF targets: {e}")
                 import traceback
+
                 traceback.print_exc()
 
     def _create_index_mappings(self):
@@ -909,13 +996,17 @@ class DexHandBase(VecTask):
 
         # 2. Control name to active finger DOF index mapping (th_dip, etc. -> 0-11)
         self.control_name_to_index = {}
-        if hasattr(self, 'hand_initializer') and hasattr(self.hand_initializer, 'active_joint_names'):
+        if hasattr(self, "hand_initializer") and hasattr(
+            self.hand_initializer, "active_joint_names"
+        ):
             for i, control_name in enumerate(self.hand_initializer.active_joint_names):
                 self.control_name_to_index[control_name] = i
 
         # 3. Raw finger DOF name to raw DOF tensor index mapping (r_f_joint1_1, etc. -> 0-25)
         self.raw_dof_name_to_index = {}
-        if hasattr(self, 'observation_encoder') and hasattr(self.observation_encoder, 'dof_names'):
+        if hasattr(self, "observation_encoder") and hasattr(
+            self.observation_encoder, "dof_names"
+        ):
             for i, dof_name in enumerate(self.observation_encoder.dof_names):
                 self.raw_dof_name_to_index[dof_name] = i
 
@@ -924,15 +1015,19 @@ class DexHandBase(VecTask):
 
         # Map fingertip body names to indices
         for i, tip_name in enumerate(self.fingertip_body_names):
-            finger_name = tip_name.replace("_tip", "")  # e.g., "r_f_link1_tip" -> "r_f_link1"
+            finger_name = tip_name.replace(
+                "_tip", ""
+            )  # e.g., "r_f_link1_tip" -> "r_f_link1"
             self.finger_body_to_index[f"{finger_name}_tip"] = ("fingertip", i)
 
         # Map fingerpad body names to indices
         for i, pad_name in enumerate(self.fingerpad_body_names):
-            finger_name = pad_name.replace("_pad", "")  # e.g., "r_f_link1_pad" -> "r_f_link1"
+            finger_name = pad_name.replace(
+                "_pad", ""
+            )  # e.g., "r_f_link1_pad" -> "r_f_link1"
             self.finger_body_to_index[f"{finger_name}_pad"] = ("fingerpad", i)
 
-        print(f"Created mappings:")
+        print("Created mappings:")
         print(f"  Base joints: {len(self.base_joint_to_index)} entries")
         print(f"  Control names: {len(self.control_name_to_index)} entries")
         print(f"  Raw DOF names: {len(self.raw_dof_name_to_index)} entries")

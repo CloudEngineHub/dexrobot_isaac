@@ -7,13 +7,12 @@ including loading assets, creating actors, and setting up initial states.
 
 # Import standard libraries
 import os
-import torch
-import numpy as np
 from enum import Enum
-from typing import List, Tuple
+from typing import List
+from loguru import logger
 
 # Import IsaacGym
-from isaacgym import gymapi, gymtorch
+from isaacgym import gymapi
 
 
 class HardwareMapping(Enum):
@@ -67,7 +66,9 @@ class HandInitializer:
         # Set asset root
         if asset_root is None:
             # Default to assets directory in parent of current file
-            current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            current_dir = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
             self.asset_root = os.path.join(current_dir, "assets")
         else:
             self.asset_root = asset_root
@@ -76,20 +77,35 @@ class HandInitializer:
         self.hand_asset_file = "dexrobot_mujoco/dexrobot_mujoco/models/dexhand021_right_simplified_floating.xml"
 
         # Define joint names for use in hand creation
-        self.base_joint_names = [
-            "ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"
-        ]
+        self.base_joint_names = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"]
 
         self.finger_joint_names = [
-            "r_f_joint1_1", "r_f_joint1_2", "r_f_joint1_3", "r_f_joint1_4",
-            "r_f_joint2_1", "r_f_joint2_2", "r_f_joint2_3", "r_f_joint2_4",
-            "r_f_joint3_1", "r_f_joint3_2", "r_f_joint3_3", "r_f_joint3_4",
-            "r_f_joint4_1", "r_f_joint4_2", "r_f_joint4_3", "r_f_joint4_4",
-            "r_f_joint5_1", "r_f_joint5_2", "r_f_joint5_3", "r_f_joint5_4"
+            "r_f_joint1_1",
+            "r_f_joint1_2",
+            "r_f_joint1_3",
+            "r_f_joint1_4",
+            "r_f_joint2_1",
+            "r_f_joint2_2",
+            "r_f_joint2_3",
+            "r_f_joint2_4",
+            "r_f_joint3_1",
+            "r_f_joint3_2",
+            "r_f_joint3_3",
+            "r_f_joint3_4",
+            "r_f_joint4_1",
+            "r_f_joint4_2",
+            "r_f_joint4_3",
+            "r_f_joint4_4",
+            "r_f_joint5_1",
+            "r_f_joint5_2",
+            "r_f_joint5_3",
+            "r_f_joint5_4",
         ]
 
         # Use the authoritative hardware mapping
-        self.active_joint_mapping = {member.control_name: member.joint_names for member in HardwareMapping}
+        self.active_joint_mapping = {
+            member.control_name: member.joint_names for member in HardwareMapping
+        }
 
         # Create reverse mapping from joint name to controller
         self.joint_to_control = {}
@@ -102,13 +118,19 @@ class HandInitializer:
 
         # Body names for fingertips and fingerpads in the MJCF model
         self.fingertip_body_names = [
-            "r_f_link1_tip", "r_f_link2_tip", "r_f_link3_tip",
-            "r_f_link4_tip", "r_f_link5_tip"
+            "r_f_link1_tip",
+            "r_f_link2_tip",
+            "r_f_link3_tip",
+            "r_f_link4_tip",
+            "r_f_link5_tip",
         ]
 
         self.fingerpad_body_names = [
-            "r_f_link1_pad", "r_f_link2_pad", "r_f_link3_pad",
-            "r_f_link4_pad", "r_f_link5_pad"
+            "r_f_link1_pad",
+            "r_f_link2_pad",
+            "r_f_link3_pad",
+            "r_f_link4_pad",
+            "r_f_link5_pad",
         ]
 
         # Storage for handles and indices
@@ -136,7 +158,6 @@ class HandInitializer:
         self.initial_hand_pos = pos
         if rot is not None:
             self.initial_hand_rot = rot
-
 
     def load_hand_asset(self, asset_file=None):
         """
@@ -174,15 +195,15 @@ class HandInitializer:
 
             # Debug: Check DOF count in the asset
             dof_count = self.gym.get_asset_dof_count(hand_asset)
-            print(f"Asset DOF count: {dof_count}")
+            logger.debug(f"Asset DOF count: {dof_count}")
 
             # Debug: Get asset DOF names to see what Isaac Gym sees in the asset
             asset_dof_names = self.gym.get_asset_dof_names(hand_asset)
-            print(f"Asset DOF names ({len(asset_dof_names)}): {asset_dof_names}")
+            logger.debug(f"Asset DOF names ({len(asset_dof_names)}): {asset_dof_names}")
 
             return hand_asset
         except Exception as e:
-            print(f"Error loading hand asset: {e}")
+            logger.error(f"Error loading hand asset: {e}")
             raise
 
     def create_hands(self, envs, hand_asset):
@@ -229,26 +250,30 @@ class HandInitializer:
             if i == 0:
                 self.original_dof_props = hand_dof_props.copy()
                 # Debug: Print DOF limits for first 6 joints
-                print(f"\n===== BASE DOF LIMITS FROM ACTOR =====")
+                logger.debug("===== BASE DOF LIMITS FROM ACTOR =====")
                 for j in range(min(6, len(dof_names))):
-                    print(f"DOF {j} ({dof_names[j]}): lower={hand_dof_props['lower'][j]:.6f}, upper={hand_dof_props['upper'][j]:.6f}")
-                print("=====================================\n")
+                    logger.debug(
+                        f"DOF {j} ({dof_names[j]}): lower={hand_dof_props['lower'][j]:.6f}, upper={hand_dof_props['upper'][j]:.6f}"
+                    )
+                logger.debug("=====================================")
 
             # Log DOF names for the first actor to verify all 25 DOFs
             if i == 0:
-                print(f"\n===== DOF NAMES VERIFICATION =====")
-                print(f"Total DOFs found: {len(dof_names)}")
-                print("DOF Index -> Joint Name:")
+                logger.debug("===== DOF NAMES VERIFICATION =====")
+                logger.debug(f"Total DOFs found: {len(dof_names)}")
+                logger.debug("DOF Index -> Joint Name:")
                 for j, name in enumerate(dof_names):
                     # Determine joint type for classification
                     joint_type = "UNKNOWN"
                     if any(base_name in name for base_name in self.base_joint_names):
                         joint_type = "BASE"
-                    elif any(finger_name in name for finger_name in self.finger_joint_names):
+                    elif any(
+                        finger_name in name for finger_name in self.finger_joint_names
+                    ):
                         joint_type = "FINGER"
 
-                    print(f"  {j:2d}: {name:<20} ({joint_type})")
-                print("=====================================\n")
+                    logger.debug(f"  {j:2d}: {name:<20} ({joint_type})")
+                logger.debug("=====================================")
 
             for j, name in enumerate(dof_names):
                 # Set drive mode (keep using position control)
@@ -283,7 +308,7 @@ class HandInitializer:
             "hand_handles": self.hand_handles,
             "fingertip_body_handles": self.fingertip_body_handles,
             "fingerpad_body_handles": self.fingerpad_body_handles,
-            "dof_properties": self.original_dof_props  # Add DOF properties to return value
+            "dof_properties": self.original_dof_props,  # Add DOF properties to return value
         }
 
     def get_dof_mapping(self):
@@ -298,7 +323,7 @@ class HandInitializer:
             "finger_joint_names": self.finger_joint_names,
             "active_joint_mapping": self.active_joint_mapping,
             "joint_to_control": self.joint_to_control,
-            "active_joint_names": self.active_joint_names
+            "active_joint_names": self.active_joint_names,
         }
 
     def initialize_rigid_body_indices(self, envs):
@@ -319,7 +344,9 @@ class HandInitializer:
 
         # Ensure we only initialize once
         if self.hand_indices:
-            raise RuntimeError("Rigid body indices have already been initialized. They should only be initialized once.")
+            raise RuntimeError(
+                "Rigid body indices have already been initialized. They should only be initialized once."
+            )
 
         # Acquire indices for each environment
         for i, (env, hand_handle) in enumerate(zip(envs, self.hand_handles)):
@@ -349,10 +376,12 @@ class HandInitializer:
 
         logger.debug(f"Initialized rigid body indices for {len(envs)} environments")
         logger.debug(f"Hand indices: {self.hand_indices}")
-        logger.debug(f"First env fingertip indices: {self.fingertip_indices[0] if self.fingertip_indices else 'None'}")
+        logger.debug(
+            f"First env fingertip indices: {self.fingertip_indices[0] if self.fingertip_indices else 'None'}"
+        )
 
         return {
             "hand_indices": self.hand_indices,
             "fingertip_indices": self.fingertip_indices,
-            "fingerpad_indices": self.fingerpad_indices
+            "fingerpad_indices": self.fingerpad_indices,
         }
