@@ -256,7 +256,7 @@ class ResetManager:
                     self.randomize_dof_positions
                     and self.dof_position_randomization_range > 0
                 ):
-                    print("DEBUG: reset_manager.reset_idx - Applying DOF randomization")
+                    # Apply DOF randomization
                     dof_pos = (
                         dof_pos
                         + torch.rand(dof_pos.shape, device=self.device)
@@ -265,15 +265,13 @@ class ResetManager:
                     )
 
                 # Set DOF positions for reset environments
-                print(
-                    f"DEBUG: reset_manager.reset_idx - Setting DOF positions for env_ids: {env_ids}"
-                )
+                # Set DOF positions
                 dof_state[env_ids, :, 0] = dof_pos
 
                 # Zero DOF velocities
-                print("DEBUG: reset_manager.reset_idx - Zeroing DOF velocities")
+                # Zero DOF velocities
                 dof_state[env_ids, :, 1] = 0
-                print("DEBUG: reset_manager.reset_idx - DOF states reset")
+                # DOF states reset
 
             # Reset hand pose in root state tensor
             # Reset hand pose
