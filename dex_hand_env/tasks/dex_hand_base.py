@@ -9,6 +9,7 @@ import os
 import sys
 import math
 import numpy as np
+from loguru import logger
 
 # Import Gym
 
@@ -96,26 +97,28 @@ class DexHandBase(VecTask):
             virtual_screen_capture: If True, allow capturing screen for rgb_array mode.
             force_render: If True, always render in the steps.
         """
-        print("\n===== DEXHAND ENVIRONMENT INITIALIZATION =====")
-        print(f"RL Device: {rl_device}")
-        print(f"Sim Device: {sim_device}")
-        print(f"Graphics Device ID: {graphics_device_id}")
-        print(f"Headless Mode: {headless}")
-        print(f"Force Render: {force_render}")
+        logger.info("\n===== DEXHAND ENVIRONMENT INITIALIZATION =====")
+        logger.info(f"RL Device: {rl_device}")
+        logger.info(f"Sim Device: {sim_device}")
+        logger.info(f"Graphics Device ID: {graphics_device_id}")
+        logger.info(f"Headless Mode: {headless}")
+        logger.info(f"Force Render: {force_render}")
 
         # Store GPU pipeline flag for use in step() and other methods
         self.use_gpu_pipeline = cfg["sim"].get("use_gpu_pipeline", False)
 
         # Ensure we're using a GPU device if GPU pipeline is enabled
         if self.use_gpu_pipeline and sim_device == "cpu":
-            print(
-                "WARNING: GPU Pipeline is enabled but using CPU device. This may cause errors. Disabling GPU pipeline."
+            logger.warning(
+                "GPU Pipeline is enabled but using CPU device. This may cause errors. Disabling GPU pipeline."
             )
             cfg["sim"]["use_gpu_pipeline"] = False
             self.use_gpu_pipeline = False
 
-        print(f"GPU Pipeline: {'enabled' if self.use_gpu_pipeline else 'disabled'}")
-        print("=============================================\n")
+        logger.info(
+            f"GPU Pipeline: {'enabled' if self.use_gpu_pipeline else 'disabled'}"
+        )
+        logger.info("=============================================\n")
 
         # Core initialization variables
         self.cfg = cfg
@@ -170,7 +173,7 @@ class DexHandBase(VecTask):
         self.rule_based_finger_controller = None
 
         # Initialize the base class
-        print("Initializing VecTask parent class...")
+        logger.info("Initializing VecTask parent class...")
         super().__init__(
             config=self.cfg,
             rl_device=rl_device,
@@ -180,7 +183,7 @@ class DexHandBase(VecTask):
             virtual_screen_capture=virtual_screen_capture,
             force_render=force_render,
         )
-        print("VecTask parent class initialized, creating simulation...")
+        logger.info("VecTask parent class initialized, creating simulation...")
 
         # Initialize components
         self._init_components()
@@ -205,17 +208,17 @@ class DexHandBase(VecTask):
         # Additional setup (should only happen after components are created)
         self._setup_additional_tensors()
 
-        print("DexHandBase initialization complete.")
+        logger.info("DexHandBase initialization complete.")
 
     def _init_components(self):
         """
         Initialize all components for the environment.
         """
-        print("Creating components...")
+        logger.debug("Creating components...")
 
         # Check if simulation exists (should have been created by parent class)
         if not hasattr(self, "sim") or self.sim is None:
-            print("Simulation not created by parent class, creating now...")
+            logger.warning("Simulation not created by parent class, creating now...")
             self.sim = self.create_sim()
 
         # Create hand initializer
@@ -251,9 +254,9 @@ class DexHandBase(VecTask):
 
         # Set up viewer
         # CRITICAL: Create viewer even in headless mode for proper DOF control
-        print("Creating viewer...")
+        logger.debug("Creating viewer...")
         self.set_viewer()
-        print("Viewer created")
+        logger.debug("Viewer created")
 
         # Initialize rigid body indices after all actors have been created
         # This must happen after task objects are created but before tensor manager
@@ -273,9 +276,9 @@ class DexHandBase(VecTask):
 
         # CRITICAL: Call prepare_sim after all actors are created and tensors acquired
         # This is needed for both GPU pipeline and proper DOF control in headless mode
-        print("Preparing simulation...")
+        logger.debug("Preparing simulation...")
         self.gym.prepare_sim(self.sim)
-        print("Simulation prepared successfully")
+        logger.debug("Simulation prepared successfully")
 
         # Set up tensors
         tensors = self.tensor_manager.setup_tensors(self.fingertip_indices)
@@ -429,7 +432,7 @@ class DexHandBase(VecTask):
         """
         Create environments in the simulation.
         """
-        print("Creating environments...")
+        logger.info("Creating environments...")
 
         # Define environment spacing
         env_lower = gymapi.Vec3(-1.0, -1.0, 0.0)
@@ -461,7 +464,7 @@ class DexHandBase(VecTask):
             if hasattr(self.task, "create_task_objects"):
                 self.task.create_task_objects(self.gym, self.sim, env, i)
 
-        print(f"Created {self.num_envs} environments.")
+        logger.info(f"Created {self.num_envs} environments.")
 
     def _setup_additional_tensors(self):
         """
@@ -621,7 +624,7 @@ class DexHandBase(VecTask):
                 hand_indices=None,
             )
         except Exception as e:
-            print(f"CRITICAL ERROR in reset_idx: {e}")
+            logger.critical(f"CRITICAL ERROR in reset_idx: {e}")
             import traceback
 
             traceback.print_exc()
@@ -646,7 +649,7 @@ class DexHandBase(VecTask):
                     reset_callback=lambda env_ids: self.reset_idx(env_ids)
                 )
             except Exception as e:
-                print(f"ERROR in check_keyboard_events: {e}")
+                logger.error(f"ERROR in check_keyboard_events: {e}")
                 import traceback
 
                 traceback.print_exc()
@@ -674,7 +677,7 @@ class DexHandBase(VecTask):
                 task_targets=task_targets,
             )
         except Exception as e:
-            print(f"ERROR in action_processor.process_actions: {e}")
+            logger.error(f"ERROR in action_processor.process_actions: {e}")
             import traceback
 
             traceback.print_exc()
@@ -684,7 +687,7 @@ class DexHandBase(VecTask):
         try:
             self._apply_rule_based_control()
         except Exception as e:
-            print(f"ERROR in _apply_rule_based_control: {e}")
+            logger.error(f"ERROR in _apply_rule_based_control: {e}")
             import traceback
 
             traceback.print_exc()
@@ -694,7 +697,7 @@ class DexHandBase(VecTask):
         try:
             self.observation_encoder.update_prev_actions(self.actions)
         except Exception as e:
-            print(f"ERROR in update_prev_actions: {e}")
+            logger.error(f"ERROR in update_prev_actions: {e}")
             import traceback
 
             traceback.print_exc()
@@ -779,7 +782,7 @@ class DexHandBase(VecTask):
             return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
 
         except Exception as e:
-            print(f"CRITICAL ERROR in post_physics_step: {e}")
+            logger.critical(f"CRITICAL ERROR in post_physics_step: {e}")
             import traceback
 
             traceback.print_exc()
@@ -793,7 +796,7 @@ class DexHandBase(VecTask):
         try:
             self.pre_physics_step(actions)
         except Exception as e:
-            print(f"ERROR in pre_physics_step: {e}")
+            logger.error(f"ERROR in pre_physics_step: {e}")
             import traceback
 
             traceback.print_exc()
@@ -810,7 +813,7 @@ class DexHandBase(VecTask):
             if self.use_gpu_pipeline:
                 self.physics_manager.refresh_tensors()
         except Exception as e:
-            print(f"ERROR in physics step: {e}")
+            logger.error(f"ERROR in physics step: {e}")
             import traceback
 
             traceback.print_exc()
@@ -820,7 +823,7 @@ class DexHandBase(VecTask):
         try:
             obs, rew, done, info = self.post_physics_step()
         except Exception as e:
-            print(f"ERROR in post_physics_step: {e}")
+            logger.error(f"ERROR in post_physics_step: {e}")
             import traceback
 
             traceback.print_exc()
@@ -870,12 +873,12 @@ class DexHandBase(VecTask):
 
         # Validate controllers
         if base_controller is not None and self.policy_controls_hand_base:
-            print(
-                "Warning: Base controller provided but policy_controls_hand_base=True. Controller will be ignored."
+            logger.warning(
+                "Base controller provided but policy_controls_hand_base=True. Controller will be ignored."
             )
         if finger_controller is not None and self.policy_controls_fingers:
-            print(
-                "Warning: Finger controller provided but policy_controls_fingers=True. Controller will be ignored."
+            logger.warning(
+                "Finger controller provided but policy_controls_fingers=True. Controller will be ignored."
             )
 
     def _apply_rule_based_control(self):
@@ -903,11 +906,11 @@ class DexHandBase(VecTask):
                         :, 0 : self.action_processor.NUM_BASE_DOFS
                     ] = base_targets
                 else:
-                    print(
-                        f"Error: Base controller returned shape {base_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_BASE_DOFS})"
+                    logger.error(
+                        f"Base controller returned shape {base_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_BASE_DOFS})"
                     )
             except Exception as e:
-                print(f"Error in base controller: {e}")
+                logger.error(f"Error in base controller: {e}")
                 import traceback
 
                 traceback.print_exc()
@@ -929,11 +932,11 @@ class DexHandBase(VecTask):
                         finger_targets=finger_targets, dof_pos=self.dof_pos
                     )
                 else:
-                    print(
-                        f"Error: Finger controller returned shape {finger_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_ACTIVE_FINGER_DOFS})"
+                    logger.error(
+                        f"Finger controller returned shape {finger_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_ACTIVE_FINGER_DOFS})"
                     )
             except Exception as e:
-                print(f"Error in finger controller: {e}")
+                logger.error(f"Error in finger controller: {e}")
                 import traceback
 
                 traceback.print_exc()
@@ -956,7 +959,7 @@ class DexHandBase(VecTask):
                     gymtorch.unwrap_tensor(self.action_processor.current_targets),
                 )
             except Exception as e:
-                print(f"Error setting DOF targets: {e}")
+                logger.error(f"Error setting DOF targets: {e}")
                 import traceback
 
                 traceback.print_exc()
@@ -965,7 +968,7 @@ class DexHandBase(VecTask):
         """
         Create index mappings for convenient access to tensors by key names.
         """
-        print("Creating index mappings...")
+        logger.debug("Creating index mappings...")
 
         # 1. Base joint name to index mapping (ARTx, ARTy, etc. -> 0-5)
         self.base_joint_to_index = {}
@@ -1005,11 +1008,11 @@ class DexHandBase(VecTask):
             )  # e.g., "r_f_link1_pad" -> "r_f_link1"
             self.finger_body_to_index[f"{finger_name}_pad"] = ("fingerpad", i)
 
-        print("Created mappings:")
-        print(f"  Base joints: {len(self.base_joint_to_index)} entries")
-        print(f"  Control names: {len(self.control_name_to_index)} entries")
-        print(f"  Raw DOF names: {len(self.raw_dof_name_to_index)} entries")
-        print(f"  Finger bodies: {len(self.finger_body_to_index)} entries")
+        logger.debug("Created mappings:")
+        logger.debug(f"  Base joints: {len(self.base_joint_to_index)} entries")
+        logger.debug(f"  Control names: {len(self.control_name_to_index)} entries")
+        logger.debug(f"  Raw DOF names: {len(self.raw_dof_name_to_index)} entries")
+        logger.debug(f"  Finger bodies: {len(self.finger_body_to_index)} entries")
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""
