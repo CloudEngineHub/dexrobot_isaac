@@ -47,8 +47,8 @@ class ObservationEncoder:
         num_envs,
         device,
         tensor_manager,
-        hand_asset=None,
-        hand_initializer=None,
+        hand_initializer,
+        hand_asset,
     ):
         """
         Initialize the observation encoder.
@@ -59,8 +59,8 @@ class ObservationEncoder:
             num_envs: Number of environments
             device: PyTorch device
             tensor_manager: Reference to tensor manager for accessing tensors
-            hand_asset: Hand asset for getting DOF names (optional)
             hand_initializer: Reference to hand initializer for accessing rigid body indices
+            hand_asset: Hand asset for getting DOF names
         """
         self.gym = gym
         self.sim = sim
@@ -126,11 +126,7 @@ class ObservationEncoder:
         self.active_joint_names = active_joint_names
         self.action_processor = action_processor
 
-        # Verify hand_initializer was provided
-        if self.hand_initializer is None:
-            raise RuntimeError(
-                "ObservationEncoder requires hand_initializer reference for accessing rigid body indices"
-            )
+        # hand_initializer is now a required parameter
 
         # Pre-compute active finger DOF indices for efficient observation extraction
         self.active_finger_dof_indices = self._compute_active_finger_dof_indices()

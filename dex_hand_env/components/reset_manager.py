@@ -206,10 +206,10 @@ class ResetManager:
     def reset_idx(
         self,
         env_ids,
-        physics_manager=None,
-        dof_state=None,
-        root_state_tensor=None,
-        hand_indices=None,
+        physics_manager,
+        dof_state,
+        root_state_tensor,
+        hand_indices,
         task_reset_func=None,
     ):
         """
@@ -232,10 +232,7 @@ class ResetManager:
                 # No environments to reset
                 return True
 
-            # Validate inputs
-            if dof_state is None or root_state_tensor is None:
-                logger.error("ERROR: dof_state and root_state_tensor must be provided")
-                return False
+            # No need to validate required parameters - they are now non-optional
 
             # Removed excessive DEBUG logging - tensor shapes and devices
 
@@ -380,10 +377,6 @@ class ResetManager:
                 pass
 
             # Apply tensor states to simulation
-            if physics_manager is None:
-                raise RuntimeError(
-                    "physics_manager is None. Cannot apply tensor states during reset."
-                )
 
             # Apply tensor states to simulation
             physics_manager.apply_tensor_states(
@@ -402,10 +395,10 @@ class ResetManager:
 
     def reset_all(
         self,
-        physics_manager=None,
-        dof_state=None,
-        root_state_tensor=None,
-        hand_indices=None,
+        physics_manager,
+        dof_state,
+        root_state_tensor,
+        hand_indices,
         task_reset_func=None,
     ):
         """

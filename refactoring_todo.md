@@ -39,11 +39,13 @@
 - [ ] Refactor to properly delegate to reset_manager component
 - [ ] Remove duplicated reset logic from dex_hand_base
 
-### 7. Make required arguments non-optional
-- [ ] `reset_manager.reset_idx()`: physics_manager, dof_state, root_state_tensor should not have default=None
-- [ ] Review all component methods for optional parameters that are actually required
-- [ ] Remove =None defaults and fail at function definition time, not runtime
-- [ ] Update method signatures to enforce required dependencies
+### 7. Make required arguments non-optional ✅
+- [x] `reset_manager.reset_idx()`: physics_manager, dof_state, root_state_tensor no longer have default=None
+- [x] `reset_manager.reset_all()`: Made all required parameters non-optional
+- [x] `observation_encoder.__init__()`: hand_initializer and hand_asset are now required
+- [x] `action_processor.__init__()`: dof_props and hand_asset are now required
+- [x] `action_processor.setup()`: dof_props is now required
+- [x] Fixed indentation error introduced during refactoring
 
 ## 🟡 Important Issues (Medium Priority)
 

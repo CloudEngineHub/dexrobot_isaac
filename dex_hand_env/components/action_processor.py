@@ -31,7 +31,7 @@ class ActionProcessor:
     - Manage PD control targets
     """
 
-    def __init__(self, gym, sim, num_envs, device, dof_props=None, hand_asset=None):
+    def __init__(self, gym, sim, num_envs, device, dof_props, hand_asset):
         """
         Initialize the action processor.
 
@@ -40,8 +40,8 @@ class ActionProcessor:
             sim: The isaacgym simulation instance
             num_envs: Number of environments
             device: PyTorch device
-            dof_props: DOF properties tensor (optional)
-            hand_asset: Hand asset for getting DOF names (optional)
+            dof_props: DOF properties tensor
+            hand_asset: Hand asset for getting DOF names
         """
         self.gym = gym
         self.sim = sim
@@ -96,13 +96,13 @@ class ActionProcessor:
         # Scaling coefficients for unscaling actions (will be computed during setup)
         self.action_scaling_coeffs = None
 
-    def setup(self, num_dof, dof_props=None):
+    def setup(self, num_dof, dof_props):
         """
         Set up action processor with DOF information.
 
         Args:
             num_dof: Number of DOFs in the model
-            dof_props: DOF properties tensor (optional)
+            dof_props: DOF properties tensor (required)
         """
         self.num_dof = num_dof
 
@@ -130,35 +130,30 @@ class ActionProcessor:
         )
 
         # Initialize DOF limits
-        if dof_props is not None:
-            self.dof_props = dof_props
+        self.dof_props = dof_props
 
-            # Check if it's a tensor (from TensorManager) or a dictionary
-            if isinstance(dof_props, torch.Tensor):
-                logger.debug(f"DOF props is a tensor with shape: {dof_props.shape}")
-                # Format is [stiffness, damping, friction, armature, min, max]
-                # Extract limits from the tensor (indices 4 and 5 are min and max)
-                self.dof_lower_limits = dof_props[:, 4].clone().to(device=self.device)
-                self.dof_upper_limits = dof_props[:, 5].clone().to(device=self.device)
-            elif (
-                isinstance(dof_props, dict)
-                and "lower" in dof_props
-                and "upper" in dof_props
-            ):
-                # Extract DOF limits from dictionary
-                self.dof_lower_limits = torch.tensor(
-                    dof_props["lower"], dtype=torch.float, device=self.device
-                )
-                self.dof_upper_limits = torch.tensor(
-                    dof_props["upper"], dtype=torch.float, device=self.device
-                )
-            else:
-                raise RuntimeError(
-                    f"DOF properties format not recognized: {type(dof_props)}. Expected torch.Tensor or dict with 'lower'/'upper' keys. Cannot proceed without valid DOF limits."
-                )
+        # Check if it's a tensor (from TensorManager) or a dictionary
+        if isinstance(dof_props, torch.Tensor):
+            logger.debug(f"DOF props is a tensor with shape: {dof_props.shape}")
+            # Format is [stiffness, damping, friction, armature, min, max]
+            # Extract limits from the tensor (indices 4 and 5 are min and max)
+            self.dof_lower_limits = dof_props[:, 4].clone().to(device=self.device)
+            self.dof_upper_limits = dof_props[:, 5].clone().to(device=self.device)
+        elif (
+            isinstance(dof_props, dict)
+            and "lower" in dof_props
+            and "upper" in dof_props
+        ):
+            # Extract DOF limits from dictionary
+            self.dof_lower_limits = torch.tensor(
+                dof_props["lower"], dtype=torch.float, device=self.device
+            )
+            self.dof_upper_limits = torch.tensor(
+                dof_props["upper"], dtype=torch.float, device=self.device
+            )
         else:
             raise RuntimeError(
-                "DOF properties not provided to ActionProcessor. Cannot proceed without DOF limits."
+                f"DOF properties format not recognized: {type(dof_props)}. Expected torch.Tensor or dict with 'lower'/'upper' keys. Cannot proceed without valid DOF limits."
             )
 
         # Compute action scaling coefficients for unscaling
