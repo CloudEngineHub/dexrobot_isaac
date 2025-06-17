@@ -316,9 +316,6 @@ class DexHandBase(VecTask):
             )
         self.action_processor.set_control_mode(self.cfg["env"]["controlMode"])
 
-        # Basic setup (without action scaling - control_dt not yet determined)
-        self.action_processor.setup(self.num_dof, self.dof_props)
-
         # Set control options - determine which parts are controlled by policy vs rule-based control
         self.action_processor.set_control_options(
             policy_controls_hand_base=self.cfg["env"]["policyControlsHandBase"],
@@ -335,12 +332,15 @@ class DexHandBase(VecTask):
                 finger_targets=self.cfg["env"]["defaultFingerTargets"]
             )
 
-        # Set component-wise velocity limits for position_delta mode
+        # Set component-wise velocity limits for position_delta mode (MUST be before setup)
         self.action_processor.set_velocity_limits(
             finger_vel_limit=self.cfg["env"]["maxFingerJointVelocity"],
             base_lin_vel_limit=self.cfg["env"]["maxBaseLinearVelocity"],
             base_ang_vel_limit=self.cfg["env"]["maxBaseAngularVelocity"],
         )
+
+        # Basic setup (without action scaling - control_dt not yet determined)
+        self.action_processor.setup(self.num_dof, self.dof_props)
 
         # ActionProcessor now accesses control_dt directly from physics_manager via property decorator
 
