@@ -56,10 +56,11 @@
 
 ## 🟡 Important Issues (Medium Priority)
 
-### 8. Vectorize loops
-- [ ] `action_processor.py` L578-615: `_apply_coupling_to_targets` - nested loops over 12 actions × 1-3 joints × all envs
-  - Precompute tensor mappings: `coupling_indices`, `coupling_scales`, `action_to_coupling_range`
+### 8. Vectorize loops ✅
+- [x] `action_processor.py` L578-615: `_apply_coupling_to_targets` - nested loops over 12 actions × 1-3 joints × all envs
+  - Precomputed tensor mappings: `coupling_indices`, `coupling_scales`, `action_to_coupling_range`
   - Use vectorized gather/scatter operations for ~10-100x speedup
+  - Removed loop-based fallback - always use vectorized implementation
 - [ ] `reset_manager.py` L275-328: Environment reset loop
 - [ ] `dex_hand_base.py` L724-731: Hand position extraction loop
 - [ ] `observation_encoder.py` L286-320: Nested loops for DOF mapping
@@ -76,26 +77,27 @@
 - [ ] Use WARNING for potential issues
 - [ ] Use ERROR for failures
 
-### 11. Move magic numbers to configuration
-- [ ] `action_processor.py`: Velocity limits should come from config
-  - `policy_finger_velocity_limit = 2.0` (rad/s)
-  - `policy_base_lin_velocity_limit = 1.0` (m/s)
-  - `policy_base_ang_velocity_limit = 1.5` (rad/s)
-- [ ] Remove DOF limit fallbacks (-1.0, 1.0) - violates fail-fast policy
+### 11. Move magic numbers to configuration ✅
+- [x] `action_processor.py`: Velocity limits now come from config
+  - Velocity limits set via `_set_velocity_limits()` method
+  - Must be called before `setup()` to ensure proper initialization
+  - Clear error messages if limits not set
+- [x] Removed DOF limit fallbacks - now raises RuntimeError per fail-fast policy
 
-### 12. Consolidate ActionProcessor initialization
-- [ ] Multiple setup methods need consolidation (with caveat from guide_component_initialization.md)
-  - Current: `__init__` → `set_control_mode` → `setup` → `set_control_options` → `set_default_targets` → `set_velocity_limits`
-  - Proposed: Single `initialize(config)` method that validates and sets up everything
-  - Note: Some initialization order constraints exist due to component dependencies
-- [ ] Add `_initialized` flag to prevent double initialization
+### 12. Consolidate ActionProcessor initialization ✅
+- [x] Multiple setup methods consolidated into `initialize_from_config()`
+  - Single atomic initialization method replaces error-prone multi-step setup
+  - All setter methods made private (_set_control_mode, _set_velocity_limits, etc.)
+  - Ensures correct initialization order automatically
+- [x] Added `_initialized` flag to prevent double initialization
 
-### 13. Eliminate runtime branching on control mode
-- [ ] `_compute_position_targets` - assign function pointer in setup
-- [ ] `_get_control_mode_limits` - assign function pointer in setup
-- [ ] `_compute_joint_target` - assign function pointer in setup
-- [ ] `_process_finger_dofs` - refactor inline branching
-- [ ] Already done: `unscale_actions` uses `_unscale_actions_fn` pointer
+### 13. Eliminate runtime branching on control mode ✅
+- [x] `_compute_position_targets` - function pointer assigned in setup
+- [x] `_get_control_mode_limits` - function pointer assigned in setup
+- [x] `_compute_joint_target` - function pointer assigned in setup
+- [x] `_process_finger_dofs` - no runtime branching needed (policy control is fixed)
+- [x] `unscale_actions` uses `_unscale_actions_fn` pointer
+- [x] Added mode-specific methods for all operations
 
 ## 🟢 Nice to Have (Low Priority)
 

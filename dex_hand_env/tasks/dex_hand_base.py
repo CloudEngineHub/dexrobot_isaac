@@ -309,38 +309,34 @@ class DexHandBase(VecTask):
             physics_manager=self.physics_manager,
         )
 
-        # Set control mode BEFORE setup
+        # Initialize action processor with all configuration at once
         if "controlMode" not in self.cfg["env"]:
             raise RuntimeError(
                 "controlMode not specified in config. Must be 'position' or 'position_delta'."
             )
-        self.action_processor.set_control_mode(self.cfg["env"]["controlMode"])
 
-        # Set control options - determine which parts are controlled by policy vs rule-based control
-        self.action_processor.set_control_options(
-            policy_controls_hand_base=self.cfg["env"]["policyControlsHandBase"],
-            policy_controls_fingers=self.cfg["env"]["policyControlsFingers"],
-        )
+        action_processor_config = {
+            "control_mode": self.cfg["env"]["controlMode"],
+            "num_dof": self.num_dof,
+            "dof_props": self.dof_props,
+            "policy_controls_hand_base": self.cfg["env"]["policyControlsHandBase"],
+            "policy_controls_fingers": self.cfg["env"]["policyControlsFingers"],
+            "finger_vel_limit": self.cfg["env"]["maxFingerJointVelocity"],
+            "base_lin_vel_limit": self.cfg["env"]["maxBaseLinearVelocity"],
+            "base_ang_vel_limit": self.cfg["env"]["maxBaseAngularVelocity"],
+        }
 
-        # Set default targets
+        # Add optional default targets if present
         if "defaultBaseTargets" in self.cfg["env"]:
-            self.action_processor.set_default_targets(
-                base_targets=self.cfg["env"]["defaultBaseTargets"]
-            )
+            action_processor_config["default_base_targets"] = self.cfg["env"][
+                "defaultBaseTargets"
+            ]
         if "defaultFingerTargets" in self.cfg["env"]:
-            self.action_processor.set_default_targets(
-                finger_targets=self.cfg["env"]["defaultFingerTargets"]
-            )
+            action_processor_config["default_finger_targets"] = self.cfg["env"][
+                "defaultFingerTargets"
+            ]
 
-        # Set component-wise velocity limits for position_delta mode (MUST be before setup)
-        self.action_processor.set_velocity_limits(
-            finger_vel_limit=self.cfg["env"]["maxFingerJointVelocity"],
-            base_lin_vel_limit=self.cfg["env"]["maxBaseLinearVelocity"],
-            base_ang_vel_limit=self.cfg["env"]["maxBaseAngularVelocity"],
-        )
-
-        # Basic setup (without action scaling - control_dt not yet determined)
-        self.action_processor.setup(self.num_dof, self.dof_props)
+        self.action_processor.initialize_from_config(action_processor_config)
 
         # ActionProcessor now accesses control_dt directly from physics_manager via property decorator
 

@@ -237,22 +237,22 @@ class ActionProcessor:
             )
 
         # Set control mode
-        self.set_control_mode(config["control_mode"])
+        self._set_control_mode(config["control_mode"])
 
         # Set control options
-        self.set_control_options(
+        self._set_control_options(
             policy_controls_hand_base=config.get("policy_controls_hand_base", True),
             policy_controls_fingers=config.get("policy_controls_fingers", True),
         )
 
         # Set default targets if provided
         if "default_base_targets" in config:
-            self.set_default_targets(base_targets=config["default_base_targets"])
+            self._set_default_targets(base_targets=config["default_base_targets"])
         if "default_finger_targets" in config:
-            self.set_default_targets(finger_targets=config["default_finger_targets"])
+            self._set_default_targets(finger_targets=config["default_finger_targets"])
 
         # Set velocity limits
-        self.set_velocity_limits(
+        self._set_velocity_limits(
             finger_vel_limit=config["finger_vel_limit"],
             base_lin_vel_limit=config["base_lin_vel_limit"],
             base_ang_vel_limit=config["base_ang_vel_limit"],
@@ -270,10 +270,11 @@ class ActionProcessor:
             f"finger_control={self.policy_controls_fingers}"
         )
 
-    def set_control_mode(self, mode):
+    def _set_control_mode(self, mode):
         """
         Set the control mode for action processing.
         Note: Must be called before setup() to take effect.
+        PRIVATE: Should only be called from initialize_from_config.
 
         Args:
             mode: Control mode string ("position" or "position_delta")
@@ -292,11 +293,12 @@ class ActionProcessor:
 
         self.action_control_mode = mode
 
-    def set_control_options(
+    def _set_control_options(
         self, policy_controls_hand_base=None, policy_controls_fingers=None
     ):
         """
         Set which parts of the hand are controlled by the policy vs rule-based control.
+        PRIVATE: Should only be called from initialize_from_config.
 
         When policy_controls_hand_base=False, the hand base is controlled by rule-based controllers
         instead of policy actions. The base DOFs can still move, but their motion is
@@ -319,9 +321,10 @@ class ActionProcessor:
                 "At least one of policy_controls_hand_base or policy_controls_fingers must be True"
             )
 
-    def set_default_targets(self, base_targets=None, finger_targets=None):
+    def _set_default_targets(self, base_targets=None, finger_targets=None):
         """
         Set default targets for uncontrolled DOFs.
+        PRIVATE: Should only be called from initialize_from_config.
 
         Args:
             base_targets: Default targets for base DOFs
@@ -337,11 +340,12 @@ class ActionProcessor:
                 finger_targets = torch.tensor(finger_targets, device=self.device)
             self.default_finger_targets = finger_targets
 
-    def set_velocity_limits(
+    def _set_velocity_limits(
         self, finger_vel_limit=None, base_lin_vel_limit=None, base_ang_vel_limit=None
     ):
         """
         Set component-wise velocity limits for position_delta mode action scaling.
+        PRIVATE: Should only be called from initialize_from_config.
 
         These limits are applied per component (each joint/axis independently):
         - finger_vel_limit: Applied to each finger joint individually
@@ -398,7 +402,10 @@ class ActionProcessor:
                 targets = self.current_targets.clone()
             else:
                 # Only on first step, initialize with current positions
-                targets = self.dof_pos.clone()
+                raise RuntimeError(
+                    "current_targets is None during action processing. "
+                    "This indicates setup() was not called properly."
+                )
 
             # Split actions into base and finger components
             action_idx = 0
@@ -475,10 +482,10 @@ class ActionProcessor:
         - action_to_coupling_range: (12, 2) tensor with [start_idx, end_idx] for each action
         """
         if not self.dof_names:
-            logger.warning(
-                "DOF names not available. Cannot precompute coupling tensors."
+            raise RuntimeError(
+                "DOF names not available. Cannot precompute coupling tensors. "
+                "This indicates hand_asset was not provided during initialization."
             )
-            return
 
         # Get DOF name to index mapping
         dof_name_to_idx = self._get_dof_name_to_idx_mapping()
@@ -503,43 +510,45 @@ class ActionProcessor:
                 for joint_spec in joint_mapping:
                     joint_name, coupling_scale = self._parse_joint_spec(joint_spec)
 
-                    if joint_name in dof_name_to_idx:
-                        dof_idx = dof_name_to_idx[joint_name]
-                        coupling_indices_list.append([action_idx, dof_idx])
-                        coupling_scales_list.append(coupling_scale)
-                        coupling_idx += 1
-                    else:
-                        logger.warning(f"Joint '{joint_name}' not found in DOF names")
+                    if joint_name not in dof_name_to_idx:
+                        raise RuntimeError(
+                            f"Joint '{joint_name}' from coupling map not found in DOF names. "
+                            f"Available DOFs: {self.dof_names}"
+                        )
+
+                    dof_idx = dof_name_to_idx[joint_name]
+                    coupling_indices_list.append([action_idx, dof_idx])
+                    coupling_scales_list.append(coupling_scale)
+                    coupling_idx += 1
 
             end_idx = coupling_idx
             action_ranges.append([start_idx, end_idx])
 
         # Convert to tensors
-        if coupling_indices_list:
-            self.coupling_indices = torch.tensor(
-                coupling_indices_list, dtype=torch.long, device=self.device
+        if not coupling_indices_list:
+            raise RuntimeError(
+                "No valid couplings found. This indicates a mismatch between "
+                "finger_coupling_map and available DOF names."
             )
-            self.coupling_scales = torch.tensor(
-                coupling_scales_list, dtype=torch.float32, device=self.device
-            )
-        else:
-            # Empty tensors if no couplings
-            self.coupling_indices = torch.zeros(
-                (0, 2), dtype=torch.long, device=self.device
-            )
-            self.coupling_scales = torch.zeros(
-                (0,), dtype=torch.float32, device=self.device
-            )
+
+        self.coupling_indices = torch.tensor(
+            coupling_indices_list, dtype=torch.long, device=self.device
+        )
+        self.coupling_scales = torch.tensor(
+            coupling_scales_list, dtype=torch.float32, device=self.device
+        )
 
         self.action_to_coupling_range = torch.tensor(
             action_ranges, dtype=torch.long, device=self.device
         )
 
         # Find index for middle finger spread (fixed joint)
-        if "r_f_joint3_1" in dof_name_to_idx:
-            self.middle_finger_spread_idx = dof_name_to_idx["r_f_joint3_1"]
-        else:
-            self.middle_finger_spread_idx = -1
+        if "r_f_joint3_1" not in dof_name_to_idx:
+            raise RuntimeError(
+                "Middle finger spread joint 'r_f_joint3_1' not found in DOF names. "
+                "This is required for proper finger coupling."
+            )
+        self.middle_finger_spread_idx = dof_name_to_idx["r_f_joint3_1"]
 
         logger.debug(
             f"Precomputed coupling tensors: {len(coupling_indices_list)} couplings, "
@@ -686,17 +695,12 @@ class ActionProcessor:
                 # Update action index
                 action_idx += self.NUM_BASE_DOFS
             else:
-                # Get targets from task or use defaults
-                if task_targets is not None and "base_targets" in task_targets:
-                    targets[:, : self.NUM_BASE_DOFS] = task_targets["base_targets"]
-                else:
-                    # Expand default_base_targets to match batch dimension
-                    expanded_targets = self._expand_to_batch(
-                        self.default_base_targets, self.num_envs
-                    )
-                    targets[:, : self.NUM_BASE_DOFS] = expanded_targets
+                raise RuntimeError(
+                    "Base DOF actions missing when policy_controls_hand_base=True. "
+                    "This indicates a mismatch between action space and control configuration."
+                )
         else:
-            # Hand base not controlled by policy - use task targets or defaults
+            # Hand base not controlled by policy - use task targets if provided, otherwise defaults
             if task_targets is not None and "base_targets" in task_targets:
                 if (
                     targets[:, : self.NUM_BASE_DOFS].shape
@@ -704,11 +708,12 @@ class ActionProcessor:
                 ):
                     targets[:, : self.NUM_BASE_DOFS] = task_targets["base_targets"]
                 else:
-                    logger.error(
-                        "Cannot assign task_targets['base_targets'] to targets[:, :self.NUM_BASE_DOFS]"
+                    raise RuntimeError(
+                        f"Shape mismatch: base_targets shape {task_targets['base_targets'].shape} "
+                        f"does not match target slice shape {targets[:, : self.NUM_BASE_DOFS].shape}"
                     )
             else:
-                # Expand default_base_targets to match batch dimension
+                # Use default base targets (will be overridden by rule-based control if set)
                 expanded_targets = self._expand_to_batch(
                     self.default_base_targets, self.num_envs
                 )
@@ -720,28 +725,6 @@ class ActionProcessor:
                 )
 
         return action_idx
-
-    def _apply_raw_finger_targets(self, finger_targets, dof_pos):
-        """
-        Apply raw finger targets (physically meaningful values) with proper coupling.
-
-        Args:
-            finger_targets: torch.Tensor of shape (num_envs, NUM_ACTIVE_FINGER_DOFS) with raw joint targets in radians
-            dof_pos: current DOF positions tensor
-        """
-        if finger_targets.shape[1] != self.NUM_ACTIVE_FINGER_DOFS:
-            logger.warning(
-                f"Expected {self.NUM_ACTIVE_FINGER_DOFS} finger targets, got {finger_targets.shape[1]}"
-            )
-            return
-
-        # Get cached DOF name to index mapping
-        dof_name_to_idx = self._get_dof_name_to_idx_mapping()
-
-        # Apply coupling mapping with raw values
-        self._apply_coupling_to_targets(
-            self.current_targets, finger_targets, dof_name_to_idx, is_raw=True
-        )
 
     def _apply_coupling_to_targets(
         self, targets, source_values, dof_name_to_idx, is_raw=False
@@ -755,30 +738,13 @@ class ActionProcessor:
             dof_name_to_idx: DOF name to index mapping
             is_raw: Whether source values are raw targets (True) or normalized actions (False)
         """
-        # Use vectorized implementation if tensors are precomputed
-        if self.coupling_indices is not None and len(self.coupling_indices) > 0:
-            self._apply_coupling_to_targets_vectorized(targets, source_values, is_raw)
-        else:
-            # Fallback to loop-based implementation if precomputation failed
-            self._apply_coupling_to_targets_loop(
-                targets, source_values, dof_name_to_idx, is_raw
+        # Always use vectorized implementation (precomputed in setup)
+        if self.coupling_indices is None or len(self.coupling_indices) == 0:
+            raise RuntimeError(
+                "Coupling tensors not precomputed. This indicates setup() was not called properly."
             )
 
-        # Special case: r_f_joint3_1 (middle finger spread) is always fixed to 0
-        if self.middle_finger_spread_idx >= 0:
-            targets[:, self.middle_finger_spread_idx] = 0.0
-
-    def _apply_coupling_to_targets_vectorized(
-        self, targets, source_values, is_raw=False
-    ):
-        """
-        Vectorized implementation of coupling application using precomputed tensors.
-
-        Args:
-            targets: Target tensor to update (num_envs, num_dofs)
-            source_values: Source values (num_envs, num_actions)
-            is_raw: Whether source values are raw targets or normalized actions
-        """
+        # Apply vectorized coupling
         # Extract indices
         action_indices = self.coupling_indices[:, 0]  # Shape: (num_couplings,)
         dof_indices = self.coupling_indices[:, 1]  # Shape: (num_couplings,)
@@ -813,38 +779,9 @@ class ActionProcessor:
         # Use advanced indexing to set values
         targets[env_indices, dof_indices] = scaled_values
 
-    def _apply_coupling_to_targets_loop(
-        self, targets, source_values, dof_name_to_idx, is_raw=False
-    ):
-        """
-        Original loop-based implementation as fallback.
-
-        Args:
-            targets: Target tensor to update
-            source_values: Source values (actions or raw targets)
-            dof_name_to_idx: DOF name to index mapping
-            is_raw: Whether source values are raw targets (True) or normalized actions (False)
-        """
-        for action_idx, joint_mapping in self.finger_coupling_map.items():
-            if action_idx >= source_values.shape[1]:
-                continue
-
-            source_value = source_values[:, action_idx]
-
-            for joint_spec in joint_mapping:
-                joint_name, coupling_scale = self._parse_joint_spec(joint_spec)
-
-                if joint_name in dof_name_to_idx:
-                    dof_idx = dof_name_to_idx[joint_name]
-
-                    if is_raw:
-                        # Raw values: just apply DOF coupling scale
-                        targets[:, dof_idx] = source_value * coupling_scale
-                    else:
-                        # Normalized actions: compute full target with both action space scaling and DOF coupling
-                        targets[:, dof_idx] = self._compute_joint_target(
-                            source_value, dof_idx, coupling_scale
-                        )
+        # Special case: r_f_joint3_1 (middle finger spread) is always fixed to 0
+        if self.middle_finger_spread_idx >= 0:
+            targets[:, self.middle_finger_spread_idx] = 0.0
 
     def _process_finger_dofs(
         self, targets, action_idx, task_targets, joint_to_control, active_joint_names
@@ -887,9 +824,9 @@ class ActionProcessor:
                         :, self.NUM_BASE_DOFS :
                     ] = finger_pos_targets
             else:
-                # Get targets from task or use defaults
-                self._apply_default_finger_targets(
-                    targets, task_targets, joint_to_control, active_joint_names
+                raise RuntimeError(
+                    "Finger actions missing when policy_controls_fingers=True. "
+                    "This indicates a mismatch between action space and control configuration."
                 )
 
         return action_idx
@@ -953,8 +890,10 @@ class ActionProcessor:
         if self.current_targets is not None:
             prev_target = self.current_targets[:, dof_idx]
         else:
-            # First step: use current DOF position as base
-            prev_target = self.dof_pos[:, dof_idx]
+            raise RuntimeError(
+                "current_targets is None in position_delta mode. "
+                "This indicates setup() was not called properly."
+            )
         return prev_target + scaled_delta
 
     def _apply_default_finger_targets(

@@ -321,6 +321,55 @@ The components must be initialized in this order to satisfy dependencies:
 - **Cause**: control_dt not available when scaling coefficients computed
 - **Solution**: Ensure physics_manager initialized before ActionProcessor.setup()
 
+## Rule-Based Control Architecture
+
+### Control Flow Overview
+
+The environment supports hybrid control where some DOFs are controlled by the RL policy while others use rule-based control:
+
+1. **Policy Control**: DOFs controlled by the RL agent through actions
+2. **Rule-Based Control**: DOFs controlled by programmatic functions
+
+### Execution Order
+
+The control flow follows this specific order:
+
+```python
+# In pre_physics_step():
+1. process_actions()          # Process RL policy actions
+2. _apply_rule_based_control() # Override with rule-based control
+3. set_dof_position_target()   # Apply final targets to simulation
+```
+
+**Important**: Rule-based control is applied AFTER process_actions, allowing it to override any default values.
+
+### Configuration
+
+Control mode is determined by configuration flags:
+- `policy_controls_hand_base`: If False, base uses rule-based control
+- `policy_controls_fingers`: If False, fingers use rule-based control
+
+### Rule-Based Controller Interface
+
+Controllers are registered using `set_rule_based_controllers()`:
+
+```python
+def my_base_controller(env):
+    """Return (num_envs, 6) tensor with base DOF targets in physical units."""
+    t = env.progress_buf[0] * env.control_dt
+    targets = torch.zeros((env.num_envs, 6), device=env.device)
+    targets[:, 0] = 0.1 * torch.sin(t)  # X oscillation
+    return targets
+
+env.set_rule_based_controllers(base_controller=my_base_controller)
+```
+
+### Default Values
+
+When neither policy nor rule-based control is active:
+- Default values from configuration are used
+- These serve as fallback positions to prevent undefined behavior
+
 ## Related Documentation
 
 - **Physics Implementation**: [`reference_physics_implementation.md`](reference_physics_implementation.md)
