@@ -298,11 +298,9 @@ class DexHandBase(VecTask):
             gym=self.gym,
             sim=self.sim,
             device=self.device,
+            physics_dt=self.physics_dt,
             use_gpu_pipeline=self.use_gpu_pipeline,
         )
-
-        # Set physics timestep
-        self.physics_manager.set_dt(self.physics_dt)
 
         # Create action processor
         self.action_processor = ActionProcessor(
@@ -344,8 +342,7 @@ class DexHandBase(VecTask):
 
         self.action_processor.initialize_from_config(action_processor_config)
 
-        # Finalize action processor setup now that control_dt is available
-        self.action_processor.finalize_setup()
+        # Note: finalize_setup() will be called after control_dt is measured
 
         # Create observation encoder with tensor manager reference (will be initialized later)
         self.observation_encoder = ObservationEncoder(
@@ -757,6 +754,9 @@ class DexHandBase(VecTask):
         """
         Apply actions, simulate physics, and return observations, rewards, resets, and info.
         """
+        # Check if we need to start measurement for auto-detection
+        is_measuring = self.physics_manager.start_control_cycle_measurement()
+
         # Pre-physics: process actions
         try:
             self.pre_physics_step(actions)
@@ -787,6 +787,19 @@ class DexHandBase(VecTask):
         # Post-physics: compute observations and rewards
         try:
             obs, rew, done, info = self.post_physics_step()
+
+            # If measuring, force a reset on all environments AFTER post_physics_step
+            # This ensures we measure a complete control cycle
+            if is_measuring:
+                # Call reset_idx on all environments for measurement
+                all_env_ids = torch.arange(self.num_envs, device=self.device)
+                self.reset_idx(all_env_ids)
+
+                # Finish measurement and set control_dt
+                self.physics_manager.finish_control_cycle_measurement()
+
+                # Now that control_dt is available, finalize action processor
+                self.action_processor.finalize_setup()
         except Exception as e:
             logger.error(f"ERROR in post_physics_step: {e}")
             import traceback

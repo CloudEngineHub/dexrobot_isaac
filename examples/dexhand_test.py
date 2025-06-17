@@ -1086,6 +1086,14 @@ def main():
     obs = env.reset()
     initial_dof_pos = env.dof_pos.clone() if hasattr(env, "dof_pos") else None
 
+    # Log control_dt information
+    logger.info("\nPhysics timing:")
+    logger.info(f"  physics_dt: {env.physics_manager.physics_dt}")
+    logger.info(f"  control_dt: {env.physics_manager.control_dt}")
+    logger.info(
+        f"  physics_steps_per_control: {env.physics_manager.physics_steps_per_control_step}"
+    )
+
     logger.info("\nStarting action-to-DOF verification test...")
     logger.info(f"Movement magnitude: {args.movement_speed}")
     logger.info("Steps per action: 100")

@@ -49,11 +49,10 @@ def _init_components(self):
         gym=self.gym,
         sim=self.sim,
         device=self.device,
+        physics_dt=self.physics_dt,  # Physics timestep from config
         use_gpu_pipeline=self.use_gpu_pipeline,
     )
-
-    # Set physics timestep
-    self.physics_manager.set_dt(self.physics_dt)
+    # Note: control_dt will be determined by active measurement on first step
 ```
 
 ## Critical Dependency Chain: control_dt
@@ -65,17 +64,16 @@ The `control_dt` parameter flows through the system following a specific depende
 ```python
 # PhysicsManager stores the authoritative control_dt
 class PhysicsManager:
-    def __init__(self):
-        self.physics_dt = 0.01
-        self.physics_steps_per_control_step = 1  # Auto-detected
+    def __init__(self, ..., physics_dt):
+        self.physics_dt = physics_dt  # From config
+        self.physics_steps_per_control_step = 1  # Will be measured
+        self.control_dt = None  # Set after measurement
 
-    @property
-    def control_dt(self):
-        return self.physics_dt * self.physics_steps_per_control_step
-
-    def set_dt(self, physics_dt):
-        self.physics_dt = physics_dt
-        # control_dt automatically recalculated via property
+    def start_control_cycle_measurement(self):
+        # Active measurement on first step
+        if self.control_dt is None:
+            # Reset counters and start measuring
+            return True
 ```
 
 ### Dependent Components Access via Property Decorators
@@ -120,11 +118,10 @@ class ObservationEncoder:
         physics_manager=self.physics_manager,  # ← Key dependency
     )
 
-    # Set control mode BEFORE setup (affects scaling calculations)
-    self.action_processor.set_control_mode(self.cfg["env"]["controlMode"])
+    # Initialize configuration
+    self.action_processor.initialize_from_config(action_processor_config)
 
-    # Basic setup (computes action scaling using control_dt)
-    self.action_processor.setup(self.num_dof, self.dof_props)
+    # Note: finalize_setup() is called after control_dt is measured
 ```
 
 ### 5. Observation Encoder Initialization
@@ -201,23 +198,28 @@ def some_physics_change():
 
 ## Auto-Detection and Dynamic Updates
 
-### Physics Step Auto-Detection
+### Active Control Cycle Measurement
 
-The system can detect the required physics steps per control step during runtime:
+The system actively measures the required physics steps per control cycle on the first step:
 
 ```python
-# In PhysicsManager.step_physics()
-def step_physics(self, refresh_tensors=True):
-    self.physics_step_count += 1
+# In DexHandBase.step()
+def step(self, actions):
+    # Check if we need to measure control cycle
+    is_measuring = self.physics_manager.start_control_cycle_measurement()
 
-    # Auto-detect physics_steps_per_control_step
-    if not self.auto_detected_physics_steps:
-        measured_steps = self.physics_step_count - self.last_control_step_count
+    # Normal physics step
+    self.physics_manager.step_physics()
 
-        if measured_steps > self.physics_steps_per_control_step:
-            self.physics_steps_per_control_step = measured_steps
-            self.auto_detected_physics_steps = True
-            # control_dt automatically updates via property calculation
+    if is_measuring:
+        # Force reset on all environments to measure full cycle
+        self.reset_idx(torch.arange(self.num_envs))
+
+        # Finish measurement and set control_dt
+        self.physics_manager.finish_control_cycle_measurement()
+
+        # Now finalize action processor with control_dt available
+        self.action_processor.finalize_setup()
 ```
 
 ### Automatic Propagation
@@ -300,10 +302,11 @@ The components must be initialized in this order to satisfy dependencies:
 
 1. **Simulation and Assets**: Basic Isaac Gym setup
 2. **TensorManager**: Acquire tensors after actors exist
-3. **PhysicsManager**: Foundation for timing calculations
-4. **ActionProcessor**: Depends on physics_manager for control_dt
-5. **ObservationEncoder**: Depends on physics_manager for control_dt
+3. **PhysicsManager**: Foundation for timing calculations (physics_dt from config)
+4. **ActionProcessor**: Created with physics_manager reference
+5. **ObservationEncoder**: Created with physics_manager reference
 6. **Other Components**: Reset manager, viewer controller, etc.
+7. **First Step**: Measures control_dt and finalizes ActionProcessor
 
 ## Troubleshooting
 
@@ -317,9 +320,13 @@ The components must be initialized in this order to satisfy dependencies:
 - **Cause**: ActionProcessor setup() called before all instance variables initialized
 - **Solution**: Ensure all instance variables set in `__init__` before any methods called
 
+**Error**: `TypeError: unsupported operand type(s) for *: 'NoneType' and 'float'`
+- **Cause**: ActionProcessor trying to use control_dt before measurement
+- **Solution**: This is normal - control_dt is measured on first step
+
 **Error**: Action scaling produces wrong values
-- **Cause**: control_dt not available when scaling coefficients computed
-- **Solution**: Ensure physics_manager initialized before ActionProcessor.setup()
+- **Cause**: control_dt not measured yet or measurement incorrect
+- **Solution**: Check auto-detection is running and detecting correct step count
 
 ## Rule-Based Control Architecture
 

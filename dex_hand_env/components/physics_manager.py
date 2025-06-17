@@ -26,7 +26,7 @@ class PhysicsManager:
     - Apply tensor states to simulation
     """
 
-    def __init__(self, gym, sim, device, use_gpu_pipeline=False):
+    def __init__(self, gym, sim, device, physics_dt, use_gpu_pipeline=False):
         """
         Initialize the physics manager.
 
@@ -34,11 +34,13 @@ class PhysicsManager:
             gym: The isaacgym gym instance
             sim: The isaacgym simulation instance
             device: PyTorch device
+            physics_dt: Physics timestep from config
             use_gpu_pipeline: Whether GPU pipeline is enabled
         """
         self.gym = gym
         self.sim = sim
         self.device = device
+        self.physics_dt = physics_dt
         self.use_gpu_pipeline = use_gpu_pipeline
 
         # Physics tracking variables
@@ -46,20 +48,10 @@ class PhysicsManager:
         self.last_control_step_count = 0
         self.physics_steps_per_control_step = 1
         self.auto_detected_physics_steps = False
+        self.measuring_control_cycle = False
 
-        # Default physics timestep
-        self.physics_dt = 0.01
-        self.control_dt = self.physics_dt * self.physics_steps_per_control_step
-
-    def set_dt(self, physics_dt):
-        """
-        Set the physics timestep.
-
-        Args:
-            physics_dt: The physics simulation timestep
-        """
-        self.physics_dt = physics_dt
-        self.control_dt = self.physics_dt * self.physics_steps_per_control_step
+        # control_dt will be set by measurement
+        self.control_dt = None
 
     def step_physics(self, refresh_tensors=True):
         """
@@ -101,25 +93,7 @@ class PhysicsManager:
                 except Exception as refresh_err:
                     logger.warning(f"Error refreshing tensors: {refresh_err}")
 
-            # Auto-detect physics_steps_per_control_step
-            if not self.auto_detected_physics_steps:
-                # Measure distance from last control step
-                measured_steps = self.physics_step_count - self.last_control_step_count
-
-                # If we've measured more steps than currently configured, update
-                if measured_steps > self.physics_steps_per_control_step:
-                    self.physics_steps_per_control_step = measured_steps
-                    self.auto_detected_physics_steps = True
-
-                    # Update control_dt to match the actual control frequency
-                    self.control_dt = (
-                        self.physics_dt * self.physics_steps_per_control_step
-                    )
-
-                    logger.info(
-                        f"Auto-detected physics_steps_per_control_step: {measured_steps}. "
-                        f"This means {measured_steps} physics steps occur between each policy action."
-                    )
+            # No passive auto-detection needed - we use active measurement
 
             return True
         except Exception as e:
@@ -250,7 +224,48 @@ class PhysicsManager:
 
         This helps track physics vs control steps for auto-detection.
         """
+        logger.debug(
+            f"Marking control step: last_control_step_count {self.last_control_step_count} -> {self.physics_step_count}"
+        )
         self.last_control_step_count = self.physics_step_count
+
+    def start_control_cycle_measurement(self):
+        """
+        Start measuring physics steps for auto-detection.
+
+        This should be called at the beginning of the first control cycle
+        to accurately measure how many physics steps occur including resets.
+        """
+        if not self.auto_detected_physics_steps and self.control_dt is None:
+            logger.info("Starting control cycle measurement for auto-detection")
+            self.measuring_control_cycle = True
+            self.physics_step_count = 0
+            self.last_control_step_count = 0
+            return True
+        return False
+
+    def finish_control_cycle_measurement(self):
+        """
+        Finish measuring and set control_dt based on measured steps.
+        """
+        if self.measuring_control_cycle:
+            measured_steps = self.physics_step_count
+            logger.info(
+                f"Control cycle measurement complete: {measured_steps} physics steps detected"
+            )
+
+            # Update physics steps per control
+            self.physics_steps_per_control_step = measured_steps
+            self.auto_detected_physics_steps = True
+            self.measuring_control_cycle = False
+
+            # Set control_dt for the first time
+            self.control_dt = self.physics_dt * self.physics_steps_per_control_step
+
+            logger.info(
+                f"Auto-detected physics_steps_per_control_step: {measured_steps}. "
+                f"control_dt = {self.control_dt:.6f}s"
+            )
 
     def refresh_tensors(self):
         """
