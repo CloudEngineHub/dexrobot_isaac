@@ -353,12 +353,17 @@ class DexHandBase(VecTask):
             physics_manager=self.physics_manager,
         )
 
-        # Create reset manager
+        # Create reset manager with all dependencies
         self.reset_manager = ResetManager(
             gym=self.gym,
             sim=self.sim,
             num_envs=self.num_envs,
             device=self.device,
+            physics_manager=self.physics_manager,
+            dof_state=self.dof_state,
+            root_state_tensor=self.actor_root_state_tensor,
+            hand_indices=self.hand_indices,
+            task=self.task,
             max_episode_length=self.max_episode_length,
         )
 
@@ -489,6 +494,13 @@ class DexHandBase(VecTask):
         # reset_manager must exist after _init_components()
         self.reset_manager.set_buffers(self.reset_buf, self.progress_buf)
 
+        # Set default DOF positions for reset
+        default_dof_pos = torch.zeros(self.num_dof, device=self.device)
+        # All DOFs start at 0.0 (no offset from initial placement)
+        # The hand actor itself is placed at Z=0.5m in world coordinates
+        # but the ARTz DOF represents delta/offset from that initial position
+        self.reset_manager.set_default_state(dof_pos=default_dof_pos)
+
         # Set up action space
         # action_processor must exist after _init_components()
         # Calculate action space size
@@ -561,54 +573,9 @@ class DexHandBase(VecTask):
             if len(env_ids) == 0:
                 return
 
-            # Reset progress buffer for the reset environments
-            self.progress_buf[env_ids] = 0
+            # Delegate all reset logic to reset_manager
+            self.reset_manager.reset_idx(env_ids)
 
-            # Create default DOF positions/velocities if not already set
-            # This is a one-time initialization that persists across resets
-            if not hasattr(self, "default_dof_pos"):
-                self.default_dof_pos = torch.zeros(self.num_dof, device=self.device)
-                # All DOFs start at 0.0 (no offset from initial placement)
-                # The hand actor itself is placed at Z=0.5m in world coordinates
-                # but the ARTz DOF represents delta/offset from that initial position
-
-            # We need to handle both [num_envs*num_dofs, 2] and [num_envs, num_dofs, 2] shapes
-            if len(self.dof_state.shape) == 2:
-                # Flat array format [num_envs*num_dofs, 2]
-                # We need to compute the start/end indices for each env
-                for env_id in env_ids:
-                    start_idx = env_id * self.num_dof
-                    end_idx = start_idx + self.num_dof
-
-                    # Set positions and velocities
-                    self.dof_state[
-                        start_idx:end_idx, 0
-                    ] = self.default_dof_pos  # Positions
-                    self.dof_state[start_idx:end_idx, 1] = 0.0  # Velocities
-            else:
-                # Already in [num_envs, num_dofs, 2] format
-                for env_id in env_ids:
-                    # Set DOF positions and velocities
-                    self.dof_state[env_id, :, 0] = self.default_dof_pos  # Positions
-                    self.dof_state[env_id, :, 1] = 0.0  # Velocities
-
-            # Reset hand pose using proper Isaac Gym API
-            # Note: The hand pose is controlled by DOF positions, not by directly setting rigid body states
-            # The hand base rigid body will move automatically based on the DOF values we set above
-
-            # Call task-specific reset if available
-            if hasattr(self.task, "reset_task"):
-                self.task.reset_task(env_ids)
-
-            # Apply the updated DOF states to the simulation
-            self.physics_manager.apply_tensor_states(
-                gym=self.gym,
-                sim=self.sim,
-                env_ids=env_ids,
-                dof_state=self.dof_state,
-                root_state_tensor=None,  # Don't modify rigid body states directly
-                hand_indices=None,
-            )
         except Exception as e:
             logger.critical(f"CRITICAL ERROR in reset_idx: {e}")
             import traceback

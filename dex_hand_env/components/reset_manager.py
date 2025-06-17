@@ -23,7 +23,19 @@ class ResetManager:
     - Apply randomization during resets
     """
 
-    def __init__(self, gym, sim, num_envs, device, max_episode_length=1000):
+    def __init__(
+        self,
+        gym,
+        sim,
+        num_envs,
+        device,
+        physics_manager,
+        dof_state,
+        root_state_tensor,
+        hand_indices,
+        task,
+        max_episode_length,
+    ):
         """
         Initialize the reset manager.
 
@@ -32,13 +44,25 @@ class ResetManager:
             sim: The isaacgym simulation instance
             num_envs: Number of environments
             device: PyTorch device
-            max_episode_length: Maximum episode length
+            physics_manager: Physics manager for applying state updates
+            dof_state: DOF state tensor reference
+            root_state_tensor: Root state tensor reference
+            hand_indices: Hand actor indices for each environment
+            task: Task instance (may have reset_task method)
+            max_episode_length: Maximum episode length from config
         """
         self.gym = gym
         self.sim = sim
         self.num_envs = num_envs
         self.device = device
         self.max_episode_length = max_episode_length
+
+        # Store dependencies
+        self.physics_manager = physics_manager
+        self.dof_state = dof_state
+        self.root_state_tensor = root_state_tensor
+        self.hand_indices = hand_indices
+        self.task = task
 
         # Reset and progress buffers - will be set by set_buffers()
         self.reset_buf = None
@@ -203,25 +227,12 @@ class ResetManager:
             traceback.print_exc()
             raise
 
-    def reset_idx(
-        self,
-        env_ids,
-        physics_manager,
-        dof_state,
-        root_state_tensor,
-        hand_indices,
-        task_reset_func=None,
-    ):
+    def reset_idx(self, env_ids):
         """
         Reset specified environments.
 
         Args:
             env_ids: Tensor of environment IDs to reset
-            physics_manager: Physics manager component
-            dof_state: DOF state tensor
-            root_state_tensor: Root state tensor
-            hand_indices: Indices of hand actors
-            task_reset_func: Optional task-specific reset function
 
         Returns:
             Boolean indicating success
@@ -263,21 +274,23 @@ class ResetManager:
 
                 # Set DOF positions for reset environments
                 # Set DOF positions
-                dof_state[env_ids, :, 0] = dof_pos
+                self.dof_state[env_ids, :, 0] = dof_pos
 
                 # Zero DOF velocities
                 # Zero DOF velocities
-                dof_state[env_ids, :, 1] = 0
+                self.dof_state[env_ids, :, 1] = 0
                 # DOF states reset
 
             # Reset hand pose in root state tensor
-            # Reset hand pose
-            if hand_indices is not None and len(hand_indices) > 0:
+            # For fixed-base hands, we don't need to reset root state
+            # The hand position is controlled by DOFs, not by root state
+            # Skip this section for fixed-base configuration
+            if False:  # Disabled for fixed-base hands
                 # Process hand indices
                 # Validate input parameters
-                if len(hand_indices) != self.num_envs:
+                if len(self.hand_indices) != self.num_envs:
                     raise RuntimeError(
-                        f"hand_indices length {len(hand_indices)} doesn't match num_envs {self.num_envs}"
+                        f"hand_indices length {len(self.hand_indices)} doesn't match num_envs {self.num_envs}"
                     )
 
                 # Check if any env_ids are out of bounds
@@ -291,13 +304,13 @@ class ResetManager:
                 for env_id in env_ids:
                     # Reset environment (removed per-env debug logging)
                     # Get hand actor index in root_state_tensor
-                    hand_idx = hand_indices[env_id]
+                    hand_idx = self.hand_indices[env_id]
                     # Process hand index (removed per-env debug logging)
 
                     # Safety check that hand_idx is valid for the tensor - FAIL FAST
-                    if hand_idx >= root_state_tensor.shape[1]:
+                    if hand_idx >= self.root_state_tensor.shape[1]:
                         raise RuntimeError(
-                            f"Hand index {hand_idx} exceeds root_state_tensor bodies dimension {root_state_tensor.shape[1]}"
+                            f"Hand index {hand_idx} exceeds root_state_tensor bodies dimension {self.root_state_tensor.shape[1]}"
                         )
 
                     # Set position
@@ -321,7 +334,7 @@ class ResetManager:
 
                     # Set position (root_state_tensor has shape [num_envs, num_bodies, 13])
                     # Set position (removed per-env debug logging)
-                    root_state_tensor[env_id, hand_idx, 0:3] = pos
+                    self.root_state_tensor[env_id, hand_idx, 0:3] = pos
 
                     # Set rotation (quaternion)
                     rot = self.default_hand_rot.clone()
@@ -356,11 +369,11 @@ class ResetManager:
 
                     # Set rotation
                     # Set rotation (removed per-env debug logging)
-                    root_state_tensor[env_id, hand_idx, 3:7] = rot
+                    self.root_state_tensor[env_id, hand_idx, 3:7] = rot
 
                     # Zero velocities
                     # Zero velocities (removed per-env debug logging)
-                    root_state_tensor[env_id, hand_idx, 7:13] = torch.zeros(
+                    self.root_state_tensor[env_id, hand_idx, 7:13] = torch.zeros(
                         6, device=self.device
                     )
             else:
@@ -368,9 +381,9 @@ class ResetManager:
                 pass
 
             # Call task-specific reset function if provided
-            if task_reset_func is not None:
+            if hasattr(self.task, "reset_task"):
                 # Call task reset function
-                task_reset_func(env_ids)
+                self.task.reset_task(env_ids)
                 # Task reset function completed
             else:
                 # No task reset function provided
@@ -379,8 +392,9 @@ class ResetManager:
             # Apply tensor states to simulation
 
             # Apply tensor states to simulation
-            physics_manager.apply_tensor_states(
-                self.gym, self.sim, env_ids, dof_state, root_state_tensor
+            # For fixed-base hands, we only need to apply DOF states
+            self.physics_manager.apply_tensor_states(
+                self.gym, self.sim, env_ids, self.dof_state, None
             )
 
             # Reset completed successfully
@@ -393,33 +407,12 @@ class ResetManager:
             traceback.print_exc()
             raise
 
-    def reset_all(
-        self,
-        physics_manager,
-        dof_state,
-        root_state_tensor,
-        hand_indices,
-        task_reset_func=None,
-    ):
+    def reset_all(self):
         """
         Reset all environments.
-
-        Args:
-            physics_manager: Physics manager component
-            dof_state: DOF state tensor
-            root_state_tensor: Root state tensor
-            hand_indices: Indices of hand actors
-            task_reset_func: Optional task-specific reset function
 
         Returns:
             Boolean indicating success
         """
         env_ids = torch.arange(self.num_envs, device=self.device)
-        return self.reset_idx(
-            env_ids,
-            physics_manager,
-            dof_state,
-            root_state_tensor,
-            hand_indices,
-            task_reset_func,
-        )
+        return self.reset_idx(env_ids)

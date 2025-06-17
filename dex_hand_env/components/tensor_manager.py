@@ -222,11 +222,12 @@ class TensorManager:
         )
 
         # Reshape DOF state to (num_envs, num_dofs_per_env, 2)
-        reshaped_dof_state = self.dof_state.view(self.num_envs, self.num_dof, 2)
+        # Update self.dof_state to be the reshaped view for consistency
+        self.dof_state = self.dof_state.view(self.num_envs, self.num_dof, 2)
 
         # Extract position and velocity components
-        self.dof_pos = reshaped_dof_state[..., 0]
-        self.dof_vel = reshaped_dof_state[..., 1]
+        self.dof_pos = self.dof_state[..., 0]
+        self.dof_vel = self.dof_state[..., 1]
 
         logger.debug(f"DOF position tensor shape: {self.dof_pos.shape}")
         logger.debug(f"DOF velocity tensor shape: {self.dof_vel.shape}")
@@ -286,20 +287,32 @@ class TensorManager:
 
         # Wrap actor root state tensor (correct Isaac Gym API)
         logger.debug("Wrapping actor root state tensor...")
-        self.actor_root_state_tensor = gymtorch.wrap_tensor(
+        actor_root_state_flat = gymtorch.wrap_tensor(
             self._actor_root_state_tensor_handle
         )
 
-        if (
-            self.actor_root_state_tensor is None
-            or self.actor_root_state_tensor.numel() == 0
-        ):
+        if actor_root_state_flat is None or actor_root_state_flat.numel() == 0:
             raise RuntimeError(
                 "Actor root state tensor is empty or None after wrapping"
             )
 
         logger.debug(
-            f"Actor root state tensor shape: {self.actor_root_state_tensor.shape}"
+            f"Actor root state flat tensor shape: {actor_root_state_flat.shape}"
+        )
+
+        # Reshape to (num_envs, num_actors_per_env, 13) for consistency
+        # The tensor contains root states for all actors across all environments
+        if actor_root_state_flat.shape[0] % self.num_envs != 0:
+            raise RuntimeError(
+                f"Actor root state tensor shape {actor_root_state_flat.shape[0]} is not divisible by num_envs {self.num_envs}"
+            )
+
+        num_actors_per_env = actor_root_state_flat.shape[0] // self.num_envs
+        self.actor_root_state_tensor = actor_root_state_flat.view(
+            self.num_envs, num_actors_per_env, 13
+        )
+        logger.debug(
+            f"Actor root state tensor reshaped to: {self.actor_root_state_tensor.shape}"
         )
 
         # Wrap contact force tensor
