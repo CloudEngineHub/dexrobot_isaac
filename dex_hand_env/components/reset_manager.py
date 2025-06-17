@@ -397,12 +397,10 @@ class ResetManager:
                 # No task reset function provided
                 pass
 
-            # Apply tensor states to simulation
-
-            # Apply tensor states to simulation
+            # Apply DOF states to simulation
             # For fixed-base hands, we only need to apply DOF states
-            self.physics_manager.apply_tensor_states(
-                self.gym, self.sim, env_ids, self.dof_state, None, self.hand_indices
+            self.physics_manager.apply_dof_states(
+                self.gym, self.sim, env_ids, self.dof_state, self.hand_indices
             )
 
             # Reset action processor targets to avoid jumps after reset

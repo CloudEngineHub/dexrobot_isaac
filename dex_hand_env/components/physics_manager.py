@@ -127,113 +127,120 @@ class PhysicsManager:
             logger.exception("Traceback:")
             return False
 
-    def apply_tensor_states(
-        self, gym, sim, env_ids, dof_state, root_state_tensor, hand_indices=None
-    ):
+    def apply_dof_states(self, gym, sim, env_ids, dof_state, actor_indices):
         """
-        Apply tensor states to the physics simulation.
+        Apply DOF states to specified actors.
 
         Args:
             gym: The isaacgym gym instance
             sim: The isaacgym simulation instance
             env_ids: Tensor of environment IDs
-            dof_state: Tensor of DOF states (wrapped PyTorch tensor)
-            root_state_tensor: Tensor of root states
-            hand_indices: Optional indices of hand actors for each environment
+            dof_state: Tensor of DOF states (wrapped PyTorch tensor) [num_envs, num_dofs, 2]
+            actor_indices: Tensor of actor indices for each environment
 
         Returns:
             Boolean indicating success
         """
         try:
-            # CRITICAL: set_dof_state_tensor_indexed expects ACTOR indices, not env indices!
-            if hand_indices is None:
-                raise RuntimeError("hand_indices is required for applying DOF states")
-
-            # Convert environment indices to actor indices
-            actor_indices = torch.zeros(
+            # Extract actor indices for the environments we're updating
+            indices_to_use = torch.zeros(
                 len(env_ids), dtype=torch.int32, device=self.device
             )
             for i, env_id in enumerate(env_ids):
-                if env_id < len(hand_indices):
-                    actor_indices[i] = hand_indices[env_id]
+                if env_id < len(actor_indices):
+                    indices_to_use[i] = actor_indices[env_id]
                 else:
                     raise RuntimeError(
-                        f"Environment ID {env_id} out of range for hand_indices"
+                        f"Environment ID {env_id} out of range for actor_indices"
                     )
-
-            # Apply DOF state
-            # IMPORTANT: set_dof_state_tensor_indexed expects:
-            # 1. The unwrapped PyTorch tensor (using gymtorch.unwrap_tensor)
-            # 2. Actor indices (not environment indices)
-            # 3. The count of actors to update
 
             # Debug: Log what we're applying
             logger.debug(
-                f"Applying DOF states for env_ids {env_ids.tolist()} -> actor_indices {actor_indices.tolist()}"
+                f"Applying DOF states for env_ids {env_ids.tolist()} -> actor_indices {indices_to_use.tolist()}"
             )
             if len(env_ids) > 0:
                 logger.debug(
                     f"First env DOF positions: {dof_state[env_ids[0], :6, 0].tolist()}"
                 )
 
+            # Apply DOF states
+            # dof_state has shape [num_envs, num_dofs, 2]
+            # Extract states for the specific environments and flatten
+            dof_states_to_apply = dof_state[env_ids].reshape(-1, 2)
+
             self.gym.set_dof_state_tensor_indexed(
                 self.sim,
-                gymtorch.unwrap_tensor(dof_state),  # Unwrap the PyTorch tensor
-                gymtorch.unwrap_tensor(actor_indices),
+                gymtorch.unwrap_tensor(dof_states_to_apply),
+                gymtorch.unwrap_tensor(indices_to_use),
                 len(env_ids),
             )
 
-            # Apply root state - use the right approach based on what we have
-            if hand_indices is not None:
-                # Convert environment indices to actor indices
-                # Create actor indices tensor with the same length as env_ids
-                actor_indices = torch.zeros(
-                    len(env_ids), dtype=torch.int32, device=self.device
-                )
-                for i, env_id in enumerate(env_ids):
-                    if env_id < len(hand_indices):
-                        actor_indices[i] = hand_indices[env_id]
-                    else:
-                        logger.warning(
-                            f"Environment ID {env_id} out of range for hand_indices"
-                        )
-
-                # Need to extract the specific actor states from the tensor
-                # The root_state_tensor has shape [num_envs, num_bodies, 13]
-                # We need to create a tensor with shape [num_bodies, 13] containing just the actors we want to update
-                actor_states = torch.zeros((len(env_ids), 13), device=self.device)
-
-                # For each env_id, copy the root state for its corresponding actor
-                for i, env_id in enumerate(env_ids):
-                    if env_id < root_state_tensor.shape[0] and i < len(actor_indices):
-                        actor_idx = actor_indices[i]
-                        if actor_idx < root_state_tensor.shape[1]:
-                            actor_states[i] = root_state_tensor[env_id, actor_idx]
-
-                # Set actor root state tensor indexed
-                self.gym.set_actor_root_state_tensor_indexed(
-                    self.sim,
-                    gymtorch.unwrap_tensor(actor_states),
-                    gymtorch.unwrap_tensor(actor_indices),
-                    len(env_ids),
-                )
-            elif root_state_tensor is not None:
-                # Set the entire root state tensor if provided
-                self.gym.set_actor_root_state_tensor(
-                    self.sim, gymtorch.unwrap_tensor(root_state_tensor)
-                )
-
-            # After setting states, we need to refresh tensors to make the changes visible
-            # but we should NOT step physics yet, as that would move the DOFs away from
-            # their reset positions based on current targets
+            # Refresh tensors to make changes visible
             self.refresh_tensors()
-
-            # Note: Physics stepping will happen in the normal simulation loop
-            # We don't need to step physics here for the reset to take effect
 
             return True
         except Exception as e:
-            logger.critical(f"Error in physics_manager.apply_tensor_states: {e}")
+            logger.critical(f"Error in physics_manager.apply_dof_states: {e}")
+            logger.exception("Traceback:")
+            return False
+
+    def apply_root_states(self, gym, sim, env_ids, root_state_tensor, actor_indices):
+        """
+        Apply root states to specified actors.
+
+        Args:
+            gym: The isaacgym gym instance
+            sim: The isaacgym simulation instance
+            env_ids: Tensor of environment IDs
+            root_state_tensor: Tensor of root states [num_envs, num_bodies, 13]
+            actor_indices: Tensor of actor indices for each environment
+
+        Returns:
+            Boolean indicating success
+        """
+        try:
+            # Extract actor indices for the environments we're updating
+            indices_to_use = torch.zeros(
+                len(env_ids), dtype=torch.int32, device=self.device
+            )
+            for i, env_id in enumerate(env_ids):
+                if env_id < len(actor_indices):
+                    indices_to_use[i] = actor_indices[env_id]
+                else:
+                    raise RuntimeError(
+                        f"Environment ID {env_id} out of range for actor_indices"
+                    )
+
+            # Extract root states for the actors
+            actor_states = torch.zeros((len(env_ids), 13), device=self.device)
+            for i, env_id in enumerate(env_ids):
+                if env_id < root_state_tensor.shape[0]:
+                    actor_idx = indices_to_use[i]
+                    if actor_idx < root_state_tensor.shape[1]:
+                        actor_states[i] = root_state_tensor[env_id, actor_idx]
+                    else:
+                        raise RuntimeError(
+                            f"Actor index {actor_idx} out of range for root_state_tensor"
+                        )
+                else:
+                    raise RuntimeError(
+                        f"Environment ID {env_id} out of range for root_state_tensor"
+                    )
+
+            # Apply root states
+            self.gym.set_actor_root_state_tensor_indexed(
+                self.sim,
+                gymtorch.unwrap_tensor(actor_states),
+                gymtorch.unwrap_tensor(indices_to_use),
+                len(env_ids),
+            )
+
+            # Refresh tensors to make changes visible
+            self.refresh_tensors()
+
+            return True
+        except Exception as e:
+            logger.critical(f"Error in physics_manager.apply_root_states: {e}")
             logger.exception("Traceback:")
             return False
 
