@@ -145,13 +145,8 @@ def create_rule_based_base_controller():
         """
         base_targets = torch.zeros((env.num_envs, 6), device=env.device)
 
-        # Get actual simulation time from environment
-        # progress_buf counts control steps, not physics steps
-        # control_dt = physics_dt * physics_steps_per_control_step
-        control_dt = env.physics_manager.control_dt
-
-        # Get simulation time in seconds
-        sim_time = env.progress_buf[0].item() * control_dt
+        # Get episode time using the proper interface
+        sim_time = env.get_episode_time(env_id=0)
 
         # Use 2π for 1 second period for circular motion
         t = sim_time * 2.0 * math.pi  # 1 Hz base frequency
@@ -186,11 +181,8 @@ def create_rule_based_finger_controller():
         """
         finger_targets = torch.zeros((env.num_envs, 12), device=env.device)
 
-        # Get actual simulation time from environment
-        control_dt = env.physics_manager.control_dt
-
-        # Calculate time based on progress_buf (control steps)
-        sim_time = env.progress_buf[0].item() * control_dt
+        # Get episode time using the proper interface
+        sim_time = env.get_episode_time(env_id=0)
 
         # Use 2π for 0.5 second period for grasping (2 Hz)
         t = sim_time * 2.0 * math.pi * 2.0  # 2 Hz for faster finger motion
@@ -317,6 +309,10 @@ def log_observation_data(env, step, cfg, env_idx=0):
         # Get observation dictionary for convenient access
         obs_dict = env.get_observations_dict()
         obs_encoder = env.observation_encoder
+
+        # Check if environment was just reset (progress_buf == 0)
+        episode_step = env.progress_buf[env_idx].item()
+        just_reset = episode_step == 0
 
         # Plot 1: ARTx pos, ARTx target
         artx_pos = obs_encoder.get_base_dof_value("ARTx", "pos", obs_dict, env_idx)
@@ -642,7 +638,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
         # Plot 15: ARR Velocity Integration Check - Issue #1
         # Initialize integration tracking if needed (use global variables)
         global arr_integrated_pos, arr_initial_pos, physics_dt
-        if arr_integrated_pos is None or physics_dt is None:
+        if arr_integrated_pos is None or physics_dt is None or just_reset:
             arr_integrated_pos = np.array([0.0, 0.0, 0.0])
             arr_initial_pos = None
             # Get physics_dt from config with fallback
@@ -654,9 +650,14 @@ def log_observation_data(env, step, cfg, env_idx=0):
                     if hasattr(cfg, "sim")
                     else 0.0083
                 )
-            logger.debug(
-                f"Initialized ARR integration tracking with physics_dt = {physics_dt}"
-            )
+            if just_reset:
+                logger.debug(
+                    f"Reset ARR integration tracking due to environment reset (episode_step={episode_step})"
+                )
+            else:
+                logger.debug(
+                    f"Initialized ARR integration tracking with physics_dt = {physics_dt}"
+                )
 
         # Always try to log even if there's an error, to see if the plot appears
         try:
@@ -672,8 +673,8 @@ def log_observation_data(env, step, cfg, env_idx=0):
             if arr_initial_pos is None:
                 arr_initial_pos = np.array([arrx_pos, arry_pos, arrz_pos])
 
-            # Integrate velocities
-            if step > 0:
+            # Integrate velocities (skip first step of episode)
+            if episode_step > 0:
                 arr_integrated_pos[0] += arrx_vel * physics_dt
                 arr_integrated_pos[1] += arry_vel * physics_dt
                 arr_integrated_pos[2] += arrz_vel * physics_dt
@@ -723,10 +724,15 @@ def log_observation_data(env, step, cfg, env_idx=0):
         # Plot 16: Finger Joint Velocity Integration Check
         # Initialize finger integration tracking
         global finger_integrated_pos, finger_initial_pos
-        if step == 0 or finger_integrated_pos is None:
+        if episode_step == 0 or finger_integrated_pos is None or just_reset:
             finger_integrated_pos = 0.0
             finger_initial_pos = None
-            logger.debug("Initialized finger integration tracking")
+            if just_reset:
+                logger.debug(
+                    f"Reset finger integration tracking due to environment reset (episode_step={episode_step})"
+                )
+            else:
+                logger.debug("Initialized finger integration tracking")
 
         try:
             # Test thumb rotation joint (r_f_joint1_1) - a finger rotation joint
@@ -741,8 +747,8 @@ def log_observation_data(env, step, cfg, env_idx=0):
             if finger_initial_pos is None:
                 finger_initial_pos = finger_pos
 
-            # Integrate velocity
-            if step > 0:
+            # Integrate velocity (skip first step of episode)
+            if episode_step > 0:
                 finger_integrated_pos += finger_vel * physics_dt
 
             # Calculate actual position change from initial
@@ -1160,8 +1166,11 @@ def main():
         # Initialize action tracking variables (needed for progress display)
         finger_actions_count = env.action_processor.NUM_ACTIVE_FINGER_DOFS
         base_actions_count = env.action_processor.NUM_BASE_DOFS
-        current_action_idx = step // steps_per_action
-        step_in_action = step % steps_per_action
+
+        # Use progress_buf to determine action so it resets properly
+        episode_step = env.progress_buf[0].item()
+        current_action_idx = episode_step // steps_per_action
+        step_in_action = episode_step % steps_per_action
         action_value = 0.0  # Default for rule-based control
 
         # For base joints: Create pattern 0 → -1 → 1 → 0 over 100 steps (base middle is default)
@@ -1219,6 +1228,17 @@ def main():
             logger.debug(
                 f"[Test] After step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}, done = {dones[0].item()}"
             )
+
+        # Check if environment was reset
+        if episode_step == 0 and step > 0:
+            logger.info(f"Environment reset detected at step {step}")
+            # Check actual DOF positions after reset
+            if hasattr(env, "dof_pos"):
+                current_base_dofs = env.dof_pos[0, :6]
+                logger.info(
+                    f"Base DOF positions after reset: {current_base_dofs.tolist()}"
+                )
+
         env.render()
 
         # Log observation data for plotting

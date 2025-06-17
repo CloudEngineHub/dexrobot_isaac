@@ -3,6 +3,13 @@ Viewer controller component for DexHand environment.
 
 This module provides viewer interaction functionality for the DexHand environment,
 including keyboard shortcuts for camera control, robot selection, and environment resets.
+
+Keyboard Shortcuts:
+    R     - Reset all environments
+    E     - Reset current Environment (the one being followed)
+    G     - Toggle between Global view and single robot view
+    UP    - Previous robot (in single robot mode)
+    DOWN  - Next robot (in single robot mode)
 """
 
 # Import IsaacGym first
@@ -46,7 +53,9 @@ class ViewerController:
 
         # Camera control state
         self.camera_view_mode = "rear"  # Options: "free", "rear", "right", "bottom"
-        self.camera_follow_mode = "single"  # Options: "single" (follow one robot), "global" (overview)
+        self.camera_follow_mode = (
+            "single"  # Options: "single" (follow one robot), "global" (overview)
+        )
         self.follow_robot_index = 0  # Which robot to follow in single mode
 
         # Track whether keyboard events have been subscribed
@@ -81,8 +90,9 @@ class ViewerController:
         self.gym.subscribe_viewer_keyboard_event(
             self.viewer, gymapi.KEY_DOWN, "next robot"
         )
+        # Use KEY_E for "reset Environment" (single env) to avoid confusion with Pause
         self.gym.subscribe_viewer_keyboard_event(
-            self.viewer, gymapi.KEY_P, "reset environment"
+            self.viewer, gymapi.KEY_E, "reset environment"
         )
 
         self._keyboard_subscribed = True
@@ -114,39 +124,79 @@ class ViewerController:
                     # Cycle through view modes: free -> rear -> right -> bottom -> free
                     view_modes = ["free", "rear", "right", "bottom"]
                     current_idx = view_modes.index(self.camera_view_mode)
-                    self.camera_view_mode = view_modes[(current_idx + 1) % len(view_modes)]
+                    self.camera_view_mode = view_modes[
+                        (current_idx + 1) % len(view_modes)
+                    ]
 
                     # Display current camera state
-                    view_names = {"free": "Free Camera", "rear": "Rear View", "right": "Right View", "bottom": "Bottom View"}
-                    follow_text = f"following robot {self.follow_robot_index}" if self.camera_follow_mode == "single" else "global view"
-                    logger.info(f"Camera: {view_names[self.camera_view_mode]} ({follow_text})")
+                    view_names = {
+                        "free": "Free Camera",
+                        "rear": "Rear View",
+                        "right": "Right View",
+                        "bottom": "Bottom View",
+                    }
+                    follow_text = (
+                        f"following robot {self.follow_robot_index}"
+                        if self.camera_follow_mode == "single"
+                        else "global view"
+                    )
+                    logger.info(
+                        f"Camera: {view_names[self.camera_view_mode]} ({follow_text})"
+                    )
                 elif evt.action == "toggle follow mode" and evt.value > 0:
                     # Toggle between single robot follow and global view
-                    self.camera_follow_mode = "global" if self.camera_follow_mode == "single" else "single"
-                    follow_text = f"following robot {self.follow_robot_index}" if self.camera_follow_mode == "single" else "global view"
-                    view_names = {"free": "Free Camera", "rear": "Rear View", "right": "Right View", "bottom": "Bottom View"}
-                    logger.info(f"Camera: {view_names[self.camera_view_mode]} ({follow_text})")
+                    self.camera_follow_mode = (
+                        "global" if self.camera_follow_mode == "single" else "single"
+                    )
+                    follow_text = (
+                        f"following robot {self.follow_robot_index}"
+                        if self.camera_follow_mode == "single"
+                        else "global view"
+                    )
+                    view_names = {
+                        "free": "Free Camera",
+                        "rear": "Rear View",
+                        "right": "Right View",
+                        "bottom": "Bottom View",
+                    }
+                    logger.info(
+                        f"Camera: {view_names[self.camera_view_mode]} ({follow_text})"
+                    )
                 elif evt.action == "previous robot" and evt.value > 0:
                     # Move to previous robot (only in single mode)
                     if self.camera_follow_mode == "single":
-                        self.follow_robot_index = (self.follow_robot_index - 1) % self.num_envs
+                        self.follow_robot_index = (
+                            self.follow_robot_index - 1
+                        ) % self.num_envs
                         logger.info(f"Following robot {self.follow_robot_index}")
                     else:
-                        logger.warning("Cannot change robot in global view mode. Press G to switch to single robot mode.")
+                        logger.warning(
+                            "Cannot change robot in global view mode. Press G to switch to single robot mode."
+                        )
                 elif evt.action == "next robot" and evt.value > 0:
                     # Move to next robot (only in single mode)
                     if self.camera_follow_mode == "single":
-                        self.follow_robot_index = (self.follow_robot_index + 1) % self.num_envs
+                        self.follow_robot_index = (
+                            self.follow_robot_index + 1
+                        ) % self.num_envs
                         logger.info(f"Following robot {self.follow_robot_index}")
                     else:
-                        logger.warning("Cannot change robot in global view mode. Press G to switch to single robot mode.")
-                elif evt.action == "reset environment" and evt.value > 0 and reset_callback is not None:
+                        logger.warning(
+                            "Cannot change robot in global view mode. Press G to switch to single robot mode."
+                        )
+                elif (
+                    evt.action == "reset environment"
+                    and evt.value > 0
+                    and reset_callback is not None
+                ):
                     # Reset only the selected environment
                     logger.info(f"Resetting robot {self.follow_robot_index}")
-                    reset_callback(torch.tensor([self.follow_robot_index], device=self.device))
+                    reset_callback(
+                        torch.tensor([self.follow_robot_index], device=self.device)
+                    )
 
             return events_processed
-        except Exception as e:
+        except Exception:
             # Handle exceptions silently - this can happen during initialization
             return False
 
@@ -173,11 +223,13 @@ class ViewerController:
 
         # Define different camera positions based on the viewing mode
         camera_offsets = {
-            "rear": gymapi.Vec3(-1.0, 0.0, 0.6),     # Behind the hand
-            "right": gymapi.Vec3(0.0, -1.0, 0.6),    # From the right side
-            "bottom": gymapi.Vec3(0.0, 0.3, -1.0),   # Looking up from below
+            "rear": gymapi.Vec3(-1.0, 0.0, 0.6),  # Behind the hand
+            "right": gymapi.Vec3(0.0, -1.0, 0.6),  # From the right side
+            "bottom": gymapi.Vec3(0.0, 0.3, -1.0),  # Looking up from below
         }
-        camera_offset = camera_offsets.get(self.camera_view_mode, gymapi.Vec3(-1.0, 0.0, 0.6))
+        camera_offset = camera_offsets.get(
+            self.camera_view_mode, gymapi.Vec3(-1.0, 0.0, 0.6)
+        )
 
         # Determine camera target based on follow mode
         if self.camera_follow_mode == "single":
@@ -191,7 +243,9 @@ class ViewerController:
             camera_offset = gymapi.Vec3(
                 camera_offset.x * 2.0,
                 camera_offset.y * 2.0,
-                camera_offset.z + 1.0 if self.camera_view_mode != "bottom" else camera_offset.z - 1.0
+                camera_offset.z + 1.0
+                if self.camera_view_mode != "bottom"
+                else camera_offset.z - 1.0,
             )
 
         try:
@@ -199,13 +253,13 @@ class ViewerController:
             cam_pos = gymapi.Vec3(
                 target_pos[0] + camera_offset.x,
                 target_pos[1] + camera_offset.y,
-                target_pos[2] + camera_offset.z
+                target_pos[2] + camera_offset.z,
             )
             cam_target = gymapi.Vec3(target_pos[0], target_pos[1], target_pos[2])
 
             # Update camera
             self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
             return True
-        except Exception as e:
+        except Exception:
             # Handle exceptions silently - this can happen during initialization
             return False

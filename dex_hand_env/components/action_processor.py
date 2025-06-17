@@ -525,6 +525,34 @@ class ActionProcessor:
         if self.policy_controls_fingers:
             self.active_target_mask[self.NUM_BASE_DOFS :] = True
 
+    def reset_targets(self, env_ids=None):
+        """
+        Reset previous targets to match current DOF positions.
+        Should be called after environment reset to avoid jumps.
+
+        Args:
+            env_ids: Optional tensor of environment IDs to reset. If None, reset all.
+        """
+        if env_ids is None:
+            # Reset all environments
+            self.prev_active_targets.zero_()
+        else:
+            # Reset specific environments
+            self.prev_active_targets[env_ids] = 0.0
+
+        # Also reset current targets to ensure consistency
+        if self.current_targets is not None:
+            if env_ids is None:
+                self.current_targets.zero_()
+            else:
+                self.current_targets[env_ids] = 0.0
+
+        # Apply the reset targets to the simulation to ensure DOFs move to reset position
+        if self.current_targets is not None:
+            self.gym.set_dof_position_target_tensor(
+                self.sim, gymtorch.unwrap_tensor(self.current_targets)
+            )
+
     @post_initialization_only
     def apply_coupling(self, active_targets):
         """

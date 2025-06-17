@@ -137,7 +137,7 @@ class PhysicsManager:
             gym: The isaacgym gym instance
             sim: The isaacgym simulation instance
             env_ids: Tensor of environment IDs
-            dof_state: Tensor of DOF states
+            dof_state: Tensor of DOF states (wrapped PyTorch tensor)
             root_state_tensor: Tensor of root states
             hand_indices: Optional indices of hand actors for each environment
 
@@ -145,14 +145,41 @@ class PhysicsManager:
             Boolean indicating success
         """
         try:
-            # For DOF state, we use env_ids directly
-            env_ids_int32 = env_ids.to(torch.int32)
+            # CRITICAL: set_dof_state_tensor_indexed expects ACTOR indices, not env indices!
+            if hand_indices is None:
+                raise RuntimeError("hand_indices is required for applying DOF states")
+
+            # Convert environment indices to actor indices
+            actor_indices = torch.zeros(
+                len(env_ids), dtype=torch.int32, device=self.device
+            )
+            for i, env_id in enumerate(env_ids):
+                if env_id < len(hand_indices):
+                    actor_indices[i] = hand_indices[env_id]
+                else:
+                    raise RuntimeError(
+                        f"Environment ID {env_id} out of range for hand_indices"
+                    )
 
             # Apply DOF state
+            # IMPORTANT: set_dof_state_tensor_indexed expects:
+            # 1. The unwrapped PyTorch tensor (using gymtorch.unwrap_tensor)
+            # 2. Actor indices (not environment indices)
+            # 3. The count of actors to update
+
+            # Debug: Log what we're applying
+            logger.debug(
+                f"Applying DOF states for env_ids {env_ids.tolist()} -> actor_indices {actor_indices.tolist()}"
+            )
+            if len(env_ids) > 0:
+                logger.debug(
+                    f"First env DOF positions: {dof_state[env_ids[0], :6, 0].tolist()}"
+                )
+
             self.gym.set_dof_state_tensor_indexed(
                 self.sim,
-                gymtorch.unwrap_tensor(dof_state),
-                gymtorch.unwrap_tensor(env_ids_int32),
+                gymtorch.unwrap_tensor(dof_state),  # Unwrap the PyTorch tensor
+                gymtorch.unwrap_tensor(actor_indices),
                 len(env_ids),
             )
 
@@ -196,10 +223,15 @@ class PhysicsManager:
                     self.sim, gymtorch.unwrap_tensor(root_state_tensor)
                 )
 
-            # Step physics to settle objects
-            # This may require multiple physics steps for stability
-            success = self.step_physics()
-            return success
+            # After setting states, we need to refresh tensors to make the changes visible
+            # but we should NOT step physics yet, as that would move the DOFs away from
+            # their reset positions based on current targets
+            self.refresh_tensors()
+
+            # Note: Physics stepping will happen in the normal simulation loop
+            # We don't need to step physics here for the reset to take effect
+
+            return True
         except Exception as e:
             logger.critical(f"Error in physics_manager.apply_tensor_states: {e}")
             logger.exception("Traceback:")

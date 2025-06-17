@@ -34,6 +34,7 @@ class ResetManager:
         root_state_tensor,
         hand_indices,
         task,
+        action_processor,
         max_episode_length,
     ):
         """
@@ -49,6 +50,7 @@ class ResetManager:
             root_state_tensor: Root state tensor reference
             hand_indices: Hand actor indices for each environment
             task: Task instance (may have reset_task method)
+            action_processor: ActionProcessor instance for resetting targets
             max_episode_length: Maximum episode length from config
         """
         self.gym = gym
@@ -63,6 +65,7 @@ class ResetManager:
         self.root_state_tensor = root_state_tensor
         self.hand_indices = hand_indices
         self.task = task
+        self.action_processor = action_processor
 
         # Reset and progress buffers - will be set by set_buffers()
         self.reset_buf = None
@@ -281,6 +284,11 @@ class ResetManager:
                 self.dof_state[env_ids, :, 1] = 0
                 # DOF states reset
 
+                # Debug: Log what we're setting
+                logger.debug(
+                    f"Reset DOF positions to: {dof_pos[:6]}"
+                )  # Show first 6 DOFs
+
             # Reset hand pose in root state tensor
             # For fixed-base hands, we don't need to reset root state
             # The hand position is controlled by DOFs, not by root state
@@ -394,8 +402,11 @@ class ResetManager:
             # Apply tensor states to simulation
             # For fixed-base hands, we only need to apply DOF states
             self.physics_manager.apply_tensor_states(
-                self.gym, self.sim, env_ids, self.dof_state, None
+                self.gym, self.sim, env_ids, self.dof_state, None, self.hand_indices
             )
+
+            # Reset action processor targets to avoid jumps after reset
+            self.action_processor.reset_targets(env_ids)
 
             # Reset completed successfully
             return True

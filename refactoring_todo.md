@@ -40,11 +40,11 @@
 - [x] `observation_encoder.py` L500-501, 517-518: ~~Remove return torch.zeros()~~ Now raises RuntimeError
 - [x] `reset_manager.py`: physics_manager=None now raises RuntimeError
 
-### 6. Fix architectural violation: dex_hand_base bypasses reset_manager
-- [ ] `dex_hand_base.reset_idx()` duplicates reset logic instead of using `reset_manager.reset_idx()`
-- [ ] Reset randomization settings are configured but never used
-- [ ] Refactor to properly delegate to reset_manager component
-- [ ] Remove duplicated reset logic from dex_hand_base
+### 6. Fix architectural violation: dex_hand_base bypasses reset_manager ✅
+- [x] `dex_hand_base.reset_idx()` duplicates reset logic instead of using `reset_manager.reset_idx()`
+- [x] Reset randomization settings are configured but never used
+- [x] Refactor to properly delegate to reset_manager component
+- [x] Remove duplicated reset logic from dex_hand_base
 
 ### 7. Make required arguments non-optional ✅
 - [x] `reset_manager.reset_idx()`: physics_manager, dof_state, root_state_tensor no longer have default=None
@@ -167,7 +167,7 @@ class AdvancedActionProcessor:
 - **`reset_manager.py`**: ✅ DEBUG logging cleaned, ✅ required params fixed, remaining: vectorization opportunities
 - **`tensor_manager.py`**: ✅ Print statements converted to logger
 - **`observation_encoder.py`**: ✅ Print statements converted, ✅ required params fixed, remaining: nested loops need vectorization
-- **`dex_hand_base.py`**: ✅ Print statements converted, remaining: architectural violation (bypasses reset_manager), single source violations
+- **`dex_hand_base.py`**: ✅ Print statements converted, ✅ architectural violation fixed (now delegates to reset_manager), remaining: single source violations
 - **`hand_initializer.py`**: ✅ Print statements converted, remaining: single source of truth issues
 - **`constants.py`**: ✅ Created for single source of truth
 - **`physics_manager.py`**: ✅ Single source of truth for control_dt implemented with property decorators

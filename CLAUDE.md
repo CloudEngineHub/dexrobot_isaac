@@ -31,6 +31,12 @@ if x is None:
 ### Think Like a Scientist
 Write elegant mathematical code, not defensive business logic.
 
+**Defensive Programming Clarification:**
+- ✅ DO check for external failures (hardware, file I/O, network)
+- ❌ DON'T check if your own dependencies are None
+- ❌ DON'T add fallbacks for your own logic errors
+- If a dependency is required at init, it should NEVER be None later
+
 ❌ WRONG - Business programmer mindset:
 ```python
 if self.policy_controls_hand_base:

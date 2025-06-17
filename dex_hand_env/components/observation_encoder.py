@@ -217,10 +217,10 @@ class ObservationEncoder:
 
     @property
     def hand_indices(self):
-        """Access hand indices from hand_initializer (single source of truth)."""
+        """Access hand rigid body indices from hand_initializer (single source of truth)."""
         if self.hand_initializer is None:
             raise RuntimeError("hand_initializer not set in ObservationEncoder")
-        return self.hand_initializer.hand_indices
+        return self.hand_initializer.hand_rigid_body_indices
 
     @property
     def fingertip_indices(self):

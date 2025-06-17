@@ -50,7 +50,7 @@ class TensorManager:
 
         # Tensor handles
         self._dof_state_tensor_handle = None
-        self._rigid_body_state_tensor_handle = None
+        self.rigid_body_state_tensor_handle = None
         self._contact_force_tensor_handle = None
 
         # Simulation tensors
@@ -86,8 +86,8 @@ class TensorManager:
 
         # Get handle for DOF states
         logger.debug("Acquiring DOF state tensor handle...")
-        self._dof_state_tensor_handle = self.gym.acquire_dof_state_tensor(self.sim)
-        if self._dof_state_tensor_handle is None:
+        self.dof_state_tensor_handle = self.gym.acquire_dof_state_tensor(self.sim)
+        if self.dof_state_tensor_handle is None:
             raise RuntimeError(
                 "Failed to acquire DOF state tensor handle. Cannot continue."
             )
@@ -95,10 +95,10 @@ class TensorManager:
 
         # Get handle for rigid body states
         logger.debug("Acquiring rigid body state tensor handle...")
-        self._rigid_body_state_tensor_handle = self.gym.acquire_rigid_body_state_tensor(
+        self.rigid_body_state_tensor_handle = self.gym.acquire_rigid_body_state_tensor(
             self.sim
         )
-        if self._rigid_body_state_tensor_handle is None:
+        if self.rigid_body_state_tensor_handle is None:
             raise RuntimeError(
                 "Failed to acquire rigid body state tensor handle. Cannot continue."
             )
@@ -117,10 +117,10 @@ class TensorManager:
 
         # Get handle for actor root state
         logger.debug("Acquiring actor root state tensor handle...")
-        self._actor_root_state_tensor_handle = self.gym.acquire_actor_root_state_tensor(
+        self.actor_root_state_tensor_handle = self.gym.acquire_actor_root_state_tensor(
             self.sim
         )
-        if self._actor_root_state_tensor_handle is None:
+        if self.actor_root_state_tensor_handle is None:
             raise RuntimeError(
                 "Failed to acquire actor root state tensor handle. Cannot continue."
             )
@@ -128,9 +128,9 @@ class TensorManager:
 
         return {
             "dof_state": self._dof_state_tensor_handle,
-            "rigid_body_state": self._rigid_body_state_tensor_handle,
+            "rigid_body_state": self.rigid_body_state_tensor_handle,
             "contact_force": self._contact_force_tensor_handle,
-            "actor_root_state": self._actor_root_state_tensor_handle,
+            "actor_root_state": self.actor_root_state_tensor_handle,
         }
 
     def setup_tensors(self, fingertip_indices=None):
@@ -149,12 +149,12 @@ class TensorManager:
         logger.info("Setting up tensors from handles...")
 
         # Verify tensor handles exist
-        if self._dof_state_tensor_handle is None:
+        if self.dof_state_tensor_handle is None:
             raise RuntimeError(
                 "DOF state tensor handle is None. Cannot set up tensors."
             )
 
-        if self._rigid_body_state_tensor_handle is None:
+        if self.rigid_body_state_tensor_handle is None:
             raise RuntimeError(
                 "Rigid body state tensor handle is None. Cannot set up tensors."
             )
@@ -167,9 +167,9 @@ class TensorManager:
         # Wrap DOF state tensor
         logger.debug("Wrapping DOF state tensor...")
         try:
-            self.dof_state = gymtorch.wrap_tensor(self._dof_state_tensor_handle)
+            self.dof_state = gymtorch.wrap_tensor(self.dof_state_tensor_handle)
             logger.debug(
-                f"DOF state tensor handle type: {type(self._dof_state_tensor_handle)}"
+                f"DOF state tensor handle type: {type(self.dof_state_tensor_handle)}"
             )
 
             if self.dof_state is None:
@@ -259,7 +259,7 @@ class TensorManager:
         # Wrap rigid body state tensor
         logger.debug("Wrapping rigid body state tensor...")
         rigid_body_states_flat = gymtorch.wrap_tensor(
-            self._rigid_body_state_tensor_handle
+            self.rigid_body_state_tensor_handle
         )
 
         if rigid_body_states_flat is None or rigid_body_states_flat.numel() == 0:
@@ -288,7 +288,7 @@ class TensorManager:
         # Wrap actor root state tensor (correct Isaac Gym API)
         logger.debug("Wrapping actor root state tensor...")
         actor_root_state_flat = gymtorch.wrap_tensor(
-            self._actor_root_state_tensor_handle
+            self.actor_root_state_tensor_handle
         )
 
         if actor_root_state_flat is None or actor_root_state_flat.numel() == 0:

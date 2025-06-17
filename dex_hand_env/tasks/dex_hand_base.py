@@ -247,6 +247,7 @@ class DexHandBase(VecTask):
         self.fingertip_body_handles = handles["fingertip_body_handles"]
         self.fingerpad_body_handles = handles["fingerpad_body_handles"]
         self.dof_properties_from_asset = handles.get("dof_properties", None)
+        self.hand_actor_indices = handles["hand_actor_indices"]
 
         # Set up viewer
         # CRITICAL: Create viewer even in headless mode for proper DOF control
@@ -256,7 +257,12 @@ class DexHandBase(VecTask):
 
         # Initialize rigid body indices after all actors have been created
         # This must happen after task objects are created but before tensor manager
-        self.hand_initializer.initialize_rigid_body_indices(self.envs)
+        rigid_body_indices = self.hand_initializer.initialize_rigid_body_indices(
+            self.envs
+        )
+        self.hand_rigid_body_indices = rigid_body_indices["hand_rigid_body_indices"]
+        self.fingertip_indices = rigid_body_indices["fingertip_indices"]
+        self.fingerpad_indices = rigid_body_indices["fingerpad_indices"]
 
         # Create tensor manager after environment setup
         self.tensor_manager = TensorManager(
@@ -362,8 +368,9 @@ class DexHandBase(VecTask):
             physics_manager=self.physics_manager,
             dof_state=self.dof_state,
             root_state_tensor=self.actor_root_state_tensor,
-            hand_indices=self.hand_indices,
+            hand_indices=self.hand_actor_indices_tensor,
             task=self.task,
+            action_processor=self.action_processor,
             max_episode_length=self.max_episode_length,
         )
 
@@ -554,18 +561,39 @@ class DexHandBase(VecTask):
 
     @property
     def hand_indices(self):
-        """Access hand indices from hand_initializer (single source of truth)."""
-        return self.hand_initializer.hand_indices
+        """Access hand rigid body indices (for backward compatibility)."""
+        return self.hand_rigid_body_indices
 
     @property
-    def fingertip_indices(self):
-        """Access fingertip indices from hand_initializer (single source of truth)."""
-        return self.hand_initializer.fingertip_indices
+    def hand_actor_indices_tensor(self):
+        """Access hand actor indices as tensor for DOF operations."""
+        import torch
+
+        return torch.tensor(
+            self.hand_actor_indices, dtype=torch.int32, device=self.device
+        )
 
     @property
-    def fingerpad_indices(self):
-        """Access fingerpad indices from hand_initializer (single source of truth)."""
-        return self.hand_initializer.fingerpad_indices
+    def episode_time(self):
+        """Get current episode time in seconds for all environments.
+
+        Returns:
+            Tensor of shape (num_envs,) with episode time in seconds
+        """
+        return self.progress_buf.float() * self.physics_manager.control_dt
+
+    def get_episode_time(self, env_id=0):
+        """Get current episode time in seconds for a specific environment.
+
+        Args:
+            env_id: Environment index (default: 0)
+
+        Returns:
+            Float episode time in seconds
+        """
+        return self.progress_buf[env_id].item() * self.physics_manager.control_dt
+
+    # Note: fingertip_indices and fingerpad_indices are now stored directly on self
 
     def reset_idx(self, env_ids):
         """Reset environments at specified indices."""

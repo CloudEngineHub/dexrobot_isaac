@@ -137,7 +137,8 @@ class HandInitializer:
         self.hand_handles = []
         self.fingertip_body_handles = []
         self.fingerpad_body_handles = []
-        self.hand_indices = []
+        self.hand_actor_indices = []  # Actor indices for DOF operations
+        self.hand_rigid_body_indices = []  # Rigid body indices
         self.fingertip_indices = []
         self.fingerpad_indices = []
 
@@ -220,7 +221,8 @@ class HandInitializer:
         self.hand_handles = []
         self.fingertip_body_handles = []
         self.fingerpad_body_handles = []
-        self.hand_indices = []
+        self.hand_actor_indices = []  # Actor indices for DOF operations
+        self.hand_rigid_body_indices = []  # Rigid body indices
         self.fingertip_indices = []
         self.fingerpad_indices = []
 
@@ -239,6 +241,10 @@ class HandInitializer:
             hand_handle = self.gym.create_actor(
                 env, hand_asset, hand_pose, f"hand_{i}", i, 0
             )
+
+            # Get actor index (for DOF operations)
+            actor_idx = self.gym.get_actor_index(env, hand_handle, gymapi.DOMAIN_SIM)
+            self.hand_actor_indices.append(actor_idx)
 
             # Get DOF properties from actor (not asset) for GPU pipeline compatibility
             hand_dof_props = self.gym.get_actor_dof_properties(env, hand_handle)
@@ -309,6 +315,7 @@ class HandInitializer:
             "fingertip_body_handles": self.fingertip_body_handles,
             "fingerpad_body_handles": self.fingerpad_body_handles,
             "dof_properties": self.original_dof_props,  # Add DOF properties to return value
+            "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
         }
 
     def get_dof_mapping(self):
@@ -343,7 +350,7 @@ class HandInitializer:
         logger.debug("Initializing rigid body indices after all actor creation...")
 
         # Ensure we only initialize once
-        if self.hand_indices:
+        if self.hand_rigid_body_indices:
             raise RuntimeError(
                 "Rigid body indices have already been initialized. They should only be initialized once."
             )
@@ -354,7 +361,7 @@ class HandInitializer:
             hand_base_idx = self.gym.find_actor_rigid_body_index(
                 env, hand_handle, "right_hand_base", gymapi.DOMAIN_SIM
             )
-            self.hand_indices.append(hand_base_idx)
+            self.hand_rigid_body_indices.append(hand_base_idx)
 
             # Get fingertip indices
             fingertip_indices = []
@@ -375,13 +382,15 @@ class HandInitializer:
             self.fingerpad_indices.append(fingerpad_indices)
 
         logger.debug(f"Initialized rigid body indices for {len(envs)} environments")
-        logger.debug(f"Hand indices: {self.hand_indices}")
+        logger.debug(f"Hand rigid body indices: {self.hand_rigid_body_indices}")
+        logger.debug(f"Hand actor indices: {self.hand_actor_indices}")
         logger.debug(
             f"First env fingertip indices: {self.fingertip_indices[0] if self.fingertip_indices else 'None'}"
         )
 
         return {
-            "hand_indices": self.hand_indices,
+            "hand_rigid_body_indices": self.hand_rigid_body_indices,  # Rigid body indices
+            "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
             "fingertip_indices": self.fingertip_indices,
             "fingerpad_indices": self.fingerpad_indices,
         }
