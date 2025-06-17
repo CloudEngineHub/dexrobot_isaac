@@ -338,7 +338,8 @@ class DexHandBase(VecTask):
 
         self.action_processor.initialize_from_config(action_processor_config)
 
-        # ActionProcessor now accesses control_dt directly from physics_manager via property decorator
+        # Finalize action processor setup now that control_dt is available
+        self.action_processor.finalize_setup()
 
         # Create observation encoder with tensor manager reference (will be initialized later)
         self.observation_encoder = ObservationEncoder(
@@ -645,22 +646,7 @@ class DexHandBase(VecTask):
 
         # Process actions using action processor
         try:
-            task_targets = None
-            if hasattr(self.task, "get_task_dof_targets"):
-                task_targets = self.task.get_task_dof_targets(
-                    num_envs=self.num_envs,
-                    device=self.device,
-                    base_controlled=self.policy_controls_hand_base,
-                    fingers_controlled=self.policy_controls_fingers,
-                )
-
-            self.action_processor.process_actions(
-                actions=self.actions,
-                dof_pos=self.dof_pos,
-                joint_to_control=self.hand_initializer.joint_to_control,
-                active_joint_names=self.hand_initializer.active_joint_names,
-                task_targets=task_targets,
-            )
+            self.action_processor.process_actions(actions=self.actions)
         except Exception as e:
             logger.error(f"ERROR in action_processor.process_actions: {e}")
             import traceback
@@ -912,9 +898,18 @@ class DexHandBase(VecTask):
                     self.num_envs,
                     self.action_processor.NUM_ACTIVE_FINGER_DOFS,
                 ):
-                    # Process finger targets through action processor to handle coupling
-                    self.action_processor._apply_raw_finger_targets(
-                        finger_targets=finger_targets, dof_pos=self.dof_pos
+                    # Apply finger coupling by creating full active targets
+                    active_targets = torch.zeros(
+                        (self.num_envs, 18), device=self.device  # 6 base + 12 fingers
+                    )
+                    # Copy current base targets
+                    active_targets[:, :6] = self.action_processor.current_targets[:, :6]
+                    # Set finger targets
+                    active_targets[:, 6:] = finger_targets
+
+                    # Apply coupling to get full DOF targets and overwrite current_targets
+                    self.action_processor.current_targets = (
+                        self.action_processor.apply_coupling(active_targets)
                     )
                 else:
                     logger.error(
