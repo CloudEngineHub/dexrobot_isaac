@@ -24,6 +24,10 @@ env:
   # Viewer synchronization
   enableViewerSync: true          # Synchronize viewer to real-time animation speed
 
+  # Logging configuration
+  logLevel: "INFO"                # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  enableComponentDebugLogs: false # Enable detailed debug logs for component internals
+
   # Controller parameters now loaded from MJCF model
 
   # Initial pose

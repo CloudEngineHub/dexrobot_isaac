@@ -136,9 +136,14 @@ class HandInitializer:
         self.fingertip_body_handles = []
         self.fingerpad_body_handles = []
         self.hand_actor_indices = []  # Actor indices for DOF operations
-        self.hand_rigid_body_indices = []  # Rigid body indices
+        self.hand_rigid_body_indices = (
+            []
+        )  # Rigid body indices (per-env, but should be identical)
         self.fingertip_indices = []
         self.fingerpad_indices = []
+
+        # Optimized single index (after verification that all envs have same index)
+        self.hand_rigid_body_index = None  # Single scalar index (same across envs)
 
         # DOF names - will be populated during asset loading
         self._dof_names = None
@@ -403,6 +408,22 @@ class HandInitializer:
                 )
                 fingerpad_indices.append(body_idx)
             self.fingerpad_indices.append(fingerpad_indices)
+
+        # Verify that all environments have the same rigid body index structure
+        # This is expected since we create identical actors in each environment
+        if self.hand_rigid_body_indices:
+            first_index = self.hand_rigid_body_indices[0]
+            if all(idx == first_index for idx in self.hand_rigid_body_indices):
+                self.hand_rigid_body_index = first_index
+                logger.debug(
+                    f"Verified: All {len(envs)} environments have identical hand rigid body index {first_index}"
+                )
+            else:
+                logger.warning(
+                    f"Hand rigid body indices differ across environments: {self.hand_rigid_body_indices}. "
+                    f"This is unexpected and may indicate an Isaac Gym setup issue."
+                )
+                self.hand_rigid_body_index = first_index  # Use first as fallback
 
         logger.debug(f"Initialized rigid body indices for {len(envs)} environments")
         logger.debug(f"Hand rigid body indices: {self.hand_rigid_body_indices}")

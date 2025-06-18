@@ -123,6 +123,9 @@ class DexHandBase(VecTask):
 
         # Core initialization variables
         self.cfg = cfg
+
+        # Configure logging based on user preferences
+        self._configure_logging()
         self.task = task
         self.asset_root = os.path.join(
             os.path.dirname(
@@ -234,10 +237,25 @@ class DexHandBase(VecTask):
                 + (1 - self.real_time_factor_ema_alpha) * self.real_time_factor_ema
             )
 
+            # Log performance metrics periodically
+            if (
+                hasattr(self, "episode_step_count")
+                and self.episode_step_count[0] % 100 == 0
+            ):
+                logger.debug(
+                    f"Viewer sync: real_time_factor={real_time_factor:.3f}, "
+                    f"ema={self.real_time_factor_ema:.3f}, "
+                    f"elapsed_real={elapsed_real_time*1000:.1f}ms, "
+                    f"simulated={simulated_time*1000:.1f}ms"
+                )
+
             # If simulation is running faster than real-time, sleep
             if real_time_factor > 1.0:
                 sleep_time = simulated_time - elapsed_real_time
                 if sleep_time > 0:
+                    logger.debug(
+                        f"Viewer sync: sleeping for {sleep_time*1000:.1f}ms to match real-time"
+                    )
                     time.sleep(sleep_time)
 
             # If simulation is running significantly slower than real-time, warn periodically
@@ -1105,6 +1123,40 @@ class DexHandBase(VecTask):
         if self.sim:
             self.gym.destroy_sim(self.sim)
             self.sim = None
+
+    def _configure_logging(self):
+        """Configure logging based on user preferences in config."""
+        # Get logging preferences from config
+        log_level = self.cfg.get("env", {}).get("logLevel", "INFO").upper()
+        enable_debug_logs = self.cfg.get("env", {}).get(
+            "enableComponentDebugLogs", False
+        )
+
+        # Map string levels to loguru levels
+        level_mapping = {
+            "DEBUG": "DEBUG",
+            "INFO": "INFO",
+            "WARNING": "WARNING",
+            "ERROR": "ERROR",
+            "CRITICAL": "CRITICAL",
+        }
+
+        if log_level in level_mapping:
+            # Configure loguru to use the specified level
+            logger.remove()  # Remove default handler
+            logger.add(
+                sys.stderr,
+                level=level_mapping[log_level],
+                format="{time:HH:mm:ss} | {level:8} | {message}",
+                colorize=True,
+            )
+
+            if log_level == "DEBUG" or enable_debug_logs:
+                logger.debug(
+                    f"Logging configured: level={log_level}, component_debug={enable_debug_logs}"
+                )
+        else:
+            logger.warning(f"Unknown log level '{log_level}', using INFO")
 
     def compute_point_in_hand_frame(self, pos_world, hand_pos, hand_rot):
         """Convert a point from world frame to hand frame."""

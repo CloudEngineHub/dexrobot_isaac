@@ -89,16 +89,13 @@ class TensorManager:
         # The simulation has already been prepared by gym.prepare_sim()
 
         # Get handle for DOF states
-        logger.debug("Acquiring DOF state tensor handle...")
         self.dof_state_tensor_handle = self.gym.acquire_dof_state_tensor(self.sim)
         if self.dof_state_tensor_handle is None:
             raise RuntimeError(
                 "Failed to acquire DOF state tensor handle. Cannot continue."
             )
-        logger.debug("Successfully acquired DOF state tensor handle")
 
         # Get handle for rigid body states
-        logger.debug("Acquiring rigid body state tensor handle...")
         self.rigid_body_state_tensor_handle = self.gym.acquire_rigid_body_state_tensor(
             self.sim
         )
@@ -106,10 +103,8 @@ class TensorManager:
             raise RuntimeError(
                 "Failed to acquire rigid body state tensor handle. Cannot continue."
             )
-        logger.debug("Successfully acquired rigid body state tensor handle")
 
         # Get handle for contact forces
-        logger.debug("Acquiring contact force tensor handle...")
         self._contact_force_tensor_handle = self.gym.acquire_net_contact_force_tensor(
             self.sim
         )
@@ -117,10 +112,8 @@ class TensorManager:
             raise RuntimeError(
                 "Failed to acquire contact force tensor handle. Cannot continue."
             )
-        logger.debug("Successfully acquired contact force tensor handle")
 
         # Get handle for actor root state
-        logger.debug("Acquiring actor root state tensor handle...")
         self.actor_root_state_tensor_handle = self.gym.acquire_actor_root_state_tensor(
             self.sim
         )
@@ -128,7 +121,6 @@ class TensorManager:
             raise RuntimeError(
                 "Failed to acquire actor root state tensor handle. Cannot continue."
             )
-        logger.debug("Successfully acquired actor root state tensor handle")
 
         return {
             "dof_state": self._dof_state_tensor_handle,
@@ -169,23 +161,12 @@ class TensorManager:
             )
 
         # Wrap DOF state tensor
-        logger.debug("Wrapping DOF state tensor...")
+        # Wrap DOF state tensor
         try:
             self.dof_state = gymtorch.wrap_tensor(self.dof_state_tensor_handle)
-            logger.debug(
-                f"DOF state tensor handle type: {type(self.dof_state_tensor_handle)}"
-            )
 
             if self.dof_state is None:
                 raise RuntimeError("DOF state tensor is None after wrapping")
-
-            # This line is causing the error if the tensor exists but is empty
-            # Let's check what's actually in the tensor before assuming it's empty
-            logger.debug(f"DOF state tensor type: {type(self.dof_state)}")
-            logger.debug(f"DOF state tensor device: {self.dof_state.device}")
-            logger.debug(
-                f"DOF state tensor shape exists: {'shape' in dir(self.dof_state)}"
-            )
 
             # Verify device matches expectation
             actual_device = self.dof_state.device
@@ -261,7 +242,7 @@ class TensorManager:
         logger.debug(f"DOF properties tensor shape: {self.dof_props.shape}")
 
         # Wrap rigid body state tensor
-        logger.debug("Wrapping rigid body state tensor...")
+        # Wrap rigid body state tensor
         rigid_body_states_flat = gymtorch.wrap_tensor(
             self.rigid_body_state_tensor_handle
         )
@@ -290,7 +271,7 @@ class TensorManager:
         )
 
         # Wrap actor root state tensor (correct Isaac Gym API)
-        logger.debug("Wrapping actor root state tensor...")
+        # Wrap actor root state tensor
         actor_root_state_flat = gymtorch.wrap_tensor(
             self.actor_root_state_tensor_handle
         )
@@ -320,7 +301,7 @@ class TensorManager:
         )
 
         # Wrap contact force tensor
-        logger.debug("Wrapping contact force tensor...")
+        # Wrap contact force tensor
         contact_forces_flat = gymtorch.wrap_tensor(self._contact_force_tensor_handle)
 
         if contact_forces_flat is None or contact_forces_flat.numel() == 0:
@@ -560,17 +541,11 @@ class TensorManager:
                                     field_data.astype(np.float32), device=self.device
                                 )
                                 props_tensor[:, col_idx] = field_tensor
-                                logger.debug(
-                                    f"  {field_name}: min={field_tensor.min():.3f}, max={field_tensor.max():.3f}"
-                                )
-
-                                # Debug: Print limits for base joints
+                                # Log summary for important fields
                                 if field_name in ["lower", "upper"]:
-                                    logger.debug(f"    First 6 DOFs ({field_name}):")
-                                    for i in range(min(6, len(field_data))):
-                                        logger.debug(
-                                            f"      DOF {i}: {field_data[i]:.6f}"
-                                        )
+                                    logger.debug(
+                                        f"  {field_name}: range [{field_tensor.min():.3f}, {field_tensor.max():.3f}]"
+                                    )
                             except Exception as e:
                                 logger.error(
                                     f"Error converting field {field_name}: {e}"
@@ -584,10 +559,7 @@ class TensorManager:
                     if "hasLimits" in dof_props.dtype.names:
                         has_limits = dof_props["hasLimits"]
                         logger.debug(
-                            f"  hasLimits field: {has_limits} (shape: {has_limits.shape})"
-                        )
-                        logger.debug(
-                            f"  Number of joints with hasLimits=True: {np.sum(has_limits)}"
+                            f"  DOFs with limits enabled: {np.sum(has_limits)}/{len(has_limits)}"
                         )
                         logger.debug(
                             f"  Joints without limits: {np.where(~has_limits)[0]}"

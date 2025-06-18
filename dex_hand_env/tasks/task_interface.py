@@ -172,11 +172,13 @@ class DexTask(ABC):
 
                 # If base not controlled by policy, move it in a circle
                 if not base_controlled:
-                    t = self.episode_step_count.float() * 0.01
+                    # Use episode time for smooth trajectory (assumes control_dt is available)
+                    # This creates a full circle every ~6.28 seconds
+                    episode_time = self.episode_step_count.float() * self.control_dt
                     base_targets = torch.zeros((num_envs, 6), device=device)
-                    base_targets[:, 0] = 0.3 * torch.sin(t)  # x position
-                    base_targets[:, 1] = 0.3 * torch.cos(t)  # y position
-                    base_targets[:, 2] = 0.5  # z position
+                    base_targets[:, 0] = 0.3 * torch.sin(episode_time)  # x position
+                    base_targets[:, 1] = 0.3 * torch.cos(episode_time)  # y position
+                    base_targets[:, 2] = 0.5  # z position (fixed height)
                     targets["base_targets"] = base_targets
 
                 # If fingers not controlled by policy, execute grasp sequence

@@ -433,7 +433,12 @@ class ObservationEncoder:
         # Hand pose (position and orientation)
         # hand_indices and rigid_body_states should never be None/empty during observation computation
         # If they are, that indicates an initialization bug that must be fixed
-        hand_base_idx = self.hand_indices[0]  # Same rigid body index within each env
+        # Use optimized single index if available (since it's the same across all envs)
+        hand_base_idx = (
+            self.hand_initializer.hand_rigid_body_index
+            if self.hand_initializer.hand_rigid_body_index is not None
+            else self.hand_indices[0]
+        )
 
         if hand_base_idx < 0 or hand_base_idx >= rigid_body_states.shape[1]:
             raise RuntimeError(
@@ -684,8 +689,12 @@ class ObservationEncoder:
         ):
             return poses_world  # Return world poses if transformation not possible
 
-        # Get hand base index (same for all envs)
-        hand_base_idx = self.hand_indices[0]
+        # Get hand base index - use optimized single index if available
+        hand_base_idx = (
+            self.hand_initializer.hand_rigid_body_index
+            if self.hand_initializer.hand_rigid_body_index is not None
+            else self.hand_indices[0]
+        )
 
         if hand_base_idx < 0 or hand_base_idx >= rigid_body_states.shape[1]:
             raise RuntimeError(

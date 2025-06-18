@@ -357,10 +357,19 @@ class VecTask(Env):
                     sys.exit()
                 elif evt.action == "toggle_viewer_sync" and evt.value > 0:
                     self.enable_viewer_sync = not self.enable_viewer_sync
+                    logger.debug(
+                        f"Viewer sync {'enabled' if self.enable_viewer_sync else 'disabled'}"
+                    )
                 elif evt.action == "record_frames" and evt.value > 0:
                     self.record_frames = not self.record_frames
+                    logger.debug(
+                        f"Frame recording {'enabled' if self.record_frames else 'disabled'}"
+                    )
                 elif evt.action == "toggle_random_actions" and evt.value > 0:
                     self.random_actions = not self.random_actions
+                    logger.debug(
+                        f"Random actions {'enabled' if self.random_actions else 'disabled'}"
+                    )
 
             # fetch results
             if self.device != "cpu":
