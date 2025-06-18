@@ -206,7 +206,46 @@ class DexHandBase(VecTask):
         # Additional setup (should only happen after components are created)
         self._setup_additional_tensors()
 
+        # Perform control cycle measurement after all setup is complete
+        logger.info("Performing control cycle measurement...")
+        self._perform_control_cycle_measurement()
+
         logger.info("DexHandBase initialization complete.")
+
+    def _perform_control_cycle_measurement(self):
+        """
+        Perform active measurement of physics steps per control cycle.
+
+        This is done during initialization to ensure control_dt is available
+        before any external calls to reset() or step().
+        """
+        # Start measurement
+        if not self.physics_manager.start_control_cycle_measurement():
+            # Already measured, nothing to do
+            return
+
+        # Perform a dummy action to process_actions (will use zero targets)
+        dummy_actions = torch.zeros(
+            (self.num_envs, self.num_actions), device=self.device
+        )
+        self.action_processor.process_actions(dummy_actions)
+
+        # Step physics
+        self.physics_manager.step_physics(refresh_tensors=True)
+
+        # Force a reset on all environments to measure full cycle
+        all_env_ids = torch.arange(self.num_envs, device=self.device)
+        self.reset_idx(all_env_ids)
+
+        # Finish measurement and set control_dt
+        self.physics_manager.finish_control_cycle_measurement()
+
+        # Now that control_dt is available, finalize action processor
+        self.action_processor.finalize_setup()
+
+        logger.info(
+            f"Control cycle measurement complete: control_dt = {self.physics_manager.control_dt}"
+        )
 
     def _init_components(self):
         """
@@ -754,9 +793,6 @@ class DexHandBase(VecTask):
         """
         Apply actions, simulate physics, and return observations, rewards, resets, and info.
         """
-        # Check if we need to start measurement for auto-detection
-        is_measuring = self.physics_manager.start_control_cycle_measurement()
-
         # Pre-physics: process actions
         try:
             self.pre_physics_step(actions)
@@ -787,19 +823,6 @@ class DexHandBase(VecTask):
         # Post-physics: compute observations and rewards
         try:
             obs, rew, done, info = self.post_physics_step()
-
-            # If measuring, force a reset on all environments AFTER post_physics_step
-            # This ensures we measure a complete control cycle
-            if is_measuring:
-                # Call reset_idx on all environments for measurement
-                all_env_ids = torch.arange(self.num_envs, device=self.device)
-                self.reset_idx(all_env_ids)
-
-                # Finish measurement and set control_dt
-                self.physics_manager.finish_control_cycle_measurement()
-
-                # Now that control_dt is available, finalize action processor
-                self.action_processor.finalize_setup()
         except Exception as e:
             logger.error(f"ERROR in post_physics_step: {e}")
             import traceback

@@ -200,27 +200,39 @@ def some_physics_change():
 
 ### Active Control Cycle Measurement
 
-The system actively measures the required physics steps per control cycle on the first step:
+The system actively measures the required physics steps per control cycle during initialization:
 
 ```python
-# In DexHandBase.step()
-def step(self, actions):
-    # Check if we need to measure control cycle
-    is_measuring = self.physics_manager.start_control_cycle_measurement()
+# In DexHandBase._init_components()
+def _init_components(self):
+    # ... create all components ...
 
-    # Normal physics step
+    # Perform control cycle measurement to determine control_dt
+    self._perform_control_cycle_measurement()
+
+def _perform_control_cycle_measurement(self):
+    # Start measurement
+    if not self.physics_manager.start_control_cycle_measurement():
+        return  # Already measured
+
+    # Process dummy actions
+    dummy_actions = torch.zeros((self.num_envs, self.num_actions))
+    self.action_processor.process_actions(dummy_actions)
+
+    # Step physics
     self.physics_manager.step_physics()
 
-    if is_measuring:
-        # Force reset on all environments to measure full cycle
-        self.reset_idx(torch.arange(self.num_envs))
+    # Force reset on all environments to measure full cycle
+    self.reset_idx(torch.arange(self.num_envs))
 
-        # Finish measurement and set control_dt
-        self.physics_manager.finish_control_cycle_measurement()
+    # Finish measurement and set control_dt
+    self.physics_manager.finish_control_cycle_measurement()
 
-        # Now finalize action processor with control_dt available
-        self.action_processor.finalize_setup()
+    # Now finalize action processor with control_dt available
+    self.action_processor.finalize_setup()
 ```
+
+This ensures control_dt is determined before any external calls to reset() or step().
 
 ### Automatic Propagation
 
@@ -306,7 +318,7 @@ The components must be initialized in this order to satisfy dependencies:
 4. **ActionProcessor**: Created with physics_manager reference
 5. **ObservationEncoder**: Created with physics_manager reference
 6. **Other Components**: Reset manager, viewer controller, etc.
-7. **First Step**: Measures control_dt and finalizes ActionProcessor
+7. **Control Cycle Measurement**: Measure physics steps and finalize ActionProcessor
 
 ## Troubleshooting
 
@@ -322,7 +334,7 @@ The components must be initialized in this order to satisfy dependencies:
 
 **Error**: `TypeError: unsupported operand type(s) for *: 'NoneType' and 'float'`
 - **Cause**: ActionProcessor trying to use control_dt before measurement
-- **Solution**: This is normal - control_dt is measured on first step
+- **Solution**: Measurement should happen during initialization
 
 **Error**: Action scaling produces wrong values
 - **Cause**: control_dt not measured yet or measurement incorrect
