@@ -168,7 +168,7 @@ class TensorManager:
 
             # Verify device matches expectation
             actual_device = self.dof_state.device
-            if actual_device != self.device:
+            if torch.device(actual_device) != torch.device(self.device):
                 raise RuntimeError(
                     f"Device mismatch: TensorManager initialized with device '{self.device}' "
                     f"but Isaac Gym created tensors on device '{actual_device}'. "
