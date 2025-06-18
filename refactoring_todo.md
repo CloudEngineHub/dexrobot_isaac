@@ -77,11 +77,11 @@
 - [ ] Use WARNING for potential issues
 - [ ] Use ERROR for failures
 
-### 11. Add real-time viewer synchronization
-- [ ] Track elapsed time vs simulated time when viewer is active
-- [ ] Add sleep if simulation runs faster than real-time
-- [ ] Log warning if simulation runs slower than real-time
-- [ ] Make real-time sync optional via config
+### 11. Add real-time viewer synchronization ✅
+- [x] Track elapsed time vs simulated time when viewer is active
+- [x] Add sleep if simulation runs faster than real-time
+- [x] Log warning if simulation runs slower than real-time
+- [x] Make real-time sync optional via config (enableViewerSync in BaseTask.yaml)
 
 ### 11. Move magic numbers to configuration ✅
 - [x] `action_processor.py`: Velocity limits now come from config
@@ -107,10 +107,13 @@
 
 ## 🟢 Nice to Have (Low Priority)
 
-### 12. Improve variable naming for clarity
-- [ ] Rename `progress_buf` to `episode_step_count` throughout codebase
-- [ ] Clarify `hand_indices` naming - distinguish between actor and rigid body indices
-- [ ] Add documentation explaining Isaac Gym terminology (actor = articulated/rigid body)
+### 12. Improve variable naming for clarity ✅
+- [x] Rename `progress_buf` to `episode_step_count` throughout codebase
+- [x] Clarify `hand_indices` naming - distinguish between actor and rigid body indices
+- [x] Add documentation explaining Isaac Gym terminology (actor = articulated/rigid body)
+  - Added detailed comment block in dex_hand_base.py explaining actor vs rigid body indices
+  - Fixed bug in ResetManager using wrong index type
+  - Renamed properties and parameters for clarity
 
 ### 13. Add verbosity configuration
 - [ ] Add config option to control log levels
