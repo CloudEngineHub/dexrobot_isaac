@@ -65,9 +65,7 @@ class TensorManager:
     @property
     def device(self):
         """Access device from parent (single source of truth)."""
-        # Ensure device is a torch.device object, not a string
-        if isinstance(self.parent.device, str):
-            return torch.device(self.parent.device)
+        # parent.device should already be a torch.device - fail fast if not
         return self.parent.device
 
     def acquire_tensor_handles(self):

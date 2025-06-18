@@ -54,7 +54,7 @@ class ObservationEncoder:
         # Constants for observation dimensions (imported from constants.py)
         self.NUM_BASE_DOFS = NUM_BASE_DOFS
         self.NUM_ACTIVE_FINGER_DOFS = NUM_ACTIVE_FINGER_DOFS
-        self.NUM_FINGERS = 5
+        self.NUM_FINGERS = 5  # TODO: Import from constants.py
 
         # Configuration - will be set during initialize()
         self.observation_keys = []
@@ -682,12 +682,15 @@ class ObservationEncoder:
             torch.Tensor of shape (num_envs, 35) with poses in hand frame
         """
         rigid_body_states = self.tensor_manager.rigid_body_states
-        if (
-            rigid_body_states is None
-            or self.hand_indices is None
-            or len(self.hand_indices) == 0
-        ):
-            return poses_world  # Return world poses if transformation not possible
+        # Fail fast - these should never be None during normal operation
+        if rigid_body_states is None:
+            raise RuntimeError(
+                "rigid_body_states is None - this indicates tensor_manager initialization bug"
+            )
+        if self.hand_indices is None or len(self.hand_indices) == 0:
+            raise RuntimeError(
+                "hand_indices not properly initialized - this indicates hand_initializer bug"
+            )
 
         # Get hand base index - use optimized single index if available
         hand_base_idx = (

@@ -322,20 +322,29 @@ class ResetManager:
 
                 # Get hand indices for environments being reset
                 # Optimize: if all environments have the same index, use it directly
-                if (
-                    hasattr(self.parent.hand_initializer, "hand_rigid_body_index")
-                    and self.parent.hand_initializer.hand_rigid_body_index is not None
-                ):
-                    # All environments have the same rigid body index - use optimized approach
+                # Use duck typing instead of hasattr
+                try:
                     single_index = self.parent.hand_initializer.hand_rigid_body_index
-                    hand_rigid_body_indices_to_reset = torch.full(
-                        (len(env_ids),),
-                        single_index,
-                        device=self.device,
-                        dtype=torch.long,
-                    )
-                else:
-                    # Fallback to per-environment lookup
+                    if single_index is not None:
+                        # All environments have the same rigid body index - use optimized approach
+                        hand_rigid_body_indices_to_reset = torch.full(
+                            (len(env_ids),),
+                            single_index,
+                            device=self.device,
+                            dtype=torch.long,
+                        )
+                    else:
+                        # Fallback to per-environment lookup
+                        hand_rigid_body_indices_to_reset = torch.tensor(
+                            [
+                                self.hand_rigid_body_indices[env_id]
+                                for env_id in env_ids
+                            ],
+                            device=self.device,
+                            dtype=torch.long,
+                        )
+                except AttributeError:
+                    # Fallback: hand_initializer doesn't have optimized index
                     hand_rigid_body_indices_to_reset = torch.tensor(
                         [self.hand_rigid_body_indices[env_id] for env_id in env_ids],
                         device=self.device,
@@ -409,13 +418,11 @@ class ResetManager:
                 # No hand indices provided, skipping hand pose reset
                 pass
 
-            # Call task-specific reset function if provided
-            if hasattr(self.task, "reset_task"):
-                # Call task reset function
+            # Call task-specific reset function - use duck typing instead of hasattr
+            try:
                 self.task.reset_task(env_ids)
-                # Task reset function completed
-            else:
-                # No task reset function provided
+            except AttributeError:
+                # Task doesn't implement reset_task - this is acceptable
                 pass
 
             # Apply DOF states to simulation

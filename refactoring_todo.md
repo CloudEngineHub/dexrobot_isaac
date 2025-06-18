@@ -71,11 +71,13 @@
 - [x] Joint specification parsing in `_parse_joint_spec()`
 - [x] Target expansion logic in `_expand_to_batch()`
 
-### 10. Set proper log levels
-- [ ] Use DEBUG for detailed diagnostics
-- [ ] Use INFO for high-level progress
-- [ ] Use WARNING for potential issues
-- [ ] Use ERROR for failures
+### 10. Set proper log levels ✅
+- [x] Use DEBUG for detailed diagnostics
+- [x] Use INFO for high-level progress
+- [x] Use WARNING for potential issues
+- [x] Use ERROR for failures
+- [x] Clean up excessive debug logging in tensor_manager
+- [x] Maintain appropriate levels across all components
 
 ### 11. Add real-time viewer synchronization ✅
 - [x] Track elapsed time vs simulated time when viewer is active
@@ -115,10 +117,11 @@
   - Fixed bug in ResetManager using wrong index type
   - Renamed properties and parameters for clarity
 
-### 13. Add verbosity configuration
-- [ ] Add config option to control log levels
-- [ ] Make debug output optional
-- [ ] Allow filtering by component
+### 13. Add verbosity configuration ✅
+- [x] Add config option to control log levels (logLevel in BaseTask.yaml)
+- [x] Make debug output optional (enableComponentDebugLogs flag)
+- [x] Allow filtering by component (loguru level-based filtering)
+- [x] Add _configure_logging() method in DexHandBase
 
 ## 🔵 Future Architecture Improvements
 
