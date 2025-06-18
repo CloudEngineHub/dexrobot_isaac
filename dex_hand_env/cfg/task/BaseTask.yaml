@@ -70,20 +70,20 @@ env:
     success: 10.0                 # Scale for task success reward
 
 sim:
-  dt: 0.0083                      # Reduced timestep for rendering mode stability (120 Hz)
-  substeps: 4                     # Increased substeps for better convergence with rendering
+  dt: 0.005                       # High-fidelity physics (200 Hz) for optimal performance
+  substeps: 1                     # Reduced due to higher frequency
   physx:
     solver_type: 1                # 0: PCG, 1: TGS
-    num_position_iterations: 32   # Significantly increased for rendering mode stability
+    num_position_iterations: 6    # Optimized for smaller timestep
     num_velocity_iterations: 0    # Set to 0 based on NVIDIA recommendations (doc: negatively impacts convergence)
-    contact_offset: 0.005         # Balanced value between stability and performance
-    rest_offset: 0.002            # Increased rest offset for better contact stability
+    contact_offset: 0.008         # Balanced value for 200 Hz physics
+    rest_offset: 0.003            # Appropriate for smaller timestep
     contact_collection: 1         # 1: CC_LAST_SUBSTEP (critical for GPU pipeline)
-    default_buffer_size_multiplier: 8.0  # Increased rest offset for better contact stability
-    gpu_contact_pairs_per_env: 1024  # Contact pairs per environment (will be multiplied by num_envs)
+    default_buffer_size_multiplier: 4.0  # Optimized for performance
+    gpu_contact_pairs_per_env: 512  # Contact pairs per environment (will be multiplied by num_envs)
     always_use_articulations: true  # Always use articulations for stability
-    bounce_threshold_velocity: 0.1  # Reduced for more stable contact behavior
-    max_depenetration_velocity: 5.0  # Further reduced to minimize aggressive corrections
+    bounce_threshold_velocity: 0.15  # Moderate value for 200 Hz
+    max_depenetration_velocity: 8.0  # Optimized for faster corrections
     num_threads: 4                # Standard CPU threads
 
 # These parameters are passed to training algorithms

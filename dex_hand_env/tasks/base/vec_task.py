@@ -192,9 +192,6 @@ class VecTask(Env):
         self.envs = []
         self.viewer = None
 
-        # Control frequency vs physics simulation frequency
-        self.control_freq_inv = self.cfg["env"].get("controlFrequencyInv", 1)
-
         # Initialize buffers
         self.num_dof = 0
         self.obs_buf = None
@@ -388,8 +385,8 @@ class VecTask(Env):
                 now = time.time()
                 delta = now - self.last_frame_time
                 if self.render_fps < 0:
-                    # render at control frequency
-                    render_dt = self.dt * self.control_freq_inv
+                    # render at physics frequency
+                    render_dt = self.dt
                 else:
                     render_dt = 1.0 / self.render_fps
 

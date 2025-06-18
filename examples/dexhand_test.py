@@ -910,6 +910,11 @@ def main():
         choices=["debug", "info", "warning", "error"],
         help="Set logging verbosity level (default: info)",
     )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Enable detailed performance profiling with timing breakdown",
+    )
     args = parser.parse_args()
 
     # Set up logging
@@ -939,6 +944,9 @@ def main():
     cfg["env"]["controlMode"] = args.control_mode
     cfg["env"]["policyControlsHandBase"] = args.policy_controls_base.lower() == "true"
     cfg["env"]["policyControlsFingers"] = args.policy_controls_fingers.lower() == "true"
+
+    # Apply performance profiling configuration
+    cfg["env"]["enablePerformanceProfiling"] = args.profile
 
     # GPU pipeline is now automatically determined from sim_device
     # No need to set it in config

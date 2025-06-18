@@ -48,11 +48,11 @@ class MyCustomTask(BaseTask):
     def __init__(self, sim, gym, device, num_envs, cfg):
         super().__init__(sim, gym, device, num_envs, cfg)
         # Initialize task-specific parameters
-        
+
     def compute_task_reward_terms(self, obs_dict):
         # Compute task-specific rewards
         return {"my_reward": torch.ones(self.num_envs, device=self.device)}
-    
+
     # Implement other required methods...
 ```
 
@@ -90,7 +90,6 @@ cfg = {
     "env": {
         "numEnvs": 2,
         "episodeLength": 1000,
-        "controlFrequencyInv": 2,
         # ... more environment parameters
     },
     "sim": {

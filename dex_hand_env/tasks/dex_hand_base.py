@@ -502,6 +502,23 @@ class DexHandBase(VecTask):
         self.real_time_factor_ema_alpha = 0.1  # Smoothing factor
         self.real_time_sync_enabled = self.cfg["env"].get("enableViewerSync", True)
 
+        # Performance profiling
+        self.enable_performance_profiling = self.cfg["env"].get(
+            "enablePerformanceProfiling", False
+        )
+        self.performance_log_interval = self.cfg["env"].get(
+            "performanceLogInterval", 50
+        )
+        self.step_count = 0
+        self.timing_history = {
+            "pre_physics": [],
+            "physics": [],
+            "post_physics": [],
+            "viewer_sync": [],
+            "render": [],
+            "total": [],
+        }
+
         # Mark tensors as initialized
         self._tensors_initialized = True
 
@@ -843,7 +860,10 @@ class DexHandBase(VecTask):
         """
         Apply actions, simulate physics, and return observations, rewards, resets, and info.
         """
+        step_start_time = time.time()
+
         # Pre-physics: process actions
+        pre_physics_start = time.time()
         try:
             self.pre_physics_step(actions)
         except Exception as e:
@@ -852,8 +872,10 @@ class DexHandBase(VecTask):
 
             traceback.print_exc()
             raise
+        pre_physics_time = time.time() - pre_physics_start
 
         # Step physics simulation
+        physics_start = time.time()
         try:
             # Step physics and ensure tensors are refreshed
             # Pass refresh_tensors=True to ensure tensor data is updated
@@ -869,8 +891,10 @@ class DexHandBase(VecTask):
 
             traceback.print_exc()
             raise
+        physics_time = time.time() - physics_start
 
         # Post-physics: compute observations and rewards
+        post_physics_start = time.time()
         try:
             obs, rew, done, info = self.post_physics_step()
         except Exception as e:
@@ -879,16 +903,98 @@ class DexHandBase(VecTask):
 
             traceback.print_exc()
             raise
+        post_physics_time = time.time() - post_physics_start
 
         # Real-time viewer synchronization
+        viewer_sync_start = time.time()
         if self.viewer and self.real_time_sync_enabled and self.enable_viewer_sync:
             self._sync_viewer_to_real_time()
+        viewer_sync_time = time.time() - viewer_sync_start
 
         # Render viewer if it exists
+        render_start = time.time()
         if self.viewer:
             self.render()
+        render_time = time.time() - render_start
+
+        total_time = time.time() - step_start_time
+
+        # Performance profiling
+        if self.enable_performance_profiling:
+            self._log_performance_metrics(
+                pre_physics_time,
+                physics_time,
+                post_physics_time,
+                viewer_sync_time,
+                render_time,
+                total_time,
+            )
 
         return obs, rew, done, info
+
+    def _log_performance_metrics(
+        self,
+        pre_physics_time,
+        physics_time,
+        post_physics_time,
+        viewer_sync_time,
+        render_time,
+        total_time,
+    ):
+        """Log detailed performance metrics for profiling."""
+        self.step_count += 1
+
+        # Store timing data
+        self.timing_history["pre_physics"].append(
+            pre_physics_time * 1000
+        )  # Convert to ms
+        self.timing_history["physics"].append(physics_time * 1000)
+        self.timing_history["post_physics"].append(post_physics_time * 1000)
+        self.timing_history["viewer_sync"].append(viewer_sync_time * 1000)
+        self.timing_history["render"].append(render_time * 1000)
+        self.timing_history["total"].append(total_time * 1000)
+
+        # Log detailed metrics every N steps
+        if self.step_count % self.performance_log_interval == 0:
+            # Calculate averages over the last interval
+            def avg_last_n(times, n):
+                return sum(times[-n:]) / min(len(times), n) if times else 0.0
+
+            n = self.performance_log_interval
+            avg_pre = avg_last_n(self.timing_history["pre_physics"], n)
+            avg_physics = avg_last_n(self.timing_history["physics"], n)
+            avg_post = avg_last_n(self.timing_history["post_physics"], n)
+            avg_sync = avg_last_n(self.timing_history["viewer_sync"], n)
+            avg_render = avg_last_n(self.timing_history["render"], n)
+            avg_total = avg_last_n(self.timing_history["total"], n)
+
+            # Calculate percentages
+            pre_pct = (avg_pre / avg_total * 100) if avg_total > 0 else 0
+            physics_pct = (avg_physics / avg_total * 100) if avg_total > 0 else 0
+            post_pct = (avg_post / avg_total * 100) if avg_total > 0 else 0
+            sync_pct = (avg_sync / avg_total * 100) if avg_total > 0 else 0
+            render_pct = (avg_render / avg_total * 100) if avg_total > 0 else 0
+
+            # Calculate real-time performance
+            target_dt_ms = (
+                self.physics_manager.control_dt * 1000
+            )  # Target step time in ms
+            performance_factor = (target_dt_ms / avg_total) if avg_total > 0 else 0
+
+            logger.info(
+                f"=== PERFORMANCE PROFILE (Steps {self.step_count-n+1}-{self.step_count}) ==="
+            )
+            logger.info(
+                f"Total step time: {avg_total:.2f}ms (target: {target_dt_ms:.2f}ms)"
+            )
+            logger.info(f"Real-time factor: {performance_factor:.1%}")
+            logger.info("Component breakdown:")
+            logger.info(f"  Pre-physics:  {avg_pre:6.2f}ms ({pre_pct:5.1f}%)")
+            logger.info(f"  Physics:      {avg_physics:6.2f}ms ({physics_pct:5.1f}%)")
+            logger.info(f"  Post-physics: {avg_post:6.2f}ms ({post_pct:5.1f}%)")
+            logger.info(f"  Viewer sync:  {avg_sync:6.2f}ms ({sync_pct:5.1f}%)")
+            logger.info(f"  Rendering:    {avg_render:6.2f}ms ({render_pct:5.1f}%)")
+            logger.info("=" * 55)
 
     def get_observations_dict(self):
         """
