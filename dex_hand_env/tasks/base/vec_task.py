@@ -5,7 +5,6 @@ This module defines the VecTask abstract base class that all tasks should inheri
 """
 
 import sys
-import time
 from abc import ABC
 from typing import Dict, Any
 
@@ -202,10 +201,7 @@ class VecTask(Env):
         self.extras = {}
 
         # Rendering
-        self.enable_viewer_sync = True
         self.viewer = None
-        self.last_frame_time = time.time()
-        self.render_fps = -1
 
     def _parse_sim_params(
         self, physics_engine: str, config_sim: Dict[str, Any], num_envs: int
@@ -304,34 +300,8 @@ class VecTask(Env):
         return self.sim
 
     def set_viewer(self):
-        """Create the viewer."""
-        # if running with a viewer, set up keyboard shortcuts and camera
-        if not self.headless:
-            # subscribe to keyboard shortcuts
-            self.viewer = self.gym.create_viewer(self.sim, gymapi.CameraProperties())
-            self.gym.subscribe_viewer_keyboard_event(
-                self.viewer, gymapi.KEY_ESCAPE, "QUIT"
-            )
-            self.gym.subscribe_viewer_keyboard_event(
-                self.viewer, gymapi.KEY_V, "toggle_viewer_sync"
-            )
-            self.gym.subscribe_viewer_keyboard_event(
-                self.viewer, gymapi.KEY_R, "record_frames"
-            )
-            self.gym.subscribe_viewer_keyboard_event(
-                self.viewer, gymapi.KEY_SPACE, "toggle_random_actions"
-            )
-
-            # set the camera position based on up axis
-            sim_params = self.gym.get_sim_params(self.sim)
-            if sim_params.up_axis == gymapi.UP_AXIS_Z:
-                cam_pos = gymapi.Vec3(20.0, 25.0, 3.0)
-                cam_target = gymapi.Vec3(10.0, 15.0, 0.0)
-            else:
-                cam_pos = gymapi.Vec3(20.0, 3.0, 25.0)
-                cam_target = gymapi.Vec3(10.0, 0.0, 15.0)
-
-            self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
+        """Create the viewer - overridden by subclasses that manage their own viewer."""
+        pass
 
     def pre_physics_step(self, actions):
         """Apply actions before physics step."""
@@ -343,60 +313,16 @@ class VecTask(Env):
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""
+        # Default implementation - subclasses should override if they have viewer management
         if self.viewer:
-            # check for window closed
+            # Basic rendering for compatibility
             if self.gym.query_viewer_has_closed(self.viewer):
                 sys.exit()
 
-            # check for keyboard events
-            for evt in self.gym.query_viewer_action_events(self.viewer):
-                if evt.action == "QUIT" and evt.value > 0:
-                    sys.exit()
-                elif evt.action == "toggle_viewer_sync" and evt.value > 0:
-                    self.enable_viewer_sync = not self.enable_viewer_sync
-                    logger.debug(
-                        f"Viewer sync {'enabled' if self.enable_viewer_sync else 'disabled'}"
-                    )
-                elif evt.action == "record_frames" and evt.value > 0:
-                    self.record_frames = not self.record_frames
-                    logger.debug(
-                        f"Frame recording {'enabled' if self.record_frames else 'disabled'}"
-                    )
-                elif evt.action == "toggle_random_actions" and evt.value > 0:
-                    self.random_actions = not self.random_actions
-                    logger.debug(
-                        f"Random actions {'enabled' if self.random_actions else 'disabled'}"
-                    )
-
-            # fetch results
-            if self.device != "cpu":
-                self.gym.fetch_results(self.sim, True)
-
-            # step graphics
-            if self.enable_viewer_sync:
-                self.gym.step_graphics(self.sim)
-                self.gym.draw_viewer(self.viewer, self.sim, True)
-
-                # Wait for dt to elapse in real time.
-                # This synchronizes the physics simulation with the rendering rate.
-                self.gym.sync_frame_time(self.sim)
-
-                # Slow down rendering to real time
-                now = time.time()
-                delta = now - self.last_frame_time
-                if self.render_fps < 0:
-                    # render at physics frequency
-                    render_dt = self.dt
-                else:
-                    render_dt = 1.0 / self.render_fps
-
-                if delta < render_dt:
-                    time.sleep(render_dt - delta)
-
-                self.last_frame_time = time.time()
-
-            else:
-                self.gym.poll_viewer_events(self.viewer)
+            self.gym.fetch_results(self.sim, True)
+            self.gym.step_graphics(self.sim)
+            self.gym.draw_viewer(self.viewer, self.sim, True)
+            self.gym.sync_frame_time(self.sim)
 
             if self.virtual_display and mode == "rgb_array":
                 img = self.virtual_display.grab()

@@ -127,6 +127,12 @@ Observe:
 - Rendering vs headless modes can affect physics
 - Always test in your target deployment configuration
 
+### Viewer Synchronization
+- IsaacGym automatically handles real-time synchronization via `gym.sync_frame_time()`
+- Viewer always syncs to real-time when rendering for smooth visualization
+- Performance profiling will show high rendering % when waiting for real-time sync
+- For training without visualization, use headless mode to run as fast as possible
+
 ## Example Parameter Ranges
 
 ### For Higher Stability (if needed)

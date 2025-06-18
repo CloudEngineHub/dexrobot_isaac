@@ -21,9 +21,6 @@ env:
   maxBaseLinearVelocity: 0.5      # Maximum velocity for each base linear axis (m/s) - applied per x/y/z axis
   maxBaseAngularVelocity: 1.5     # Maximum velocity for each base angular axis (rad/s) - applied per rx/ry/rz axis
 
-  # Viewer synchronization
-  enableViewerSync: true          # Synchronize viewer to real-time animation speed
-
   # Logging configuration
   logLevel: "INFO"                # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
   enableComponentDebugLogs: false # Enable detailed debug logs for component internals

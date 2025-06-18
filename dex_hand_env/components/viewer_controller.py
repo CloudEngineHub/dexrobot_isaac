@@ -34,16 +34,26 @@ class ViewerController:
     - Update camera position based on the current mode
     """
 
-    def __init__(self, parent, viewer):
+    def __init__(self, parent, gym, sim, headless):
         """
-        Initialize the viewer controller.
+        Initialize the viewer controller and create the viewer.
 
         Args:
             parent: Parent object (typically DexHandBase) that provides shared properties
-            viewer: The isaacgym viewer (unique to this component)
+            gym: IsaacGym instance
+            sim: Simulation instance
+            headless: Whether running in headless mode
         """
         self.parent = parent
-        self.viewer = viewer
+        self.gym = gym
+        self.sim = sim
+        self.headless = headless
+
+        # Create viewer if not in headless mode
+        if not self.headless:
+            self.viewer = self._create_viewer()
+        else:
+            self.viewer = None
 
         # Camera control state
         self.camera_view_mode = "rear"  # Options: "free", "rear", "right", "bottom"
@@ -59,10 +69,26 @@ class ViewerController:
         if self.viewer is not None:
             self.subscribe_keyboard_events()
 
-    @property
-    def gym(self):
-        """Get gym instance from parent."""
-        return self.parent.gym
+    def _create_viewer(self):
+        """Create the viewer and set initial camera position."""
+        # Create viewer
+        viewer = self.gym.create_viewer(self.sim, gymapi.CameraProperties())
+
+        # Subscribe to base keyboard shortcuts
+        self.gym.subscribe_viewer_keyboard_event(viewer, gymapi.KEY_ESCAPE, "QUIT")
+
+        # Set initial camera position based on up axis
+        sim_params = self.gym.get_sim_params(self.sim)
+        if sim_params.up_axis == gymapi.UP_AXIS_Z:
+            cam_pos = gymapi.Vec3(20.0, 25.0, 3.0)
+            cam_target = gymapi.Vec3(10.0, 15.0, 0.0)
+        else:
+            cam_pos = gymapi.Vec3(20.0, 3.0, 25.0)
+            cam_target = gymapi.Vec3(10.0, 0.0, 15.0)
+
+        self.gym.viewer_camera_look_at(viewer, None, cam_pos, cam_target)
+
+        return viewer
 
     @property
     def envs(self):
@@ -277,3 +303,42 @@ class ViewerController:
         except Exception:
             # Handle exceptions silently - this can happen during initialization
             return False
+
+    def render(self, mode="rgb_array"):
+        """
+        Handle viewer rendering and keyboard events.
+
+        Args:
+            mode: Rendering mode (currently only supports "rgb_array")
+
+        Returns:
+            None or image array if in rgb_array mode
+        """
+        if self.viewer is None:
+            return None
+
+        # Check for window closed
+        if self.gym.query_viewer_has_closed(self.viewer):
+            import sys
+
+            sys.exit()
+
+        # Process keyboard events
+        for evt in self.gym.query_viewer_action_events(self.viewer):
+            if evt.action == "QUIT" and evt.value > 0:
+                import sys
+
+                sys.exit()
+
+        # Fetch results if using GPU
+        if hasattr(self.parent, "device") and self.parent.device != "cpu":
+            self.gym.fetch_results(self.sim, True)
+
+        # Step graphics and render
+        self.gym.step_graphics(self.sim)
+        self.gym.draw_viewer(self.viewer, self.sim, True)
+
+        # Synchronize to real-time
+        self.gym.sync_frame_time(self.sim)
+
+        return None

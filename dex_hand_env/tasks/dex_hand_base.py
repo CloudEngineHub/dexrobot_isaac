@@ -216,61 +216,6 @@ class DexHandBase(VecTask):
 
         logger.info("DexHandBase initialization complete.")
 
-    def _sync_viewer_to_real_time(self):
-        """
-        Synchronize viewer animation to real-time.
-
-        This ensures the simulation plays back at real-world speed when visualizing.
-        If simulation is faster than real-time, it sleeps. If slower, it warns.
-        """
-        current_time = time.time()
-        elapsed_real_time = current_time - self.last_step_time
-        simulated_time = self.physics_manager.control_dt
-
-        # Calculate real-time factor (1.0 = real-time, >1.0 = faster than real-time)
-        if elapsed_real_time > 0:
-            real_time_factor = simulated_time / elapsed_real_time
-
-            # Update exponential moving average
-            self.real_time_factor_ema = (
-                self.real_time_factor_ema_alpha * real_time_factor
-                + (1 - self.real_time_factor_ema_alpha) * self.real_time_factor_ema
-            )
-
-            # Log performance metrics periodically
-            if (
-                hasattr(self, "episode_step_count")
-                and self.episode_step_count[0] % 100 == 0
-            ):
-                logger.debug(
-                    f"Viewer sync: real_time_factor={real_time_factor:.3f}, "
-                    f"ema={self.real_time_factor_ema:.3f}, "
-                    f"elapsed_real={elapsed_real_time*1000:.1f}ms, "
-                    f"simulated={simulated_time*1000:.1f}ms"
-                )
-
-            # If simulation is running faster than real-time, sleep
-            if real_time_factor > 1.0:
-                sleep_time = simulated_time - elapsed_real_time
-                if sleep_time > 0:
-                    logger.debug(
-                        f"Viewer sync: sleeping for {sleep_time*1000:.1f}ms to match real-time"
-                    )
-                    time.sleep(sleep_time)
-
-            # If simulation is running significantly slower than real-time, warn periodically
-            elif self.real_time_factor_ema < self.real_time_factor_warning_threshold:
-                # Only warn every 100 steps to avoid spam
-                if hasattr(self, "episode_step_count") and torch.any(
-                    self.episode_step_count % 100 == 0
-                ):
-                    logger.warning(
-                        f"Simulation running at {self.real_time_factor_ema:.1%} of real-time. "
-                        f"Consider reducing environment count or simplifying the task."
-                    )
-
-        self.last_step_time = time.time()
-
     def _perform_control_cycle_measurement(self):
         """
         Perform active measurement of physics steps per control cycle.
@@ -470,14 +415,19 @@ class DexHandBase(VecTask):
                 dof_range=self.cfg["env"].get("dofRandomizationRange", 0.05),
             )
 
-        # Create camera controller if viewer exists
-        if hasattr(self, "viewer") and self.viewer is not None:
-            self.viewer_controller = ViewerController(
-                parent=self,
-                viewer=self.viewer,
-            )
+        # Create viewer controller
+        self.viewer_controller = ViewerController(
+            parent=self,
+            gym=self.gym,
+            sim=self.sim,
+            headless=self.headless,
+        )
+
+        # Update the parent's viewer reference
+        if self.viewer_controller.viewer is not None:
+            self.viewer = self.viewer_controller.viewer
         else:
-            self.viewer_controller = None
+            self.viewer = None
 
         # Create fingertip visualizer
         self.fingertip_visualizer = FingertipVisualizer(
@@ -492,15 +442,8 @@ class DexHandBase(VecTask):
         # Create reward calculator
         self.reward_calculator = RewardCalculator(parent=self, cfg=self.cfg)
 
-        # Real-time viewer synchronization
-        self.enable_viewer_sync = True  # Enable by default when viewer exists
-        self.last_step_time = time.time()
-        self.real_time_factor_warning_threshold = (
-            0.5  # Warn if running slower than 50% real-time
-        )
-        self.real_time_factor_ema = 1.0  # Exponential moving average
-        self.real_time_factor_ema_alpha = 0.1  # Smoothing factor
-        self.real_time_sync_enabled = self.cfg["env"].get("enableViewerSync", True)
+        # Real-time viewer synchronization is handled by parent class VecTask
+        # via gym.sync_frame_time() - no need for duplicate sync here
 
         # Performance profiling
         self.enable_performance_profiling = self.cfg["env"].get(
@@ -514,7 +457,6 @@ class DexHandBase(VecTask):
             "pre_physics": [],
             "physics": [],
             "post_physics": [],
-            "viewer_sync": [],
             "render": [],
             "total": [],
         }
@@ -905,11 +847,7 @@ class DexHandBase(VecTask):
             raise
         post_physics_time = time.time() - post_physics_start
 
-        # Real-time viewer synchronization
-        viewer_sync_start = time.time()
-        if self.viewer and self.real_time_sync_enabled and self.enable_viewer_sync:
-            self._sync_viewer_to_real_time()
-        viewer_sync_time = time.time() - viewer_sync_start
+        # Viewer sync is handled by parent class render() method via gym.sync_frame_time()
 
         # Render viewer if it exists
         render_start = time.time()
@@ -925,7 +863,6 @@ class DexHandBase(VecTask):
                 pre_physics_time,
                 physics_time,
                 post_physics_time,
-                viewer_sync_time,
                 render_time,
                 total_time,
             )
@@ -937,7 +874,6 @@ class DexHandBase(VecTask):
         pre_physics_time,
         physics_time,
         post_physics_time,
-        viewer_sync_time,
         render_time,
         total_time,
     ):
@@ -950,7 +886,6 @@ class DexHandBase(VecTask):
         )  # Convert to ms
         self.timing_history["physics"].append(physics_time * 1000)
         self.timing_history["post_physics"].append(post_physics_time * 1000)
-        self.timing_history["viewer_sync"].append(viewer_sync_time * 1000)
         self.timing_history["render"].append(render_time * 1000)
         self.timing_history["total"].append(total_time * 1000)
 
@@ -964,7 +899,6 @@ class DexHandBase(VecTask):
             avg_pre = avg_last_n(self.timing_history["pre_physics"], n)
             avg_physics = avg_last_n(self.timing_history["physics"], n)
             avg_post = avg_last_n(self.timing_history["post_physics"], n)
-            avg_sync = avg_last_n(self.timing_history["viewer_sync"], n)
             avg_render = avg_last_n(self.timing_history["render"], n)
             avg_total = avg_last_n(self.timing_history["total"], n)
 
@@ -972,7 +906,6 @@ class DexHandBase(VecTask):
             pre_pct = (avg_pre / avg_total * 100) if avg_total > 0 else 0
             physics_pct = (avg_physics / avg_total * 100) if avg_total > 0 else 0
             post_pct = (avg_post / avg_total * 100) if avg_total > 0 else 0
-            sync_pct = (avg_sync / avg_total * 100) if avg_total > 0 else 0
             render_pct = (avg_render / avg_total * 100) if avg_total > 0 else 0
 
             # Calculate real-time performance
@@ -992,9 +925,15 @@ class DexHandBase(VecTask):
             logger.info(f"  Pre-physics:  {avg_pre:6.2f}ms ({pre_pct:5.1f}%)")
             logger.info(f"  Physics:      {avg_physics:6.2f}ms ({physics_pct:5.1f}%)")
             logger.info(f"  Post-physics: {avg_post:6.2f}ms ({post_pct:5.1f}%)")
-            logger.info(f"  Viewer sync:  {avg_sync:6.2f}ms ({sync_pct:5.1f}%)")
             logger.info(f"  Rendering:    {avg_render:6.2f}ms ({render_pct:5.1f}%)")
             logger.info("=" * 55)
+
+            # Warn if running significantly slower than real-time
+            if performance_factor < 0.5:  # Less than 50% real-time
+                logger.warning(
+                    f"Simulation running at {performance_factor:.1%} of real-time. "
+                    "Consider reducing environment count or simplifying the task."
+                )
 
     def get_observations_dict(self):
         """
@@ -1188,37 +1127,16 @@ class DexHandBase(VecTask):
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""
-        if self.viewer:
-            # check for window closed
-            if self.gym.query_viewer_has_closed(self.viewer):
-                sys.exit()
+        if self.viewer_controller and self.viewer_controller.viewer:
+            # Delegate rendering to viewer controller
+            result = self.viewer_controller.render(mode)
 
-            # check for keyboard events
-            for evt in self.gym.query_viewer_action_events(self.viewer):
-                if evt.action == "QUIT" and evt.value > 0:
-                    sys.exit()
-                elif evt.action == "toggle_viewer_sync" and evt.value > 0:
-                    self.enable_viewer_sync = not self.enable_viewer_sync
-
-            # fetch results
-            if self.device != "cpu":
-                self.gym.fetch_results(self.sim, True)
-
-            # step graphics
-            if self.enable_viewer_sync:
-                self.gym.step_graphics(self.sim)
-                self.gym.draw_viewer(self.viewer, self.sim, True)
-
-                # Wait for dt to elapse in real time.
-                # This synchronizes the physics simulation with the rendering rate.
-                self.gym.sync_frame_time(self.sim)
-
-            else:
-                self.gym.poll_viewer_events(self.viewer)
-
+            # Handle virtual display if needed
             if self.virtual_display and mode == "rgb_array":
                 img = self.virtual_display.grab()
                 return np.array(img)
+
+            return result
 
     def close(self):
         """Close the environment."""
