@@ -1125,38 +1125,54 @@ class DexHandBase(VecTask):
             self.sim = None
 
     def _configure_logging(self):
-        """Configure logging based on user preferences in config."""
+        """Configure logging based on user preferences in config.
+
+        Only configures logging if no handlers are already present (respects command-line setup).
+        """
+        # Check if loguru already has handlers (e.g., from command-line setup)
+        existing_handlers = len(logger._core.handlers)
+
         # Get logging preferences from config
         log_level = self.cfg.get("env", {}).get("logLevel", "INFO").upper()
         enable_debug_logs = self.cfg.get("env", {}).get(
             "enableComponentDebugLogs", False
         )
+        force_config_logging = self.cfg.get("env", {}).get("forceConfigLogging", False)
 
-        # Map string levels to loguru levels
-        level_mapping = {
-            "DEBUG": "DEBUG",
-            "INFO": "INFO",
-            "WARNING": "WARNING",
-            "ERROR": "ERROR",
-            "CRITICAL": "CRITICAL",
-        }
+        # Only configure if no handlers exist or explicitly forced via config
+        if existing_handlers == 0 or force_config_logging:
+            # Map string levels to loguru levels
+            level_mapping = {
+                "DEBUG": "DEBUG",
+                "INFO": "INFO",
+                "WARNING": "WARNING",
+                "ERROR": "ERROR",
+                "CRITICAL": "CRITICAL",
+            }
 
-        if log_level in level_mapping:
-            # Configure loguru to use the specified level
-            logger.remove()  # Remove default handler
-            logger.add(
-                sys.stderr,
-                level=level_mapping[log_level],
-                format="{time:HH:mm:ss} | {level:8} | {message}",
-                colorize=True,
-            )
+            if log_level in level_mapping:
+                if force_config_logging and existing_handlers > 0:
+                    logger.remove()  # Remove existing handlers only if forced
+                    logger.debug("Existing logging configuration overridden by config")
 
-            if log_level == "DEBUG" or enable_debug_logs:
-                logger.debug(
-                    f"Logging configured: level={log_level}, component_debug={enable_debug_logs}"
+                # Configure loguru to use the specified level
+                logger.add(
+                    sys.stderr,
+                    level=level_mapping[log_level],
+                    format="{time:HH:mm:ss} | {level:8} | {message}",
+                    colorize=True,
                 )
+
+                if log_level == "DEBUG" or enable_debug_logs:
+                    logger.debug(
+                        f"Logging configured: level={log_level}, component_debug={enable_debug_logs}"
+                    )
+            else:
+                logger.warning(f"Unknown log level '{log_level}', using INFO")
         else:
-            logger.warning(f"Unknown log level '{log_level}', using INFO")
+            logger.debug(
+                f"Logging already configured ({existing_handlers} handlers), respecting existing setup"
+            )
 
     def compute_point_in_hand_frame(self, pos_world, hand_pos, hand_rot):
         """Convert a point from world frame to hand frame."""
