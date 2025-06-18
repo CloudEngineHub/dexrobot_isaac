@@ -301,7 +301,7 @@ class ResetManager:
             # The hand position is controlled by DOFs, not by root state
             # Skip this section for fixed-base configuration
             if False:  # Disabled for fixed-base hands
-                # Process hand indices
+                # Vectorized root state reset for future use
                 # Validate input parameters
                 if len(self.hand_indices) != self.num_envs:
                     raise RuntimeError(
@@ -315,82 +315,74 @@ class ResetManager:
                         f"Environment ID {max_env_id} exceeds number of environments {self.num_envs}"
                     )
 
-                # Reset each environment
-                for env_id in env_ids:
-                    # Reset environment (removed per-env debug logging)
-                    # Get hand actor index in root_state_tensor
-                    hand_idx = self.hand_indices[env_id]
-                    # Process hand index (removed per-env debug logging)
+                # Get hand indices for environments being reset
+                hand_indices_to_reset = torch.tensor(
+                    [self.hand_indices[env_id] for env_id in env_ids],
+                    device=self.device,
+                    dtype=torch.long,
+                )
 
-                    # Safety check that hand_idx is valid for the tensor - FAIL FAST
-                    if hand_idx >= self.root_state_tensor.shape[1]:
-                        raise RuntimeError(
-                            f"Hand index {hand_idx} exceeds root_state_tensor bodies dimension {self.root_state_tensor.shape[1]}"
-                        )
-
-                    # Set position
-                    pos = self.default_hand_pos.clone()
-                    # Default hand position
-
-                    # Apply position randomization if enabled
-                    if self.randomize_initial_positions:
-                        # Apply position randomization
-                        pos = pos + torch.tensor(
-                            [
-                                (torch.rand(1, device=self.device).item() * 2 - 1)
-                                * self.position_randomization_range[0],
-                                (torch.rand(1, device=self.device).item() * 2 - 1)
-                                * self.position_randomization_range[1],
-                                (torch.rand(1, device=self.device).item() * 2 - 1)
-                                * self.position_randomization_range[2],
-                            ],
-                            device=self.device,
-                        )
-
-                    # Set position (root_state_tensor has shape [num_envs, num_bodies, 13])
-                    # Set position (removed per-env debug logging)
-                    self.root_state_tensor[env_id, hand_idx, 0:3] = pos
-
-                    # Set rotation (quaternion)
-                    rot = self.default_hand_rot.clone()
-                    # Default hand rotation
-
-                    # Apply orientation randomization if enabled
-                    if (
-                        self.randomize_initial_orientations
-                        and self.orientation_randomization_range > 0
-                    ):
-                        # Apply orientation randomization
-                        # Generate random rotation around z-axis
-                        rand_angle = (
-                            torch.rand(1, device=self.device).item() * 2 - 1
-                        ) * self.orientation_randomization_range
-                        cos_angle = torch.cos(
-                            torch.tensor(rand_angle / 2, device=self.device)
-                        )
-                        sin_angle = torch.sin(
-                            torch.tensor(rand_angle / 2, device=self.device)
-                        )
-
-                        # Create quaternion for z-axis rotation [x, y, z, w]
-                        rand_quat = torch.tensor(
-                            [0, 0, sin_angle, cos_angle], device=self.device
-                        )
-
-                        # Apply random rotation using quaternion multiplication
-                        # For simplicity, we're only applying a rotation around z
-                        # A full implementation would use quaternion multiplication
-                        rot = rand_quat
-
-                    # Set rotation
-                    # Set rotation (removed per-env debug logging)
-                    self.root_state_tensor[env_id, hand_idx, 3:7] = rot
-
-                    # Zero velocities
-                    # Zero velocities (removed per-env debug logging)
-                    self.root_state_tensor[env_id, hand_idx, 7:13] = torch.zeros(
-                        6, device=self.device
+                # Validate all hand indices
+                if torch.any(hand_indices_to_reset >= self.root_state_tensor.shape[1]):
+                    raise RuntimeError(
+                        f"One or more hand indices exceed root_state_tensor bodies dimension {self.root_state_tensor.shape[1]}"
                     )
+
+                # Set positions - vectorized
+                # Start with default positions expanded for all environments being reset
+                positions = (
+                    self.default_hand_pos.unsqueeze(0).expand(len(env_ids), -1).clone()
+                )
+
+                # Apply position randomization if enabled
+                if self.randomize_initial_positions:
+                    # Generate random offsets for all environments at once
+                    random_offsets = (
+                        torch.rand((len(env_ids), 3), device=self.device) * 2 - 1
+                    )
+                    # Scale by randomization range
+                    position_range = torch.tensor(
+                        self.position_randomization_range, device=self.device
+                    )
+                    random_offsets *= position_range
+                    positions += random_offsets
+
+                # Set positions using advanced indexing
+                self.root_state_tensor[
+                    env_ids[:, None], hand_indices_to_reset[:, None], 0:3
+                ] = positions
+
+                # Set rotations - vectorized
+                # Start with default rotations
+                rotations = (
+                    self.default_hand_rot.unsqueeze(0).expand(len(env_ids), -1).clone()
+                )
+
+                # Apply orientation randomization if enabled
+                if (
+                    self.randomize_initial_orientations
+                    and self.orientation_randomization_range > 0
+                ):
+                    # Generate random angles for all environments
+                    rand_angles = (
+                        torch.rand(len(env_ids), device=self.device) * 2 - 1
+                    ) * self.orientation_randomization_range
+                    half_angles = rand_angles / 2
+
+                    # Create quaternions for z-axis rotation [x, y, z, w]
+                    rotations = torch.zeros((len(env_ids), 4), device=self.device)
+                    rotations[:, 2] = torch.sin(half_angles)  # z component
+                    rotations[:, 3] = torch.cos(half_angles)  # w component
+
+                # Set rotations using advanced indexing
+                self.root_state_tensor[
+                    env_ids[:, None], hand_indices_to_reset[:, None], 3:7
+                ] = rotations
+
+                # Zero velocities - vectorized
+                self.root_state_tensor[
+                    env_ids[:, None], hand_indices_to_reset[:, None], 7:13
+                ] = 0
             else:
                 # No hand indices provided, skipping hand pose reset
                 pass

@@ -60,24 +60,16 @@ class ActionProcessor:
     - Manage PD control targets
     """
 
-    def __init__(self, parent, dof_props, hand_asset):
+    def __init__(self, parent):
         """
         Initialize the action processor.
 
         Args:
             parent: Parent DexHandBase instance
-            dof_props: DOF properties tensor
-            hand_asset: Hand asset for getting DOF names
         """
         self.parent = parent
         self.gym = parent.gym
         self.sim = parent.sim
-        self.hand_asset = hand_asset
-
-        # Store DOF names from asset
-        self.dof_names = []
-        if hand_asset is not None:
-            self.dof_names = self.gym.get_asset_dof_names(hand_asset)
 
         # Control settings
         self.action_control_mode = "position"  # position or position_delta
@@ -91,8 +83,7 @@ class ActionProcessor:
         # Finger coupling map
         self.finger_coupling_map = FINGER_COUPLING_MAP
 
-        # DOF properties and limits
-        self.dof_props = dof_props
+        # DOF properties and limits (will be accessed from tensor_manager)
         self.dof_lower_limits = None
         self.dof_upper_limits = None
         self.num_dof = 0
@@ -146,6 +137,16 @@ class ActionProcessor:
         return self.parent.physics_manager
 
     @property
+    def dof_names(self):
+        """Access DOF names from hand_initializer (single source of truth)."""
+        return self.parent.hand_initializer.dof_names
+
+    @property
+    def dof_props(self):
+        """Access DOF properties from tensor_manager (single source of truth)."""
+        return self.parent.tensor_manager.dof_props
+
+    @property
     def control_dt(self):
         """Access control_dt from physics manager (single source of truth)."""
         if self.physics_manager is None:
@@ -160,7 +161,6 @@ class ActionProcessor:
             config: Dictionary containing:
                 - control_mode: "position" or "position_delta"
                 - num_dof: Number of DOFs
-                - dof_props: DOF properties tensor
                 - policy_controls_hand_base: bool (optional, default: True)
                 - policy_controls_fingers: bool (optional, default: True)
                 - finger_vel_limit: float (required)
@@ -183,9 +183,8 @@ class ActionProcessor:
 
         # Set up DOF properties
         self.num_dof = config["num_dof"]
-        self.dof_props = config["dof_props"]
 
-        # Extract DOF limits
+        # Extract DOF limits from tensor_manager's dof_props
         if isinstance(self.dof_props, torch.Tensor):
             # Format is [stiffness, damping, friction, armature, min, max]
             self.dof_lower_limits = self.dof_props[:, 4].clone().to(device=self.device)

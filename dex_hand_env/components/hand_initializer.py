@@ -140,6 +140,9 @@ class HandInitializer:
         self.fingertip_indices = []
         self.fingerpad_indices = []
 
+        # DOF names - will be populated during asset loading
+        self._dof_names = None
+
         # Initial pose settings
         self.initial_hand_pos = [0.0, 0.0, 0.5]
         self.initial_hand_rot = [0.0, 0.0, 0.0, 1.0]
@@ -155,6 +158,15 @@ class HandInitializer:
     def device(self):
         """Access device from parent (single source of truth)."""
         return self.parent.device
+
+    @property
+    def dof_names(self):
+        """Access DOF names (single source of truth)."""
+        if self._dof_names is None:
+            raise RuntimeError(
+                "DOF names not available. load_hand_asset() must be called first."
+            )
+        return self._dof_names
 
     def set_initial_pose(self, pos, rot=None):
         """
@@ -209,6 +221,9 @@ class HandInitializer:
             # Debug: Get asset DOF names to see what Isaac Gym sees in the asset
             asset_dof_names = self.gym.get_asset_dof_names(hand_asset)
             logger.debug(f"Asset DOF names ({len(asset_dof_names)}): {asset_dof_names}")
+
+            # Store DOF names as single source of truth
+            self._dof_names = asset_dof_names
 
             return hand_asset
         except Exception as e:

@@ -40,26 +40,16 @@ class ObservationEncoder:
     4. Concat tensors with selected keys into final observation buffer
     """
 
-    def __init__(self, parent, hand_asset):
+    def __init__(self, parent):
         """
         Initialize the observation encoder.
 
         Args:
             parent: Parent DexHandBase instance
-            hand_asset: Hand asset for getting DOF names
         """
         self.parent = parent
         self.gym = parent.gym
         self.sim = parent.sim
-        self.hand_asset = hand_asset
-
-        # Store DOF names if asset is provided
-        self.dof_names = []
-        if hand_asset is not None:
-            self.dof_names = self.gym.get_asset_dof_names(hand_asset)
-            logger.info(
-                f"ObservationEncoder initialized with {len(self.dof_names)} DOF names from asset"
-            )
 
         # Constants for observation dimensions (imported from constants.py)
         self.NUM_BASE_DOFS = NUM_BASE_DOFS
@@ -112,6 +102,11 @@ class ObservationEncoder:
         if self.physics_manager is None:
             raise RuntimeError("physics_manager not set. Cannot access control_dt.")
         return self.physics_manager.control_dt
+
+    @property
+    def dof_names(self):
+        """Access DOF names from hand_initializer (single source of truth)."""
+        return self.parent.hand_initializer.dof_names
 
     def initialize(
         self,
@@ -324,11 +319,19 @@ class ObservationEncoder:
         # Import HardwareMapping to get the authoritative control-to-joint mapping
         from dex_hand_env.components.hand_initializer import HardwareMapping
 
-        # Create mapping from control name to its index in the active joint list
-        control_to_idx = {name: idx for idx, name in enumerate(self.active_joint_names)}
+        # Pre-build mappings for vectorized lookup
+        # Create dict of control_name -> HardwareMapping
+        control_to_hardware = {}
+        for member in HardwareMapping:
+            control_to_hardware[member.control_name] = member
+
+        # Create dict of DOF name -> index for fast lookup
+        finger_dof_names = self.dof_names[self.NUM_BASE_DOFS :]
+        dof_name_to_idx = {
+            name: idx + self.NUM_BASE_DOFS for idx, name in enumerate(finger_dof_names)
+        }
 
         # Create array to store DOF indices for each active control
-        # Use the device from tensor manager's tensors to ensure indices match tensor device
         active_indices = torch.full(
             (len(self.active_joint_names),),
             -1,
@@ -336,34 +339,29 @@ class ObservationEncoder:
             device=self.tensor_manager.device,
         )
 
-        # For each control, find the PRIMARY DOF (first joint in the list)
-        for control_name in self.active_joint_names:
-            if control_name in control_to_idx:
-                control_idx = control_to_idx[control_name]
+        # Vectorized mapping: build all indices at once
+        for control_idx, control_name in enumerate(self.active_joint_names):
+            # Get hardware mapping
+            hardware_mapping = control_to_hardware.get(control_name)
+            if hardware_mapping is None:
+                raise RuntimeError(
+                    f"Control '{control_name}' not found in HardwareMapping"
+                )
 
-                # Get the joint names for this control from HardwareMapping
-                hardware_mapping = None
-                for member in HardwareMapping:
-                    if member.control_name == control_name:
-                        hardware_mapping = member
-                        break
+            # Use the PRIMARY DOF (first joint) to represent this control
+            primary_joint = hardware_mapping.joint_names[0]
 
-                if hardware_mapping is None:
-                    raise RuntimeError(
-                        f"Control '{control_name}' not found in HardwareMapping"
-                    )
+            # Direct lookup instead of loop
+            dof_idx = dof_name_to_idx.get(primary_joint)
+            if dof_idx is None:
+                raise RuntimeError(
+                    f"Primary joint '{primary_joint}' for control '{control_name}' not found in DOF names"
+                )
 
-                # Use the PRIMARY DOF (first joint) to represent this control
-                primary_joint = hardware_mapping.joint_names[0]
-
-                # Find the DOF index for this primary joint
-                for i, dof_name in enumerate(self.dof_names[self.NUM_BASE_DOFS :]):
-                    if dof_name == primary_joint:
-                        active_indices[control_idx] = i + self.NUM_BASE_DOFS
-                        logger.debug(
-                            f"Mapped control '{control_name}' -> primary joint '{primary_joint}' -> DOF index {i + self.NUM_BASE_DOFS}"
-                        )
-                        break
+            active_indices[control_idx] = dof_idx
+            logger.debug(
+                f"Mapped control '{control_name}' -> primary joint '{primary_joint}' -> DOF index {dof_idx}"
+            )
 
         # Check that all active controls have been mapped
         valid_mask = active_indices >= 0

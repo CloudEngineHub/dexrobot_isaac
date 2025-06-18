@@ -336,8 +336,6 @@ class DexHandBase(VecTask):
         # Create action processor
         self.action_processor = ActionProcessor(
             parent=self,
-            dof_props=self.dof_props,
-            hand_asset=self.hand_asset,
         )
 
         # Initialize action processor with all configuration at once
@@ -349,7 +347,6 @@ class DexHandBase(VecTask):
         action_processor_config = {
             "control_mode": self.cfg["env"]["controlMode"],
             "num_dof": self.num_dof,
-            "dof_props": self.dof_props,
             "policy_controls_hand_base": self.cfg["env"]["policyControlsHandBase"],
             "policy_controls_fingers": self.cfg["env"]["policyControlsFingers"],
             "finger_vel_limit": self.cfg["env"]["maxFingerJointVelocity"],
@@ -374,7 +371,6 @@ class DexHandBase(VecTask):
         # Create observation encoder with tensor manager reference (will be initialized later)
         self.observation_encoder = ObservationEncoder(
             parent=self,
-            hand_asset=self.hand_asset,
         )
 
         # Create reset manager with all dependencies
@@ -722,12 +718,13 @@ class DexHandBase(VecTask):
                 hand_positions = None
                 # rigid_body_states and hand_indices must be initialized
                 if self.hand_indices:
-                    hand_positions = torch.zeros((self.num_envs, 3), device=self.device)
-                    for i, hand_idx in enumerate(self.hand_indices):
-                        if i >= self.num_envs:
-                            break
-                        # Get position using the correct tensor indexing (root_state_tensor shape is [num_envs, num_bodies, 13])
-                        hand_positions[i] = self.rigid_body_states[i, hand_idx, :3]
+                    # Vectorized extraction of hand positions
+                    # rigid_body_states shape: [num_envs, num_bodies, 13]
+                    # Extract positions for all hands at once using advanced indexing
+                    env_indices = torch.arange(self.num_envs, device=self.device)
+                    hand_positions = self.rigid_body_states[
+                        env_indices, self.hand_indices, :3
+                    ]
 
                 self.viewer_controller.update_camera_position(hand_positions)
 
