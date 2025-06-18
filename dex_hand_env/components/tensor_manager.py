@@ -25,25 +25,16 @@ class TensorManager:
     - Manage tensor memory and buffers
     """
 
-    def __init__(self, gym, sim, num_envs, device):
+    def __init__(self, parent):
         """
         Initialize the tensor manager.
 
         Args:
-            gym: The isaacgym gym instance
-            sim: The isaacgym simulation instance
-            num_envs: Number of environments
-            device: PyTorch device
+            parent: Parent DexHandBase instance
         """
-        self.gym = gym
-        self.sim = sim
-        self.num_envs = num_envs
-
-        # Ensure device is a torch.device object, not a string
-        if isinstance(device, str):
-            self.device = torch.device(device)
-        else:
-            self.device = device
+        self.parent = parent
+        self.gym = parent.gym
+        self.sim = parent.sim
 
         # Flag to track initialization state
         self.tensors_initialized = False
@@ -65,6 +56,19 @@ class TensorManager:
 
         # DOF properties from asset
         self.dof_props_from_asset = None
+
+    @property
+    def num_envs(self):
+        """Access num_envs from parent (single source of truth)."""
+        return self.parent.num_envs
+
+    @property
+    def device(self):
+        """Access device from parent (single source of truth)."""
+        # Ensure device is a torch.device object, not a string
+        if isinstance(self.parent.device, str):
+            return torch.device(self.parent.device)
+        return self.parent.device
 
     def acquire_tensor_handles(self):
         """

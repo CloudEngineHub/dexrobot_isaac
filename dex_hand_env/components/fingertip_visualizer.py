@@ -21,28 +21,39 @@ class FingertipVisualizer:
     - Provide visual feedback during rendering
     """
 
-    def __init__(self, gym, envs, hand_indices, fingerpad_handles, device):
+    def __init__(self, parent, hand_indices, fingerpad_handles):
         """
         Initialize the fingertip visualizer.
 
         Args:
-            gym: The isaacgym gym instance
-            envs: List of environment instances
-            hand_indices: Indices of hand actors in each environment
-            fingerpad_handles: Handles of fingerpad rigid bodies
-            device: PyTorch device
+            parent: Parent object (typically DexHandBase) that provides shared properties
+            hand_indices: Indices of hand actors in each environment (unique to this component)
+            fingerpad_handles: Handles of fingerpad rigid bodies (unique to this component)
         """
-        self.gym = gym
-        self.envs = envs
+        self.parent = parent
         self.hand_indices = hand_indices
         self.fingerpad_handles = fingerpad_handles
-        self.device = device
 
         # Default colors
         self.default_color = gymapi.Vec3(0.7, 0.7, 0.7)  # Light gray
 
         # Check if handles are valid
         self.handles_valid = len(self.fingerpad_handles) > 0 and len(self.envs) > 0
+
+    @property
+    def gym(self):
+        """Get gym instance from parent."""
+        return self.parent.gym
+
+    @property
+    def envs(self):
+        """Get environments from parent."""
+        return self.parent.envs
+
+    @property
+    def device(self):
+        """Get device from parent."""
+        return self.parent.device
 
     def update_fingertip_visualization(self, contact_forces):
         """
@@ -73,7 +84,7 @@ class FingertipVisualizer:
             Boolean indicating whether colors were updated
         """
         # Skip if no rendering or invalid handles
-        if not hasattr(self, 'handles_valid') or not self.handles_valid:
+        if not hasattr(self, "handles_valid") or not self.handles_valid:
             return False
 
         # Calculate contact force magnitude for each fingertip
@@ -83,7 +94,9 @@ class FingertipVisualizer:
         # Update color for each environment
         for i in range(contact_forces.shape[0]):  # For each environment
             # Update each fingertip
-            for ft_idx in range(min(contact_forces.shape[1], len(self.fingerpad_handles))):  # For each fingertip
+            for ft_idx in range(
+                min(contact_forces.shape[1], len(self.fingerpad_handles))
+            ):  # For each fingertip
                 # Get the rigid body handle for this fingertip
                 handle = self.fingerpad_handles[ft_idx]
 
@@ -103,9 +116,9 @@ class FingertipVisualizer:
                             self.hand_indices[i],
                             handle,
                             gymapi.MESH_VISUAL,
-                            color
+                            color,
                         )
-                    except Exception as e:
+                    except Exception:
                         # Handle exception silently - this can happen during initialization
                         pass
                 else:
@@ -116,9 +129,9 @@ class FingertipVisualizer:
                             self.hand_indices[i],
                             handle,
                             gymapi.MESH_VISUAL,
-                            self.default_color
+                            self.default_color,
                         )
-                    except Exception as e:
+                    except Exception:
                         # Handle exception silently - this can happen during initialization
                         pass
 

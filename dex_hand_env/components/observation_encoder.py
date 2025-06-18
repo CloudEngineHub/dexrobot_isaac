@@ -40,40 +40,18 @@ class ObservationEncoder:
     4. Concat tensors with selected keys into final observation buffer
     """
 
-    def __init__(
-        self,
-        gym,
-        sim,
-        num_envs,
-        device,
-        tensor_manager,
-        hand_initializer,
-        hand_asset,
-        physics_manager,
-    ):
+    def __init__(self, parent, hand_asset):
         """
         Initialize the observation encoder.
 
         Args:
-            gym: The isaacgym gym instance
-            sim: The isaacgym simulation instance
-            num_envs: Number of environments
-            device: PyTorch device
-            tensor_manager: Reference to tensor manager for accessing tensors
-            hand_initializer: Reference to hand initializer for accessing rigid body indices
+            parent: Parent DexHandBase instance
             hand_asset: Hand asset for getting DOF names
-            physics_manager: PhysicsManager instance for accessing control_dt
         """
-        self.gym = gym
-        self.sim = sim
-        self.num_envs = num_envs
-        self.device = device
-        self.tensor_manager = tensor_manager
+        self.parent = parent
+        self.gym = parent.gym
+        self.sim = parent.sim
         self.hand_asset = hand_asset
-        self.hand_initializer = hand_initializer
-
-        # Reference to physics manager for accessing control_dt (single source of truth)
-        self.physics_manager = physics_manager
 
         # Store DOF names if asset is provided
         self.dof_names = []
@@ -102,6 +80,31 @@ class ObservationEncoder:
         # Manual velocity computation (to replace unreliable Isaac Gym velocities)
         self.prev_dof_pos = None
         # control_dt is accessed via property decorator from physics_manager
+
+    @property
+    def num_envs(self):
+        """Access num_envs from parent (single source of truth)."""
+        return self.parent.num_envs
+
+    @property
+    def device(self):
+        """Access device from parent (single source of truth)."""
+        return self.parent.device
+
+    @property
+    def tensor_manager(self):
+        """Access tensor_manager from parent (single source of truth)."""
+        return self.parent.tensor_manager
+
+    @property
+    def hand_initializer(self):
+        """Access hand_initializer from parent (single source of truth)."""
+        return self.parent.hand_initializer
+
+    @property
+    def physics_manager(self):
+        """Access physics_manager from parent (single source of truth)."""
+        return self.parent.physics_manager
 
     @property
     def control_dt(self):

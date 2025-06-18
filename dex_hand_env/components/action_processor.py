@@ -60,27 +60,19 @@ class ActionProcessor:
     - Manage PD control targets
     """
 
-    def __init__(
-        self, gym, sim, num_envs, device, dof_props, hand_asset, physics_manager
-    ):
+    def __init__(self, parent, dof_props, hand_asset):
         """
         Initialize the action processor.
 
         Args:
-            gym: The isaacgym gym instance
-            sim: The isaacgym simulation instance
-            num_envs: Number of environments
-            device: PyTorch device
+            parent: Parent DexHandBase instance
             dof_props: DOF properties tensor
             hand_asset: Hand asset for getting DOF names
-            physics_manager: PhysicsManager instance for accessing control_dt
         """
-        self.gym = gym
-        self.sim = sim
-        self.num_envs = num_envs
-        self.device = device
+        self.parent = parent
+        self.gym = parent.gym
+        self.sim = parent.sim
         self.hand_asset = hand_asset
-        self.physics_manager = physics_manager
 
         # Store DOF names from asset
         self.dof_names = []
@@ -137,6 +129,21 @@ class ActionProcessor:
 
         # Flag to ensure setup is complete
         self._initialized = False
+
+    @property
+    def num_envs(self):
+        """Access num_envs from parent (single source of truth)."""
+        return self.parent.num_envs
+
+    @property
+    def device(self):
+        """Access device from parent (single source of truth)."""
+        return self.parent.device
+
+    @property
+    def physics_manager(self):
+        """Access physics_manager from parent (single source of truth)."""
+        return self.parent.physics_manager
 
     @property
     def control_dt(self):

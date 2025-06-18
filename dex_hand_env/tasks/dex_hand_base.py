@@ -258,10 +258,7 @@ class DexHandBase(VecTask):
 
         # Create hand initializer
         self.hand_initializer = HandInitializer(
-            gym=self.gym,
-            sim=self.sim,
-            num_envs=self.num_envs,
-            device=self.device,
+            parent=self,
             asset_root=self.asset_root,
         )
 
@@ -304,9 +301,7 @@ class DexHandBase(VecTask):
         self.fingerpad_indices = rigid_body_indices["fingerpad_indices"]
 
         # Create tensor manager after environment setup
-        self.tensor_manager = TensorManager(
-            gym=self.gym, sim=self.sim, num_envs=self.num_envs, device=self.device
-        )
+        self.tensor_manager = TensorManager(parent=self)
 
         # Acquire tensor handles BEFORE prepare_sim (critical for GPU pipeline)
         self.tensor_manager.acquire_tensor_handles()
@@ -334,22 +329,15 @@ class DexHandBase(VecTask):
 
         # Create physics manager
         self.physics_manager = PhysicsManager(
-            gym=self.gym,
-            sim=self.sim,
-            device=self.device,
+            parent=self,
             physics_dt=self.physics_dt,
-            use_gpu_pipeline=self.use_gpu_pipeline,
         )
 
         # Create action processor
         self.action_processor = ActionProcessor(
-            gym=self.gym,
-            sim=self.sim,
-            num_envs=self.num_envs,
-            device=self.device,
+            parent=self,
             dof_props=self.dof_props,
             hand_asset=self.hand_asset,
-            physics_manager=self.physics_manager,
         )
 
         # Initialize action processor with all configuration at once
@@ -385,28 +373,17 @@ class DexHandBase(VecTask):
 
         # Create observation encoder with tensor manager reference (will be initialized later)
         self.observation_encoder = ObservationEncoder(
-            gym=self.gym,
-            sim=self.sim,
-            num_envs=self.num_envs,
-            device=self.device,
-            tensor_manager=self.tensor_manager,
+            parent=self,
             hand_asset=self.hand_asset,
-            hand_initializer=self.hand_initializer,
-            physics_manager=self.physics_manager,
         )
 
         # Create reset manager with all dependencies
         self.reset_manager = ResetManager(
-            gym=self.gym,
-            sim=self.sim,
-            num_envs=self.num_envs,
-            device=self.device,
-            physics_manager=self.physics_manager,
+            parent=self,
             dof_state=self.dof_state,
             root_state_tensor=self.actor_root_state_tensor,
             hand_indices=self.hand_actor_indices_tensor,
             task=self.task,
-            action_processor=self.action_processor,
             max_episode_length=self.max_episode_length,
         )
 
@@ -430,33 +407,24 @@ class DexHandBase(VecTask):
         # Create camera controller if viewer exists
         if hasattr(self, "viewer") and self.viewer is not None:
             self.viewer_controller = ViewerController(
-                gym=self.gym,
+                parent=self,
                 viewer=self.viewer,
-                envs=self.envs,
-                num_envs=self.num_envs,
-                device=self.device,
             )
         else:
             self.viewer_controller = None
 
         # Create fingertip visualizer
         self.fingertip_visualizer = FingertipVisualizer(
-            gym=self.gym,
-            envs=self.envs,
+            parent=self,
             hand_indices=self.hand_indices,
             fingerpad_handles=self.fingertip_body_handles,
-            device=self.device,
         )
 
         # Create success/failure tracker
-        self.success_tracker = SuccessFailureTracker(
-            num_envs=self.num_envs, device=self.device, cfg=self.cfg
-        )
+        self.success_tracker = SuccessFailureTracker(parent=self, cfg=self.cfg)
 
         # Create reward calculator
-        self.reward_calculator = RewardCalculator(
-            num_envs=self.num_envs, device=self.device, cfg=self.cfg
-        )
+        self.reward_calculator = RewardCalculator(parent=self, cfg=self.cfg)
 
         # Mark tensors as initialized
         self._tensors_initialized = True

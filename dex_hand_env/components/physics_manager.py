@@ -26,22 +26,18 @@ class PhysicsManager:
     - Apply tensor states to simulation
     """
 
-    def __init__(self, gym, sim, device, physics_dt, use_gpu_pipeline=False):
+    def __init__(self, parent, physics_dt):
         """
         Initialize the physics manager.
 
         Args:
-            gym: The isaacgym gym instance
-            sim: The isaacgym simulation instance
-            device: PyTorch device
+            parent: Parent DexHandBase instance
             physics_dt: Physics timestep from config
-            use_gpu_pipeline: Whether GPU pipeline is enabled
         """
-        self.gym = gym
-        self.sim = sim
-        self.device = device
+        self.parent = parent
+        self.gym = parent.gym
+        self.sim = parent.sim
         self.physics_dt = physics_dt
-        self.use_gpu_pipeline = use_gpu_pipeline
 
         # Physics tracking variables
         self.physics_step_count = 0
@@ -52,6 +48,11 @@ class PhysicsManager:
 
         # control_dt will be set by measurement
         self.control_dt = None
+
+    @property
+    def device(self):
+        """Access device from parent (single source of truth)."""
+        return self.parent.device
 
     def step_physics(self, refresh_tensors=True):
         """

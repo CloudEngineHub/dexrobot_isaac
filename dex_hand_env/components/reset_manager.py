@@ -25,47 +25,34 @@ class ResetManager:
 
     def __init__(
         self,
-        gym,
-        sim,
-        num_envs,
-        device,
-        physics_manager,
+        parent,
         dof_state,
         root_state_tensor,
         hand_indices,
         task,
-        action_processor,
         max_episode_length,
     ):
         """
         Initialize the reset manager.
 
         Args:
-            gym: The isaacgym gym instance
-            sim: The isaacgym simulation instance
-            num_envs: Number of environments
-            device: PyTorch device
-            physics_manager: Physics manager for applying state updates
+            parent: Parent DexHandBase instance
             dof_state: DOF state tensor reference
             root_state_tensor: Root state tensor reference
             hand_indices: Hand actor indices for each environment
             task: Task instance (may have reset_task method)
-            action_processor: ActionProcessor instance for resetting targets
             max_episode_length: Maximum episode length from config
         """
-        self.gym = gym
-        self.sim = sim
-        self.num_envs = num_envs
-        self.device = device
+        self.parent = parent
+        self.gym = parent.gym
+        self.sim = parent.sim
         self.max_episode_length = max_episode_length
 
         # Store dependencies
-        self.physics_manager = physics_manager
         self.dof_state = dof_state
         self.root_state_tensor = root_state_tensor
         self.hand_indices = hand_indices
         self.task = task
-        self.action_processor = action_processor
 
         # Reset and progress buffers - will be set by set_buffers()
         self.reset_buf = None
@@ -84,8 +71,28 @@ class ResetManager:
 
         # Default initial values
         self.default_dof_pos = None
-        self.default_hand_pos = torch.tensor([0.0, 0.0, 0.5], device=device)
-        self.default_hand_rot = torch.tensor([0.0, 0.0, 0.0, 1.0], device=device)
+        self.default_hand_pos = torch.tensor([0.0, 0.0, 0.5], device=self.device)
+        self.default_hand_rot = torch.tensor([0.0, 0.0, 0.0, 1.0], device=self.device)
+
+    @property
+    def num_envs(self):
+        """Access num_envs from parent (single source of truth)."""
+        return self.parent.num_envs
+
+    @property
+    def device(self):
+        """Access device from parent (single source of truth)."""
+        return self.parent.device
+
+    @property
+    def physics_manager(self):
+        """Access physics_manager from parent (single source of truth)."""
+        return self.parent.physics_manager
+
+    @property
+    def action_processor(self):
+        """Access action_processor from parent (single source of truth)."""
+        return self.parent.action_processor
 
     def set_episode_length(self, max_episode_length):
         """

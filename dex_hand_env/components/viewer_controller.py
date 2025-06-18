@@ -34,22 +34,16 @@ class ViewerController:
     - Update camera position based on the current mode
     """
 
-    def __init__(self, gym, viewer, envs, num_envs, device):
+    def __init__(self, parent, viewer):
         """
         Initialize the viewer controller.
 
         Args:
-            gym: The isaacgym gym instance
-            viewer: The isaacgym viewer
-            envs: List of environment instances
-            num_envs: Number of environments
-            device: PyTorch device
+            parent: Parent object (typically DexHandBase) that provides shared properties
+            viewer: The isaacgym viewer (unique to this component)
         """
-        self.gym = gym
+        self.parent = parent
         self.viewer = viewer
-        self.envs = envs
-        self.num_envs = num_envs
-        self.device = device
 
         # Camera control state
         self.camera_view_mode = "rear"  # Options: "free", "rear", "right", "bottom"
@@ -64,6 +58,26 @@ class ViewerController:
         # Initialize keyboard events if viewer is available
         if self.viewer is not None:
             self.subscribe_keyboard_events()
+
+    @property
+    def gym(self):
+        """Get gym instance from parent."""
+        return self.parent.gym
+
+    @property
+    def envs(self):
+        """Get environments from parent."""
+        return self.parent.envs
+
+    @property
+    def num_envs(self):
+        """Get number of environments from parent."""
+        return self.parent.num_envs
+
+    @property
+    def device(self):
+        """Get device from parent."""
+        return self.parent.device
 
     def subscribe_keyboard_events(self):
         """

@@ -19,25 +19,30 @@ class SuccessFailureTracker:
     - Generate episode termination signals and information
     """
 
-    def __init__(self, num_envs, device, cfg):
+    def __init__(self, parent, cfg):
         """
         Initialize the success/failure tracker.
 
         Args:
-            num_envs: Number of environments
-            device: PyTorch device
-            cfg: Configuration dictionary
+            parent: Parent object (typically DexHandBase) that provides shared properties
+            cfg: Configuration dictionary (unique to this component)
         """
-        self.num_envs = num_envs
-        self.device = device
+        self.parent = parent
+        self.cfg = cfg
 
         # Episode status tracking
-        self.episode_success = torch.zeros(num_envs, device=device, dtype=torch.bool)
-        self.episode_failure = torch.zeros(num_envs, device=device, dtype=torch.bool)
+        self.episode_success = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.bool
+        )
+        self.episode_failure = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.bool
+        )
 
         # Active criteria lists (which criteria to use)
         self.active_success_criteria = cfg["env"].get("activeSuccessCriteria", [])
-        self.active_failure_criteria = cfg["env"].get("activeFailureCriteria", ["hitting_ground"])
+        self.active_failure_criteria = cfg["env"].get(
+            "activeFailureCriteria", ["hitting_ground"]
+        )
 
         # Track which specific success/failure criteria triggered for each environment
         self.success_reasons = {}
@@ -54,7 +59,19 @@ class SuccessFailureTracker:
         self.consecutive_successes = 0
         self.max_consecutive_successes = cfg["env"].get("maxConsecutiveSuccesses", 50)
 
-    def evaluate(self, progress_buf, builtin_success, task_success, builtin_failure, task_failure):
+    @property
+    def num_envs(self):
+        """Get number of environments from parent."""
+        return self.parent.num_envs
+
+    @property
+    def device(self):
+        """Get device from parent."""
+        return self.parent.device
+
+    def evaluate(
+        self, progress_buf, builtin_success, task_success, builtin_failure, task_failure
+    ):
         """
         Evaluate success and failure criteria and update episode status.
 
@@ -105,14 +122,20 @@ class SuccessFailureTracker:
                 info[f"failure_{name}"] = criterion.float().mean().item()
 
         # Initialize success and failure tensors
-        episode_success = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
-        episode_failure = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        episode_success = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.bool
+        )
+        episode_failure = torch.zeros(
+            self.num_envs, device=self.device, dtype=torch.bool
+        )
 
         # Check for any success or failure conditions
         for name, criterion in active_success.items():
             # Initialize tracking tensor for this reason if it doesn't exist
             if name not in self.success_reasons:
-                self.success_reasons[name] = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+                self.success_reasons[name] = torch.zeros(
+                    self.num_envs, device=self.device, dtype=torch.bool
+                )
 
             # Identify new successes (environments that weren't successful before but now satisfy this criterion)
             new_successes = ~episode_success & criterion
@@ -126,7 +149,9 @@ class SuccessFailureTracker:
         for name, criterion in active_failure.items():
             # Initialize tracking tensor for this reason if it doesn't exist
             if name not in self.failure_reasons:
-                self.failure_reasons[name] = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+                self.failure_reasons[name] = torch.zeros(
+                    self.num_envs, device=self.device, dtype=torch.bool
+                )
 
             # Identify new failures
             new_failures = ~episode_failure & criterion
@@ -163,7 +188,9 @@ class SuccessFailureTracker:
         # Record overall statistics for easy logging
         success_count = episode_success.sum().item()
         failure_count = episode_failure.sum().item()
-        timeout_count = (max_steps_done & ~episode_success & ~episode_failure).sum().item()
+        timeout_count = (
+            (max_steps_done & ~episode_success & ~episode_failure).sum().item()
+        )
 
         info["success_rate"] = success_count / self.num_envs
         info["failure_rate"] = failure_count / self.num_envs
@@ -208,7 +235,9 @@ class SuccessFailureTracker:
             self.consecutive_successes = 0
 
         # Cap at max value
-        self.consecutive_successes = min(self.consecutive_successes, self.max_consecutive_successes)
+        self.consecutive_successes = min(
+            self.consecutive_successes, self.max_consecutive_successes
+        )
 
     def reset(self, env_ids):
         """

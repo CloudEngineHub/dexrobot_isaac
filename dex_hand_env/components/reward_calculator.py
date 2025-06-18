@@ -19,24 +19,43 @@ class RewardCalculator:
     - Combine task-specific and common rewards
     """
 
-    def __init__(self, num_envs, device, cfg):
+    def __init__(self, parent, cfg):
         """
         Initialize the reward calculator.
 
         Args:
-            num_envs: Number of environments
-            device: PyTorch device
+            parent: Parent DexHandBase instance
             cfg: Configuration dictionary
         """
-        self.num_envs = num_envs
-        self.device = device
+        self.parent = parent
 
         # Initialize reward weights from config
         self.reward_weights = cfg["env"].get("rewardWeights", {})
 
-    def compute_common_reward_terms(self, obs_dict, hand_vel, hand_ang_vel, dof_vel, dof_pos,
-                                  dof_lower_limits, dof_upper_limits, prev_dof_vel,
-                                  prev_hand_vel, prev_hand_ang_vel, prev_contacts):
+    @property
+    def num_envs(self):
+        """Access num_envs from parent (single source of truth)."""
+        return self.parent.num_envs
+
+    @property
+    def device(self):
+        """Access device from parent (single source of truth)."""
+        return self.parent.device
+
+    def compute_common_reward_terms(
+        self,
+        obs_dict,
+        hand_vel,
+        hand_ang_vel,
+        dof_vel,
+        dof_pos,
+        dof_lower_limits,
+        dof_upper_limits,
+        prev_dof_vel,
+        prev_hand_vel,
+        prev_hand_ang_vel,
+        prev_contacts,
+    ):
         """
         Compute common reward components available to all tasks.
 
@@ -71,9 +90,15 @@ class RewardCalculator:
 
         # 1. Height safety reward: penalize when fingertips get too close to the ground
         min_height = 0.02  # Minimum safe height above ground
-        fingertip_heights = obs_dict["fingertip_pos"][:, :, 2]  # Z-coordinate of all fingertips
-        min_fingertip_height = torch.min(fingertip_heights, dim=1)[0]  # Minimum height across all fingertips
-        height_safety = torch.clamp(1.0 - torch.exp(-(min_fingertip_height - min_height) * 20), 0.0, 1.0)
+        fingertip_heights = obs_dict["fingertip_pos"][
+            :, :, 2
+        ]  # Z-coordinate of all fingertips
+        min_fingertip_height = torch.min(fingertip_heights, dim=1)[
+            0
+        ]  # Minimum height across all fingertips
+        height_safety = torch.clamp(
+            1.0 - torch.exp(-(min_fingertip_height - min_height) * 20), 0.0, 1.0
+        )
         rewards["height_safety"] = height_safety
 
         # 2. Velocity penalties: penalize high velocities
@@ -98,7 +123,9 @@ class RewardCalculator:
         normalized_joints = 2.0 * (dof_pos - dof_lower_limits) / joint_ranges - 1.0
         # Penalize when |normalized_joints| > 0.8 (i.e., within 10% of limits)
         joint_limit_margin = 0.8
-        joint_limit_penalties = torch.clamp(torch.abs(normalized_joints) - joint_limit_margin, 0.0, 1.0)
+        joint_limit_penalties = torch.clamp(
+            torch.abs(normalized_joints) - joint_limit_margin, 0.0, 1.0
+        )
         joint_limit_penalty = torch.sum(joint_limit_penalties, dim=1) / dof_pos.shape[1]
         rewards["joint_limit"] = 1.0 - joint_limit_penalty
 
@@ -125,13 +152,17 @@ class RewardCalculator:
         contacts = contact_force_norm > 0.1
 
         # Compute changes in contact state
-        contact_changes = torch.sum(torch.logical_xor(contacts, prev_contacts).float(), dim=1)
+        contact_changes = torch.sum(
+            torch.logical_xor(contacts, prev_contacts).float(), dim=1
+        )
         contact_stability = torch.exp(-contact_changes)
         rewards["contact_stability"] = contact_stability
 
         return rewards
 
-    def compute_total_reward(self, common_rewards, task_rewards, success_failure_rewards=None):
+    def compute_total_reward(
+        self, common_rewards, task_rewards, success_failure_rewards=None
+    ):
         """
         Compute total reward as weighted sum of reward components.
 
@@ -173,7 +204,9 @@ class RewardCalculator:
                 total_rewards += weighted_reward
 
                 # Store for logging
-                reward_components[name] = reward  # Store unweighted rewards for interpretability
+                reward_components[
+                    name
+                ] = reward  # Store unweighted rewards for interpretability
                 reward_components[f"{name}_weighted"] = weighted_reward
 
         # Add total to components for logging

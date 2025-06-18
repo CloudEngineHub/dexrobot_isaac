@@ -47,21 +47,19 @@ class HandInitializer:
     - Configure joint properties like limits and stiffness
     """
 
-    def __init__(self, gym, sim, num_envs, device, asset_root=None):
+    def __init__(self, parent, asset_root=None):
         """
         Initialize the hand initializer.
 
         Args:
-            gym: The isaacgym gym instance
-            sim: The isaacgym simulation instance
-            num_envs: Number of environments
-            device: PyTorch device
+            parent: Parent DexHandBase instance
             asset_root: Root directory for assets
         """
-        self.gym = gym
-        self.sim = sim
-        self.num_envs = num_envs
-        self.device = device
+        self.parent = parent
+
+        # Access parent properties directly for gym and sim (immutable)
+        self.gym = parent.gym
+        self.sim = parent.sim
 
         # Set asset root
         if asset_root is None:
@@ -147,6 +145,16 @@ class HandInitializer:
         self.initial_hand_rot = [0.0, 0.0, 0.0, 1.0]
 
         # Joint control settings removed - now using MJCF values directly
+
+    @property
+    def num_envs(self):
+        """Access num_envs from parent (single source of truth)."""
+        return self.parent.num_envs
+
+    @property
+    def device(self):
+        """Access device from parent (single source of truth)."""
+        return self.parent.device
 
     def set_initial_pose(self, pos, rot=None):
         """

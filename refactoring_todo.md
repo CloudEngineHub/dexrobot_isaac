@@ -15,7 +15,7 @@
 - [x] Update components to import from constants.py (action_processor, observation_encoder, dex_hand_base)
 - [ ] DOF properties stored in 3 places (HandInitializer, TensorManager, ActionProcessor)
 - [ ] DOF names duplicated in 3 components
-- [ ] Device stored in every component
+- [x] Device stored in every component - now all components use parent reference pattern
 
 ### 3. Refactor action_processor.py process_actions() method ✅
 - [x] Method was 431 lines, now ~30 lines
