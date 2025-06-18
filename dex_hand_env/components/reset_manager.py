@@ -28,7 +28,8 @@ class ResetManager:
         parent,
         dof_state,
         root_state_tensor,
-        hand_indices,
+        hand_actor_indices,
+        hand_rigid_body_indices,
         task,
         max_episode_length,
     ):
@@ -39,7 +40,8 @@ class ResetManager:
             parent: Parent DexHandBase instance
             dof_state: DOF state tensor reference
             root_state_tensor: Root state tensor reference
-            hand_indices: Hand actor indices for each environment
+            hand_actor_indices: Hand actor indices for DOF operations
+            hand_rigid_body_indices: Hand rigid body indices for pose operations
             task: Task instance (may have reset_task method)
             max_episode_length: Maximum episode length from config
         """
@@ -51,7 +53,8 @@ class ResetManager:
         # Store dependencies
         self.dof_state = dof_state
         self.root_state_tensor = root_state_tensor
-        self.hand_indices = hand_indices
+        self.hand_actor_indices = hand_actor_indices
+        self.hand_rigid_body_indices = hand_rigid_body_indices
         self.task = task
 
         # Reset and progress buffers - will be set by set_buffers()
@@ -305,9 +308,9 @@ class ResetManager:
             if False:  # Disabled for fixed-base hands
                 # Vectorized root state reset for future use
                 # Validate input parameters
-                if len(self.hand_indices) != self.num_envs:
+                if len(self.hand_rigid_body_indices) != self.num_envs:
                     raise RuntimeError(
-                        f"hand_indices length {len(self.hand_indices)} doesn't match num_envs {self.num_envs}"
+                        f"hand_rigid_body_indices length {len(self.hand_rigid_body_indices)} doesn't match num_envs {self.num_envs}"
                     )
 
                 # Check if any env_ids are out of bounds
@@ -318,14 +321,16 @@ class ResetManager:
                     )
 
                 # Get hand indices for environments being reset
-                hand_indices_to_reset = torch.tensor(
-                    [self.hand_indices[env_id] for env_id in env_ids],
+                hand_rigid_body_indices_to_reset = torch.tensor(
+                    [self.hand_rigid_body_indices[env_id] for env_id in env_ids],
                     device=self.device,
                     dtype=torch.long,
                 )
 
                 # Validate all hand indices
-                if torch.any(hand_indices_to_reset >= self.root_state_tensor.shape[1]):
+                if torch.any(
+                    hand_rigid_body_indices_to_reset >= self.root_state_tensor.shape[1]
+                ):
                     raise RuntimeError(
                         f"One or more hand indices exceed root_state_tensor bodies dimension {self.root_state_tensor.shape[1]}"
                     )
@@ -351,7 +356,7 @@ class ResetManager:
 
                 # Set positions using advanced indexing
                 self.root_state_tensor[
-                    env_ids[:, None], hand_indices_to_reset[:, None], 0:3
+                    env_ids[:, None], hand_rigid_body_indices_to_reset[:, None], 0:3
                 ] = positions
 
                 # Set rotations - vectorized
@@ -378,12 +383,12 @@ class ResetManager:
 
                 # Set rotations using advanced indexing
                 self.root_state_tensor[
-                    env_ids[:, None], hand_indices_to_reset[:, None], 3:7
+                    env_ids[:, None], hand_rigid_body_indices_to_reset[:, None], 3:7
                 ] = rotations
 
                 # Zero velocities - vectorized
                 self.root_state_tensor[
-                    env_ids[:, None], hand_indices_to_reset[:, None], 7:13
+                    env_ids[:, None], hand_rigid_body_indices_to_reset[:, None], 7:13
                 ] = 0
             else:
                 # No hand indices provided, skipping hand pose reset
@@ -401,7 +406,7 @@ class ResetManager:
             # Apply DOF states to simulation
             # For fixed-base hands, we only need to apply DOF states
             self.physics_manager.apply_dof_states(
-                self.gym, self.sim, env_ids, self.dof_state, self.hand_indices
+                self.gym, self.sim, env_ids, self.dof_state, self.hand_actor_indices
             )
 
             # Reset action processor targets to avoid jumps after reset

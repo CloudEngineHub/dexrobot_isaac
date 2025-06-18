@@ -337,6 +337,16 @@ class DexHandBase(VecTask):
         rigid_body_indices = self.hand_initializer.initialize_rigid_body_indices(
             self.envs
         )
+
+        # IMPORTANT: Isaac Gym uses different index types for different operations:
+        # 1. Actor indices: Used for DOF operations (set_dof_state, set_dof_position_target)
+        #    - Stored in hand_actor_indices (list) and hand_actor_indices_tensor (tensor)
+        #    - Points to the articulated actor in the environment
+        # 2. Rigid body indices: Used for pose/state queries (rigid_body_states tensor)
+        #    - Stored in hand_rigid_body_indices (list)
+        #    - Points to specific rigid bodies within the global rigid body array
+        # These are NOT interchangeable - using the wrong index type will cause errors!
+
         self.hand_rigid_body_indices = rigid_body_indices["hand_rigid_body_indices"]
         self.fingertip_indices = rigid_body_indices["fingertip_indices"]
         self.fingerpad_indices = rigid_body_indices["fingerpad_indices"]
@@ -419,7 +429,8 @@ class DexHandBase(VecTask):
             parent=self,
             dof_state=self.dof_state,
             root_state_tensor=self.actor_root_state_tensor,
-            hand_indices=self.hand_actor_indices_tensor,
+            hand_actor_indices=self.hand_actor_indices_tensor,
+            hand_rigid_body_indices=self.hand_rigid_body_indices,
             task=self.task,
             max_episode_length=self.max_episode_length,
         )
@@ -453,7 +464,7 @@ class DexHandBase(VecTask):
         # Create fingertip visualizer
         self.fingertip_visualizer = FingertipVisualizer(
             parent=self,
-            hand_indices=self.hand_indices,
+            hand_rigid_body_indices=self.hand_rigid_body_indices,
             fingerpad_handles=self.fingertip_body_handles,
         )
 
@@ -611,8 +622,13 @@ class DexHandBase(VecTask):
         self.extras = {}
 
     @property
-    def hand_indices(self):
-        """Access hand rigid body indices (for backward compatibility)."""
+    def hand_rigid_body_indices_tensor(self):
+        """Access hand rigid body indices as tensor.
+
+        These indices point to the hand base rigid body in the rigid_body_states tensor.
+        Use these indices when accessing rigid body states (position, orientation, velocity).
+        For DOF operations, use hand_actor_indices_tensor instead.
+        """
         return self.hand_rigid_body_indices
 
     @property
@@ -767,14 +783,14 @@ class DexHandBase(VecTask):
             if self.viewer_controller:
                 # Get hand positions for camera following
                 hand_positions = None
-                # rigid_body_states and hand_indices must be initialized
-                if self.hand_indices:
+                # rigid_body_states and hand_rigid_body_indices must be initialized
+                if self.hand_rigid_body_indices:
                     # Vectorized extraction of hand positions
                     # rigid_body_states shape: [num_envs, num_bodies, 13]
                     # Extract positions for all hands at once using advanced indexing
                     env_indices = torch.arange(self.num_envs, device=self.device)
                     hand_positions = self.rigid_body_states[
-                        env_indices, self.hand_indices, :3
+                        env_indices, self.hand_rigid_body_indices, :3
                     ]
 
                 self.viewer_controller.update_camera_position(hand_positions)

@@ -21,17 +21,17 @@ class FingertipVisualizer:
     - Provide visual feedback during rendering
     """
 
-    def __init__(self, parent, hand_indices, fingerpad_handles):
+    def __init__(self, parent, hand_rigid_body_indices, fingerpad_handles):
         """
         Initialize the fingertip visualizer.
 
         Args:
             parent: Parent object (typically DexHandBase) that provides shared properties
-            hand_indices: Indices of hand actors in each environment (unique to this component)
+            hand_rigid_body_indices: Indices of hand base rigid bodies in each environment
             fingerpad_handles: Handles of fingerpad rigid bodies (unique to this component)
         """
         self.parent = parent
-        self.hand_indices = hand_indices
+        self.hand_rigid_body_indices = hand_rigid_body_indices
         self.fingerpad_handles = fingerpad_handles
 
         # Default colors
