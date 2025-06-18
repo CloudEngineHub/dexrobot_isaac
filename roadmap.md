@@ -1,4 +1,4 @@
-# Refactoring Todo List for DexRobot Isaac
+# Development Roadmap for DexRobot Isaac
 
 ## 🔴 Critical Issues (High Priority)
 
@@ -203,3 +203,100 @@ The codebase now strongly adheres to CLAUDE.md principles:
 - ✅ Clean interfaces with single source of truth
 - ✅ No defensive programming for internal logic
 - ✅ Proper logging levels and configuration
+
+---
+
+# 🚀 Current Development Priorities
+
+## 🔴 Critical Issues (Immediate Action Required)
+
+### ✅ Device Mismatch Error - RESOLVED
+- **Status**: ✅ COMPLETED
+- **Problem**: TensorManager device comparison failed when comparing torch.device object with string
+- **Solution**: Applied torch.device() constructor to both sides of comparison
+- **Impact**: Environment now initializes successfully without device errors
+- **Commit**: f68d263 - "fix: Resolve device mismatch error in TensorManager"
+
+## 🟡 Important Issues (Medium Priority)
+
+### 1. Remove Controller Logic from task_interface.py
+- **Status**: 🟡 PENDING
+- **Problem**: Lines 177-182 contain circular motion controller logic (sin/cos) that violates architectural principles
+- **Location**: `dex_hand_env/tasks/task_interface.py:177-182`
+- **Issue**: Example code shows base control with `sin(episode_time)` and `cos(episode_time)` - this should be in separate controller functions
+- **Solution**: Remove the example implementation from the interface documentation
+- **Impact**: Maintains clean separation between interfaces and implementations
+
+### 2. Fix --log-level Flag Not Working
+- **Status**: 🟡 PENDING
+- **Problem**: Command-line --log-level flag exists but may be overridden by config-based logging
+- **Location**: `examples/dexhand_test.py:907-912` (flag definition), needs investigation in logging setup
+- **Issue**: Users cannot override log levels from command line despite flag existing
+- **Solution**: Ensure command-line log level takes precedence over config file settings
+- **Impact**: Better debugging experience for developers
+
+## 🟢 Optimization & Enhancement (Low Priority)
+
+### 3. Investigate Performance Issue
+- **Status**: 🟢 PENDING
+- **Problem**: Simulation running at 22.5% of real-time (should be 100% or higher)
+- **Location**: Real-time factor monitoring in `dex_hand_env/tasks/dex_hand_base.py`
+- **Investigation needed**:
+  - Profile simulation steps to identify bottlenecks
+  - Check if viewer synchronization is causing delays
+  - Analyze GPU pipeline utilization
+  - Review tensor operations for inefficiencies
+- **Impact**: Faster simulation enables more efficient development and training
+
+### 4. Implement Random Action Logic in Viewer Controller
+- **Status**: 🟢 PENDING
+- **Problem**: Spacebar toggle for random actions exists in UI but logic may not be implemented
+- **Location**: `dex_hand_env/tasks/base/vec_task.py:368-372` (keyboard event handler)
+- **Solution**: Implement random action generation when `self.random_actions` is enabled
+- **Impact**: Better testing and demonstration capabilities
+
+### 5. Ensure Reset Manager Compliance
+- **Status**: 🟢 PENDING
+- **Problem**: Verify no remaining fallback patterns or un-vectorized loops in reset manager
+- **Location**: `dex_hand_env/components/reset_manager.py`
+- **Investigation**: Review for any remaining defensive programming patterns
+- **Impact**: Full compliance with fail-fast principles
+
+### 6. Create Roadmap Integration
+- **Status**: 🟢 PENDING
+- **Task**: Integrate upcoming tasks from CLAUDE.md into this roadmap
+- **CLAUDE.md Tasks to Integrate**:
+  - **Phase 2 - Architecture & Quality**:
+    - Clean up excessive debug logging
+    - Implement proper logging levels (debug, info, warning, error)
+    - Standardize naming (dex_hand vs dexhand)
+    - Update README files with current architecture
+  - **Phase 3 - RL Integration**:
+    - Test with PPO/SAC algorithms
+    - Implement reward system
+    - Add reward visualization/debugging tools
+    - Create training scripts with hyperparameter configs
+    - Benchmark learning performance
+  - **Phase 3 - Advanced Features**:
+    - ROS2 interface for real robot deployment
+    - Record/playback functionality for demonstrations
+    - Performance profiling and optimization
+    - Add more task environments beyond BaseTask
+
+---
+
+# 📋 Implementation Guidelines
+
+## Priority Order
+1. Fix architectural violations (task_interface.py controller logic)
+2. Improve developer experience (--log-level flag)
+3. Performance optimization (22.5% real-time issue)
+4. Feature completeness (random actions, reset manager cleanup)
+5. Long-term roadmap integration
+
+## Development Principles
+- Maintain fail-fast behavior - no defensive programming for internal logic
+- Follow scientific computing mindset with vectorization
+- Keep single source of truth for all shared state
+- Use proper logging levels throughout
+- Test changes with `python examples/dexhand_test.py` before committing
