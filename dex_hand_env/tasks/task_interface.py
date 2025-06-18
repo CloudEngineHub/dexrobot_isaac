@@ -21,7 +21,9 @@ class DexTask(ABC):
     """
 
     @abstractmethod
-    def compute_task_rewards(self, obs_dict: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def compute_task_rewards(
+        self, obs_dict: Dict[str, torch.Tensor]
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Compute task rewards.
 
@@ -44,7 +46,9 @@ class DexTask(ABC):
         pass
 
     @abstractmethod
-    def compute_task_reward_terms(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def compute_task_reward_terms(
+        self, obs_dict: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
         """
         Compute task-specific reward components.
 
@@ -113,7 +117,9 @@ class DexTask(ABC):
         """
         pass
 
-    def get_task_observations(self, obs_dict: Dict[str, torch.Tensor]) -> Optional[Dict[str, torch.Tensor]]:
+    def get_task_observations(
+        self, obs_dict: Dict[str, torch.Tensor]
+    ) -> Optional[Dict[str, torch.Tensor]]:
         """
         Get task-specific observations.
 
@@ -126,11 +132,13 @@ class DexTask(ABC):
         """
         return None
 
-    def get_task_dof_targets(self,
-                            num_envs: int,
-                            device: str,
-                            base_controlled: bool = True,
-                            fingers_controlled: bool = True) -> Optional[Dict[str, torch.Tensor]]:
+    def get_task_dof_targets(
+        self,
+        num_envs: int,
+        device: str,
+        base_controlled: bool = True,
+        fingers_controlled: bool = True,
+    ) -> Optional[Dict[str, torch.Tensor]]:
         """
         Get task-specific target positions for DoFs not controlled by the policy.
 
@@ -164,7 +172,7 @@ class DexTask(ABC):
 
                 # If base not controlled by policy, move it in a circle
                 if not base_controlled:
-                    t = self.progress_buf.float() * 0.01
+                    t = self.episode_step_count.float() * 0.01
                     base_targets = torch.zeros((num_envs, 6), device=device)
                     base_targets[:, 0] = 0.3 * torch.sin(t)  # x position
                     base_targets[:, 1] = 0.3 * torch.cos(t)  # y position

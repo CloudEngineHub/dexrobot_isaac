@@ -19,7 +19,7 @@ The environment now automatically detects how many physics steps are required be
 Usage:
 ```python
 # The environment will automatically detect the number of physics steps per control step
-env = create_dex_env(...) 
+env = create_dex_env(...)
 ```
 
 ### Configurable Action Space
@@ -45,21 +45,21 @@ For task-specific control of uncontrolled DOFs, implement the `get_task_dof_targ
 def get_task_dof_targets(self, num_envs, device, base_controlled, fingers_controlled):
     # Return targets for DOFs not controlled by the policy
     targets = {}
-    
+
     if not base_controlled:
         # Example: Make the base follow a circular trajectory
-        t = self.progress_buf.float() * 0.01
+        t = self.episode_step_count.float() * 0.01
         base_targets = torch.zeros((num_envs, 6), device=device)
         base_targets[:, 0] = 0.3 * torch.sin(t)  # x position
         base_targets[:, 1] = 0.3 * torch.cos(t)  # y position
         base_targets[:, 2] = 0.5  # z position
         targets["base_targets"] = base_targets
-    
+
     if not fingers_controlled and hasattr(self, 'object_pos'):
         # Example: Make fingers dynamically respond to object position
         finger_targets = self._compute_grasp_targets(self.object_pos)
         targets["finger_targets"] = finger_targets
-    
+
     return targets
 ```
 

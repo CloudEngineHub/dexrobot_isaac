@@ -4,24 +4,15 @@ Base class for vectorized tasks in Isaac Gym.
 This module defines the VecTask abstract base class that all tasks should inherit from.
 """
 
-import os
 import sys
 import time
-import abc
 from abc import ABC
-from datetime import datetime
-from os.path import join
-from collections import deque
-from copy import deepcopy
-from typing import Dict, Any, Tuple, List, Set
+from typing import Dict, Any
 
-import gym
-from gym import spaces
 import numpy as np
 import torch
-import operator
 import random
-from isaacgym import gymtorch, gymapi
+from isaacgym import gymapi
 from loguru import logger
 
 
@@ -36,7 +27,7 @@ def _create_sim_once(gym, *args, **kwargs):
     # Check if GPU pipeline is enabled - always create a new sim for GPU pipeline
     if len(args) >= 4 and isinstance(args[3], gymapi.SimParams):
         sim_params = args[3]
-        if hasattr(sim_params, 'use_gpu_pipeline') and sim_params.use_gpu_pipeline:
+        if hasattr(sim_params, "use_gpu_pipeline") and sim_params.use_gpu_pipeline:
             # With GPU pipeline, always create a new simulation
             logger.info("GPU pipeline enabled, creating new simulation instance")
             return gym.create_sim(*args, **kwargs)
@@ -172,6 +163,7 @@ class VecTask(Env):
         self.virtual_display = None
         if self.virtual_screen_capture:
             from pyvirtualdisplay.smartdisplay import SmartDisplay
+
             self.virtual_display = SmartDisplay(size=SCREEN_CAPTURE_RESOLUTION)
             self.virtual_display.start()
         self.force_render = force_render
@@ -209,7 +201,7 @@ class VecTask(Env):
         self.states_buf = None
         self.rew_buf = None
         self.reset_buf = None
-        self.progress_buf = None
+        self.episode_step_count = None
         self.extras = {}
 
         # Rendering
@@ -218,7 +210,9 @@ class VecTask(Env):
         self.last_frame_time = time.time()
         self.render_fps = -1
 
-    def _parse_sim_params(self, physics_engine: str, config_sim: Dict[str, Any], num_envs: int) -> gymapi.SimParams:
+    def _parse_sim_params(
+        self, physics_engine: str, config_sim: Dict[str, Any], num_envs: int
+    ) -> gymapi.SimParams:
         """Parse the sim configuration.
 
         Args:
@@ -267,7 +261,9 @@ class VecTask(Env):
                         pairs_per_env = config_sim["physx"][opt]
                         total_pairs = pairs_per_env * num_envs
                         setattr(sim_params.physx, "max_gpu_contact_pairs", total_pairs)
-                        logger.info(f"Auto-calculated max_gpu_contact_pairs: {pairs_per_env} per env * {num_envs} envs = {total_pairs}")
+                        logger.info(
+                            f"Auto-calculated max_gpu_contact_pairs: {pairs_per_env} per env * {num_envs} envs = {total_pairs}"
+                        )
                     else:
                         setattr(sim_params.physx, opt, config_sim["physx"][opt])
 
@@ -275,11 +271,15 @@ class VecTask(Env):
             if config_sim["use_gpu_pipeline"]:
                 # These parameters are essential for GPU pipeline stability
                 if not hasattr(sim_params.physx, "contact_collection"):
-                    sim_params.physx.contact_collection = gymapi.ContactCollection.CC_LAST_SUBSTEP
+                    sim_params.physx.contact_collection = (
+                        gymapi.ContactCollection.CC_LAST_SUBSTEP
+                    )
                 if not hasattr(sim_params.physx, "default_buffer_size_multiplier"):
                     sim_params.physx.default_buffer_size_multiplier = 1.0
                 if not hasattr(sim_params.physx, "max_gpu_contact_pairs"):
-                    raise ValueError("max_gpu_contact_pairs not set. Please specify 'gpu_contact_pairs_per_env' in the physx config.")
+                    raise ValueError(
+                        "max_gpu_contact_pairs not set. Please specify 'gpu_contact_pairs_per_env' in the physx config."
+                    )
                 if not hasattr(sim_params.physx, "always_use_articulations"):
                     sim_params.physx.always_use_articulations = True
         elif physics_engine == "flex":
@@ -298,7 +298,7 @@ class VecTask(Env):
             self.sim_device_id,
             self.graphics_device_id,
             self.physics_engine,
-            self.sim_params
+            self.sim_params,
         )
         if self.sim is None:
             logger.error("Failed to create sim")

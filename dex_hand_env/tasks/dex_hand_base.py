@@ -8,6 +8,7 @@ to delegate functionality to specialized components.
 import os
 import sys
 import math
+import time
 import numpy as np
 from loguru import logger
 
@@ -211,6 +212,46 @@ class DexHandBase(VecTask):
         self._perform_control_cycle_measurement()
 
         logger.info("DexHandBase initialization complete.")
+
+    def _sync_viewer_to_real_time(self):
+        """
+        Synchronize viewer animation to real-time.
+
+        This ensures the simulation plays back at real-world speed when visualizing.
+        If simulation is faster than real-time, it sleeps. If slower, it warns.
+        """
+        current_time = time.time()
+        elapsed_real_time = current_time - self.last_step_time
+        simulated_time = self.physics_manager.control_dt
+
+        # Calculate real-time factor (1.0 = real-time, >1.0 = faster than real-time)
+        if elapsed_real_time > 0:
+            real_time_factor = simulated_time / elapsed_real_time
+
+            # Update exponential moving average
+            self.real_time_factor_ema = (
+                self.real_time_factor_ema_alpha * real_time_factor
+                + (1 - self.real_time_factor_ema_alpha) * self.real_time_factor_ema
+            )
+
+            # If simulation is running faster than real-time, sleep
+            if real_time_factor > 1.0:
+                sleep_time = simulated_time - elapsed_real_time
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+
+            # If simulation is running significantly slower than real-time, warn periodically
+            elif self.real_time_factor_ema < self.real_time_factor_warning_threshold:
+                # Only warn every 100 steps to avoid spam
+                if hasattr(self, "episode_step_count") and torch.any(
+                    self.episode_step_count % 100 == 0
+                ):
+                    logger.warning(
+                        f"Simulation running at {self.real_time_factor_ema:.1%} of real-time. "
+                        f"Consider reducing environment count or simplifying the task."
+                    )
+
+        self.last_step_time = time.time()
 
     def _perform_control_cycle_measurement(self):
         """
@@ -422,6 +463,16 @@ class DexHandBase(VecTask):
         # Create reward calculator
         self.reward_calculator = RewardCalculator(parent=self, cfg=self.cfg)
 
+        # Real-time viewer synchronization
+        self.enable_viewer_sync = True  # Enable by default when viewer exists
+        self.last_step_time = time.time()
+        self.real_time_factor_warning_threshold = (
+            0.5  # Warn if running slower than 50% real-time
+        )
+        self.real_time_factor_ema = 1.0  # Exponential moving average
+        self.real_time_factor_ema_alpha = 0.1  # Smoothing factor
+        self.real_time_sync_enabled = self.cfg["env"].get("enableViewerSync", True)
+
         # Mark tensors as initialized
         self._tensors_initialized = True
 
@@ -492,14 +543,14 @@ class DexHandBase(VecTask):
             (self.num_envs,), device=self.device, dtype=torch.bool
         )
 
-        # Create progress buffer
-        self.progress_buf = torch.zeros(
+        # Create episode step count buffer
+        self.episode_step_count = torch.zeros(
             (self.num_envs,), device=self.device, dtype=torch.long
         )
 
         # Share buffers with reset manager
         # reset_manager must exist after _init_components()
-        self.reset_manager.set_buffers(self.reset_buf, self.progress_buf)
+        self.reset_manager.set_buffers(self.reset_buf, self.episode_step_count)
 
         # Set default DOF positions for reset
         default_dof_pos = torch.zeros(self.num_dof, device=self.device)
@@ -580,7 +631,7 @@ class DexHandBase(VecTask):
         Returns:
             Tensor of shape (num_envs,) with episode time in seconds
         """
-        return self.progress_buf.float() * self.physics_manager.control_dt
+        return self.episode_step_count.float() * self.physics_manager.control_dt
 
     def get_episode_time(self, env_id=0):
         """Get current episode time in seconds for a specific environment.
@@ -591,7 +642,7 @@ class DexHandBase(VecTask):
         Returns:
             Float episode time in seconds
         """
-        return self.progress_buf[env_id].item() * self.physics_manager.control_dt
+        return self.episode_step_count[env_id].item() * self.physics_manager.control_dt
 
     # Note: fingertip_indices and fingerpad_indices are now stored directly on self
 
@@ -795,6 +846,14 @@ class DexHandBase(VecTask):
             traceback.print_exc()
             raise
 
+        # Real-time viewer synchronization
+        if self.viewer and self.real_time_sync_enabled and self.enable_viewer_sync:
+            self._sync_viewer_to_real_time()
+
+        # Render viewer if it exists
+        if self.viewer:
+            self.render()
+
         return obs, rew, done, info
 
     def get_observations_dict(self):
@@ -828,7 +887,7 @@ class DexHandBase(VecTask):
 
         Example:
             def my_base_controller(env):
-                t = env.progress_buf[0] * env.dt  # Get simulation time
+                t = env.episode_step_count[0] * env.dt  # Get simulation time
                 targets = torch.zeros((env.num_envs, 6), device=env.device)
                 targets[:, 0] = 0.1 * torch.sin(t)  # Oscillate in X
                 return targets

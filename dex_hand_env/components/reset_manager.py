@@ -56,7 +56,7 @@ class ResetManager:
 
         # Reset and progress buffers - will be set by set_buffers()
         self.reset_buf = None
-        self.progress_buf = None
+        self.episode_step_count = None
 
         # Random state for reproducibility
         self.rng_state = None
@@ -134,16 +134,16 @@ class ResetManager:
         if dof_range is not None:
             self.dof_position_randomization_range = dof_range
 
-    def set_buffers(self, reset_buf, progress_buf):
+    def set_buffers(self, reset_buf, episode_step_count):
         """
         Set the shared reset and progress buffers.
 
         Args:
             reset_buf: Shared reset buffer from main environment
-            progress_buf: Shared progress buffer from main environment
+            episode_step_count: Shared episode step count buffer from main environment
         """
         self.reset_buf = reset_buf
-        self.progress_buf = progress_buf
+        self.episode_step_count = episode_step_count
 
     def set_default_state(self, dof_pos=None, hand_pos=None, hand_rot=None):
         """
@@ -194,7 +194,7 @@ class ResetManager:
         """
         try:
             # Reset environments that have reached max episode length
-            condition = self.progress_buf >= self.max_episode_length - 1
+            condition = self.episode_step_count >= self.max_episode_length - 1
 
             self.reset_buf = torch.where(
                 condition, torch.ones_like(self.reset_buf), self.reset_buf
@@ -224,12 +224,14 @@ class ResetManager:
         """
         try:
             # Check if progress buffer is set
-            if self.progress_buf is None:
-                raise RuntimeError("Progress buffer not set. Call set_buffers() first.")
+            if self.episode_step_count is None:
+                raise RuntimeError(
+                    "Episode step count buffer not set. Call set_buffers() first."
+                )
 
             # Increment progress
-            self.progress_buf += 1
-            return self.progress_buf
+            self.episode_step_count += 1
+            return self.episode_step_count
         except Exception as e:
             logger.error(f"ERROR in increment_progress: {e}")
             import traceback
@@ -259,7 +261,7 @@ class ResetManager:
 
             # Reset progress buffer for reset environments
             # Reset progress buffer
-            self.progress_buf[env_ids] = 0
+            self.episode_step_count[env_ids] = 0
             # Progress buffer reset
 
             # Reset DOF states

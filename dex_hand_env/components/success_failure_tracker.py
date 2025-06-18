@@ -70,7 +70,12 @@ class SuccessFailureTracker:
         return self.parent.device
 
     def evaluate(
-        self, progress_buf, builtin_success, task_success, builtin_failure, task_failure
+        self,
+        episode_step_count,
+        builtin_success,
+        task_success,
+        builtin_failure,
+        task_failure,
     ):
         """
         Evaluate success and failure criteria and update episode status.
@@ -79,7 +84,7 @@ class SuccessFailureTracker:
         which environments have completed episodes (success or failure).
 
         Args:
-            progress_buf: Buffer tracking episode progress
+            episode_step_count: Buffer tracking episode step count
             builtin_success: Dictionary of built-in success criteria
             task_success: Dictionary of task-specific success criteria
             builtin_failure: Dictionary of built-in failure criteria
@@ -167,7 +172,7 @@ class SuccessFailureTracker:
         self.episode_failure = episode_failure
 
         # Episode is done if it's a success or failure, or if max steps reached
-        max_steps_done = progress_buf >= self.max_episode_length - 1
+        max_steps_done = episode_step_count >= self.max_episode_length - 1
         done_buf = episode_success | episode_failure | max_steps_done
 
         # Create tensors indicating termination reasons

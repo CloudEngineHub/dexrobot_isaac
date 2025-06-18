@@ -10,11 +10,11 @@
 - [x] `dex_hand_base.py`: ~~20+~~ 42 print statements converted to logger
 - [ ] `test_coordinate_transforms.py`: Test output (acceptable for tests)
 
-### 2. Fix single source of truth violations
+### 2. Fix single source of truth violations ✅
 - [x] Created `constants.py` module for shared constants
 - [x] Update components to import from constants.py (action_processor, observation_encoder, dex_hand_base)
-- [ ] DOF properties stored in 3 places (HandInitializer, TensorManager, ActionProcessor)
-- [ ] DOF names duplicated in 3 components
+- [x] DOF properties stored in 3 places - now accessed from TensorManager via parent reference
+- [x] DOF names duplicated in 3 components - now single source in HandInitializer
 - [x] Device stored in every component - now all components use parent reference pattern
 
 ### 3. Refactor action_processor.py process_actions() method ✅
@@ -61,9 +61,9 @@
   - Precomputed tensor mappings: `coupling_indices`, `coupling_scales`, `action_to_coupling_range`
   - Use vectorized gather/scatter operations for ~10-100x speedup
   - Removed loop-based fallback - always use vectorized implementation
-- [ ] `reset_manager.py` L275-328: Environment reset loop
-- [ ] `dex_hand_base.py` L724-731: Hand position extraction loop
-- [ ] `observation_encoder.py` L286-320: Nested loops for DOF mapping
+- [x] `reset_manager.py` L275-328: Environment reset loop - vectorized with advanced indexing
+- [x] `dex_hand_base.py` L724-731: Hand position extraction loop - single tensor operation
+- [x] `observation_encoder.py` L286-320: Nested loops for DOF mapping - dict lookups instead of loops
 
 ### 9. Extract repeated scaling logic into helper methods ✅
 - [x] Scaling logic consolidated with action_space_scale/bias coefficients
@@ -76,6 +76,12 @@
 - [ ] Use INFO for high-level progress
 - [ ] Use WARNING for potential issues
 - [ ] Use ERROR for failures
+
+### 11. Add real-time viewer synchronization
+- [ ] Track elapsed time vs simulated time when viewer is active
+- [ ] Add sleep if simulation runs faster than real-time
+- [ ] Log warning if simulation runs slower than real-time
+- [ ] Make real-time sync optional via config
 
 ### 11. Move magic numbers to configuration ✅
 - [x] `action_processor.py`: Velocity limits now come from config
@@ -101,14 +107,19 @@
 
 ## 🟢 Nice to Have (Low Priority)
 
-### 14. Add verbosity configuration
+### 12. Improve variable naming for clarity
+- [ ] Rename `progress_buf` to `episode_step_count` throughout codebase
+- [ ] Clarify `hand_indices` naming - distinguish between actor and rigid body indices
+- [ ] Add documentation explaining Isaac Gym terminology (actor = articulated/rigid body)
+
+### 13. Add verbosity configuration
 - [ ] Add config option to control log levels
 - [ ] Make debug output optional
 - [ ] Allow filtering by component
 
 ## 🔵 Future Architecture Improvements
 
-### 15. Comprehensive Rule+Policy Control Framework
+### 14. Comprehensive Rule+Policy Control Framework
 A more flexible control architecture that supports pre-action rules, policy actions, and post-action safety filters.
 
 #### Proposed Architecture:

@@ -187,13 +187,13 @@ def create_rule_based_finger_controller():
         # Use 2π for 0.5 second period for grasping (2 Hz)
         t = sim_time * 2.0 * math.pi * 2.0  # 2 Hz for faster finger motion
 
-        # Debug: Log time info when progress_buf changes or first few calls
+        # Debug: Log time info when episode_step_count changes or first few calls
         last_progress = getattr(finger_controller, "last_progress", -1)
-        current_progress = env.progress_buf[0].item()
+        current_progress = env.episode_step_count[0].item()
 
         if state["call_count"] < 5 or current_progress != last_progress:
             logger.debug(
-                f"[Finger Controller] Call #{state['call_count']}, progress_buf: {current_progress}, sim_time: {sim_time:.6f}, t: {t:.6f}, sin(t): {math.sin(t):.6f}"
+                f"[Finger Controller] Call #{state['call_count']}, episode_step_count: {current_progress}, sim_time: {sim_time:.6f}, t: {t:.6f}, sin(t): {math.sin(t):.6f}"
             )
 
         finger_controller.last_progress = current_progress
@@ -310,8 +310,8 @@ def log_observation_data(env, step, cfg, env_idx=0):
         obs_dict = env.get_observations_dict()
         obs_encoder = env.observation_encoder
 
-        # Check if environment was just reset (progress_buf == 0)
-        episode_step = env.progress_buf[env_idx].item()
+        # Check if environment was just reset (episode_step_count == 0)
+        episode_step = env.episode_step_count[env_idx].item()
         just_reset = episode_step == 0
 
         # Plot 1: ARTx pos, ARTx target
@@ -1175,8 +1175,8 @@ def main():
         finger_actions_count = env.action_processor.NUM_ACTIVE_FINGER_DOFS
         base_actions_count = env.action_processor.NUM_BASE_DOFS
 
-        # Use progress_buf to determine action so it resets properly
-        episode_step = env.progress_buf[0].item()
+        # Use episode_step_count to determine action so it resets properly
+        episode_step = env.episode_step_count[0].item()
         current_action_idx = episode_step // steps_per_action
         step_in_action = episode_step % steps_per_action
         action_value = 0.0  # Default for rule-based control
@@ -1229,12 +1229,12 @@ def main():
         # Step the simulation (rule-based control is applied automatically in pre_physics_step)
         if step < 5:
             logger.debug(
-                f"[Test] Before step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}"
+                f"[Test] Before step {step}: episode_step_count = {env.episode_step_count[0].item()}, reset_buf = {env.reset_buf[0].item()}"
             )
         obs, rewards, dones, info = env.step(actions)
         if step < 5:
             logger.debug(
-                f"[Test] After step {step}: progress_buf = {env.progress_buf[0].item()}, reset_buf = {env.reset_buf[0].item()}, done = {dones[0].item()}"
+                f"[Test] After step {step}: episode_step_count = {env.episode_step_count[0].item()}, reset_buf = {env.reset_buf[0].item()}, done = {dones[0].item()}"
             )
 
         # Check if environment was reset
