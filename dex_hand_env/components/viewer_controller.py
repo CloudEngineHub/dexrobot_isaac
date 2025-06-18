@@ -304,12 +304,13 @@ class ViewerController:
             # Handle exceptions silently - this can happen during initialization
             return False
 
-    def render(self, mode="rgb_array"):
+    def render(self, mode="rgb_array", reset_callback=None):
         """
         Handle viewer rendering and keyboard events.
 
         Args:
             mode: Rendering mode (currently only supports "rgb_array")
+            reset_callback: Callback function to reset environments, takes env_ids as argument
 
         Returns:
             None or image array if in rgb_array mode
@@ -323,12 +324,9 @@ class ViewerController:
 
             sys.exit()
 
-        # Process keyboard events
-        for evt in self.gym.query_viewer_action_events(self.viewer):
-            if evt.action == "QUIT" and evt.value > 0:
-                import sys
-
-                sys.exit()
+        # Process all keyboard events using check_keyboard_events
+        # This handles E, G, UP, DOWN keys properly
+        self.check_keyboard_events(reset_callback=reset_callback)
 
         # Fetch results if using GPU
         if hasattr(self.parent, "device") and self.parent.device != "cpu":

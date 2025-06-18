@@ -667,18 +667,7 @@ class DexHandBase(VecTask):
 
     def pre_physics_step(self, actions):
         """Process actions before physics simulation step."""
-        # Check for keyboard events if viewer controller exists
-        if self.viewer_controller:
-            try:
-                self.viewer_controller.check_keyboard_events(
-                    reset_callback=lambda env_ids: self.reset_idx(env_ids)
-                )
-            except Exception as e:
-                logger.error(f"ERROR in check_keyboard_events: {e}")
-                import traceback
-
-                traceback.print_exc()
-                raise
+        # Keyboard events are now handled in render() method to avoid duplicate processing
 
         # Store actions
         self.actions = actions.clone()
@@ -1128,8 +1117,10 @@ class DexHandBase(VecTask):
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""
         if self.viewer_controller and self.viewer_controller.viewer:
-            # Delegate rendering to viewer controller
-            result = self.viewer_controller.render(mode)
+            # Delegate rendering to viewer controller with reset callback
+            result = self.viewer_controller.render(
+                mode, reset_callback=lambda env_ids: self.reset_idx(env_ids)
+            )
 
             # Handle virtual display if needed
             if self.virtual_display and mode == "rgb_array":
