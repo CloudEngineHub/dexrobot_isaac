@@ -260,6 +260,15 @@ class DexHandBase(VecTask):
         # Create simulation (parent class only defines the method, doesn't call it)
         self.sim = self.create_sim()
 
+        # Update task with sim and gym instances early
+        self.task.sim = self.sim
+        self.task.gym = self.gym
+
+        # Load task assets before creating any actors
+        logger.debug("Loading task-specific assets...")
+        self.task.load_task_assets()
+        logger.debug("Task assets loaded successfully")
+
         # Create hand initializer
         self.hand_initializer = HandInitializer(
             parent=self,
@@ -287,13 +296,19 @@ class DexHandBase(VecTask):
         # Create the environments
         self._create_envs()
 
-        # Create hands in the environments
+        # Create hands in the environments FIRST (before task objects)
         handles = self.hand_initializer.create_hands(self.envs, self.hand_asset)
         self.hand_handles = handles["hand_handles"]
         self.fingertip_body_handles = handles["fingertip_body_handles"]
         self.fingerpad_body_handles = handles["fingerpad_body_handles"]
         self.dof_properties_from_asset = handles.get("dof_properties", None)
         self.hand_actor_indices = handles["hand_actor_indices"]
+
+        # Now create task-specific objects AFTER hands are created
+        # This ensures hands are always actor index 0
+        for i in range(self.num_envs):
+            if hasattr(self.task, "create_task_objects"):
+                self.task.create_task_objects(self.gym, self.sim, self.envs[i], i)
 
         # Set up viewer
         # CRITICAL: Create viewer even in headless mode for proper DOF control
@@ -356,6 +371,10 @@ class DexHandBase(VecTask):
         self.dof_props = tensors["dof_props"]
         self.rigid_body_states = tensors["rigid_body_states"]
         self.contact_forces = tensors["contact_forces"]
+
+        # Provide tensor references to the task
+        if hasattr(self.task, "set_tensor_references"):
+            self.task.set_tensor_references(self.actor_root_state_tensor)
 
         # Create physics manager
         self.physics_manager = PhysicsManager(
@@ -510,10 +529,6 @@ class DexHandBase(VecTask):
             env = self.gym.create_env(self.sim, env_lower, env_upper, num_per_row)
 
             self.envs.append(env)
-
-            # Let the task add any task-specific objects
-            if hasattr(self.task, "create_task_objects"):
-                self.task.create_task_objects(self.gym, self.sim, env, i)
 
         logger.info(f"Created {self.num_envs} environments.")
 

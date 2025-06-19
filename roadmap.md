@@ -43,7 +43,17 @@
   - Works correctly for any number of environments
 - **Verified**: Successfully tested with 2 environments, no indexing errors
 
-### 4. Contact Force Visualization Enhancement
+### 4. Actions Not Applied in Multi-Environment Setup
+- **Status**: 🟡 PENDING
+- **Problem**: When running with multiple environments (num_envs > 1), actions are not being applied
+- **Symptoms**: Hand doesn't move despite actions being sent
+- **Possible Causes**:
+  - Actor indices might be incorrect when boxes are added after hands
+  - DOF state tensor shape mismatch with additional actors
+  - Need to investigate if current_targets tensor shape matches actual DOF count
+- **Impact**: Multi-environment training/testing doesn't work properly
+
+### 5. Contact Force Visualization Enhancement
 - **Status**: 🟡 PENDING
 - **Problem**: fingertip_visualizer module is obsolete and should be replaced
 - **Solution**: Add contact force visualization directly to ViewerController

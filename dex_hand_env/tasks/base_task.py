@@ -42,7 +42,9 @@ class BaseTask(DexTask):
         self.num_envs = num_envs
         self.cfg = cfg
 
-    def compute_task_rewards(self, obs_dict: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def compute_task_rewards(
+        self, obs_dict: Dict[str, torch.Tensor]
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Compute task rewards.
 
@@ -67,7 +69,9 @@ class BaseTask(DexTask):
         # Base task has no specific reset conditions
         return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
-    def compute_task_reward_terms(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def compute_task_reward_terms(
+        self, obs_dict: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
         """
         Compute task-specific reward components.
 
@@ -137,7 +141,9 @@ class BaseTask(DexTask):
         """
         pass
 
-    def get_task_observations(self, obs_dict: Dict[str, torch.Tensor]) -> Optional[Dict[str, torch.Tensor]]:
+    def get_task_observations(
+        self, obs_dict: Dict[str, torch.Tensor]
+    ) -> Optional[Dict[str, torch.Tensor]]:
         """
         Get task-specific observations.
 
@@ -150,3 +156,14 @@ class BaseTask(DexTask):
             None, indicating no task-specific observations
         """
         return None
+
+    def set_tensor_references(self, root_state_tensor: torch.Tensor):
+        """
+        Set references to simulation tensors needed by the task.
+
+        The base task doesn't need tensor references.
+
+        Args:
+            root_state_tensor: Root state tensor for all actors
+        """
+        pass

@@ -39,8 +39,9 @@ class DexGraspTask(BaseTask):
         super().__init__(sim, gym, device, num_envs, cfg)
 
         # Target parameters
-        self.target_pos = torch.tensor(self.cfg["task"].get("targetPos", [0.0, 0.0, 0.3]),
-                                      device=self.device)
+        self.target_pos = torch.tensor(
+            self.cfg["task"].get("targetPos", [0.0, 0.0, 0.3]), device=self.device
+        )
         self.target_radius = self.cfg["task"].get("targetRadius", 0.05)
 
         # Object parameters
@@ -85,6 +86,12 @@ class DexGraspTask(BaseTask):
         self.target_visual_size = 0.02  # Size of target visualization sphere
         self.target_handles = []
 
+        # Track number of actors per environment
+        self.num_task_actors = 2  # Object + target visualization
+
+        # Reference to root state tensor (will be set by environment)
+        self.root_state_tensor = None
+
     def load_task_assets(self):
         """
         Load task-specific assets.
@@ -104,37 +111,47 @@ class DexGraspTask(BaseTask):
             # Create cube asset
             self.object_asset = self.gym.create_box(
                 self.sim,
-                self.object_size, self.object_size, self.object_size,
-                asset_options
+                self.object_size,
+                self.object_size,
+                self.object_size,
+                asset_options,
             )
         elif self.object_type == "sphere":
             # Create sphere asset
             self.object_asset = self.gym.create_sphere(
-                self.sim,
-                self.object_size / 2,  # Radius
-                asset_options
+                self.sim, self.object_size / 2, asset_options  # Radius
             )
         else:
             raise ValueError(f"Unknown object type: {self.object_type}")
 
-    def create_task_actors(self, env_ptr, env_id: int):
+    def create_task_objects(self, gym, sim, env_ptr, env_id: int):
         """
-        Add task-specific actors to the environment.
+        Add task-specific objects to the environment.
 
         Adds the object and target visualization to the environment.
+        Note: This is called AFTER hands are created, so hands are always actor 0.
 
         Args:
-            env_ptr: Pointer to the environment to add actors to
+            gym: Gym instance
+            sim: Simulation instance
+            env_ptr: Pointer to the environment to add objects to
             env_id: Index of the environment being created
         """
         # Set initial object pose with randomization
-        object_pos_x = np.random.uniform(self.object_pos_init_x[0], self.object_pos_init_x[1])
-        object_pos_y = np.random.uniform(self.object_pos_init_y[0], self.object_pos_init_y[1])
-        object_pos_z = np.random.uniform(self.object_pos_init_z[0], self.object_pos_init_z[1])
+        object_pos_x = np.random.uniform(
+            self.object_pos_init_x[0], self.object_pos_init_x[1]
+        )
+        object_pos_y = np.random.uniform(
+            self.object_pos_init_y[0], self.object_pos_init_y[1]
+        )
+        object_pos_z = np.random.uniform(
+            self.object_pos_init_z[0], self.object_pos_init_z[1]
+        )
 
         # Store initial object positions for reset
-        self.initial_object_pos[env_id] = torch.tensor([object_pos_x, object_pos_y, object_pos_z],
-                                                     device=self.device)
+        self.initial_object_pos[env_id] = torch.tensor(
+            [object_pos_x, object_pos_y, object_pos_z], device=self.device
+        )
         self.initial_object_rot[env_id] = torch.tensor([0, 0, 0, 1], device=self.device)
 
         # Create object
@@ -144,18 +161,15 @@ class DexGraspTask(BaseTask):
 
         # Add object to environment
         object_handle = self.gym.create_actor(
-            env_ptr,
-            self.object_asset,
-            object_pose,
-            f"object_{env_id}",
-            env_id,
-            0
+            env_ptr, self.object_asset, object_pose, f"object_{env_id}", env_id, 0
         )
 
         # Set object properties
         props = self.gym.get_actor_rigid_body_properties(env_ptr, object_handle)
         props[0].mass = self.object_mass
-        self.gym.set_actor_rigid_body_properties(env_ptr, object_handle, props, relink=True)
+        self.gym.set_actor_rigid_body_properties(
+            env_ptr, object_handle, props, relink=True
+        )
 
         # Set collision group to enable object-hand interaction
         self.gym.set_rigid_body_segmentation_id(env_ptr, object_handle, 0, 1)
@@ -165,12 +179,12 @@ class DexGraspTask(BaseTask):
 
         # Create target visualization
         target_pose = gymapi.Transform()
-        target_pose.p = gymapi.Vec3(self.target_pos[0], self.target_pos[1], self.target_pos[2])
+        target_pose.p = gymapi.Vec3(
+            self.target_pos[0], self.target_pos[1], self.target_pos[2]
+        )
 
         target_asset = self.gym.create_sphere(
-            self.sim,
-            self.target_visual_size,  # Radius
-            gymapi.AssetOptions()
+            self.sim, self.target_visual_size, gymapi.AssetOptions()  # Radius
         )
 
         target_handle = self.gym.create_actor(
@@ -179,7 +193,7 @@ class DexGraspTask(BaseTask):
             target_pose,
             f"target_{env_id}",
             env_id,
-            1  # Set to different collision group
+            1,  # Set to different collision group
         )
 
         # Make target visualization invisible to collisions
@@ -187,9 +201,7 @@ class DexGraspTask(BaseTask):
 
         # Set target color (green)
         self.gym.set_rigid_body_color(
-            env_ptr, target_handle, 0,
-            gymapi.MESH_VISUAL,
-            gymapi.Vec3(0.0, 1.0, 0.0)
+            env_ptr, target_handle, 0, gymapi.MESH_VISUAL, gymapi.Vec3(0.0, 1.0, 0.0)
         )
 
         # Store target handle
@@ -204,9 +216,7 @@ class DexGraspTask(BaseTask):
         """
         # Get object state in hand frame
         object_pos_hand_frame = point_in_hand_frame(
-            self.object_pos,
-            self.hand_pos,
-            self.hand_rot
+            self.object_pos, self.hand_pos, self.hand_rot
         )
 
         # Compute relative position to target
@@ -220,7 +230,7 @@ class DexGraspTask(BaseTask):
             "object_angvel": self.object_angvel,
             "object_pos_hand_frame": object_pos_hand_frame,
             "object_to_target": object_to_target,
-            "target_pos": self.target_pos.repeat(self.num_envs, 1)
+            "target_pos": self.target_pos.repeat(self.num_envs, 1),
         }
 
     def reset_task_state(self, env_ids: torch.Tensor):
@@ -235,9 +245,21 @@ class DexGraspTask(BaseTask):
             return
 
         # Randomize initial object positions
-        rand_pos_x = torch.rand(len(env_ids), device=self.device) * (self.object_pos_init_x[1] - self.object_pos_init_x[0]) + self.object_pos_init_x[0]
-        rand_pos_y = torch.rand(len(env_ids), device=self.device) * (self.object_pos_init_y[1] - self.object_pos_init_y[0]) + self.object_pos_init_y[0]
-        rand_pos_z = torch.rand(len(env_ids), device=self.device) * (self.object_pos_init_z[1] - self.object_pos_init_z[0]) + self.object_pos_init_z[0]
+        rand_pos_x = (
+            torch.rand(len(env_ids), device=self.device)
+            * (self.object_pos_init_x[1] - self.object_pos_init_x[0])
+            + self.object_pos_init_x[0]
+        )
+        rand_pos_y = (
+            torch.rand(len(env_ids), device=self.device)
+            * (self.object_pos_init_y[1] - self.object_pos_init_y[0])
+            + self.object_pos_init_y[0]
+        )
+        rand_pos_z = (
+            torch.rand(len(env_ids), device=self.device)
+            * (self.object_pos_init_z[1] - self.object_pos_init_z[0])
+            + self.object_pos_init_z[0]
+        )
 
         # Create randomized positions
         self.initial_object_pos[env_ids, 0] = rand_pos_x
@@ -245,16 +267,27 @@ class DexGraspTask(BaseTask):
         self.initial_object_pos[env_ids, 2] = rand_pos_z
 
         # Reset object state in tensor
-        object_actor_ids = self.num_actors_per_env + 0  # Object is the first actor after the hand
-        self.root_state_tensor[env_ids, object_actor_ids, 0:3] = self.initial_object_pos[env_ids]
-        self.root_state_tensor[env_ids, object_actor_ids, 3:7] = self.initial_object_rot[env_ids]
-        self.root_state_tensor[env_ids, object_actor_ids, 7:10] = torch.zeros_like(self.root_state_tensor[env_ids, object_actor_ids, 7:10])
-        self.root_state_tensor[env_ids, object_actor_ids, 10:13] = torch.zeros_like(self.root_state_tensor[env_ids, object_actor_ids, 10:13])
+        # Since hands are created first (actor 0), object is actor 1
+        object_actor_ids = 1  # Object is the second actor (hand is 0)
+        self.root_state_tensor[
+            env_ids, object_actor_ids, 0:3
+        ] = self.initial_object_pos[env_ids]
+        self.root_state_tensor[
+            env_ids, object_actor_ids, 3:7
+        ] = self.initial_object_rot[env_ids]
+        self.root_state_tensor[env_ids, object_actor_ids, 7:10] = torch.zeros_like(
+            self.root_state_tensor[env_ids, object_actor_ids, 7:10]
+        )
+        self.root_state_tensor[env_ids, object_actor_ids, 10:13] = torch.zeros_like(
+            self.root_state_tensor[env_ids, object_actor_ids, 10:13]
+        )
 
         # Reset counters
         self.stable_grasp_counts[env_ids] = 0
 
-    def compute_task_reward_terms(self, obs_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def compute_task_reward_terms(
+        self, obs_dict: Dict[str, torch.Tensor]
+    ) -> Dict[str, torch.Tensor]:
         """
         Compute task-specific reward terms.
 
@@ -285,7 +318,9 @@ class DexGraspTask(BaseTask):
         self.hand_rot = obs_dict["hand_rot"]
 
         # Compute reaching reward - distance from fingertips to object
-        fingertip_to_object = fingertip_pos.view(self.num_envs, 5, 3) - object_pos.unsqueeze(1)
+        fingertip_to_object = fingertip_pos.view(
+            self.num_envs, 5, 3
+        ) - object_pos.unsqueeze(1)
         fingertip_dist = torch.norm(fingertip_to_object, dim=2)
         closest_fingertip_dist = torch.min(fingertip_dist, dim=1)[0]
         reach_reward = torch.exp(-closest_fingertip_dist * 10.0)
@@ -300,7 +335,7 @@ class DexGraspTask(BaseTask):
         lift_reward = torch.where(
             is_lifted,
             torch.ones_like(is_lifted, dtype=torch.float) * self.lift_reward_scale,
-            torch.zeros_like(is_lifted, dtype=torch.float)
+            torch.zeros_like(is_lifted, dtype=torch.float),
         )
 
         # Compute distance to target
@@ -313,7 +348,7 @@ class DexGraspTask(BaseTask):
             "reach_reward": reach_reward * self.reach_object_scale,
             "grasp_reward": grasp_reward * self.grasp_reward_scale,
             "lift_reward": lift_reward,
-            "target_reward": target_reward * self.target_reward_scale
+            "target_reward": target_reward * self.target_reward_scale,
         }
 
         return rewards
@@ -346,7 +381,7 @@ class DexGraspTask(BaseTask):
         self.stable_grasp_counts = torch.where(
             is_stable & is_lifted,
             self.stable_grasp_counts + 1,
-            torch.zeros_like(self.stable_grasp_counts)
+            torch.zeros_like(self.stable_grasp_counts),
         )
 
         # Success criteria: lifted to target position and stably grasped for enough steps

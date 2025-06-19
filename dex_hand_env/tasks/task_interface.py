@@ -191,3 +191,17 @@ class DexTask(ABC):
             ```
         """
         return None
+
+    def set_tensor_references(self, root_state_tensor: torch.Tensor):
+        """
+        Set references to simulation tensors needed by the task.
+
+        This method is called by the environment after tensors are initialized,
+        allowing tasks to access simulation state for reset operations.
+
+        Args:
+            root_state_tensor: Root state tensor for all actors
+        """
+        # Default implementation stores the reference if task needs it
+        if hasattr(self, "root_state_tensor"):
+            self.root_state_tensor = root_state_tensor
