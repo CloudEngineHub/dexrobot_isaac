@@ -235,9 +235,17 @@ The codebase now strongly adheres to CLAUDE.md principles:
 - **Solution**: Ensure command-line log level takes precedence over config file settings
 - **Impact**: Better debugging experience for developers
 
+### 3. th_rot_target Decreases Instead of Increasing
+- **Status**: 🟡 PENDING
+- **Problem**: With `--policy-controls-fingers=true`, th_rot_target decreases from step 20 to 25 in test script
+- **Expected**: Should increase linearly during this period
+- **Location**: Likely in action_processor.py finger coupling logic or test script action generation
+- **Impact**: Incorrect thumb rotation control
+- **Steps to reproduce**: Run `python examples/dexhand_test.py --policy-controls-fingers=true` and observe th_rot_target values
+
 ## 🟢 Optimization & Enhancement (Low Priority)
 
-### 3. Investigate Performance Issue
+### 4. Investigate Performance Issue
 - **Status**: 🟢 PENDING
 - **Problem**: Simulation running at 22.5% of real-time (should be 100% or higher)
 - **Location**: Real-time factor monitoring in `dex_hand_env/tasks/dex_hand_base.py`

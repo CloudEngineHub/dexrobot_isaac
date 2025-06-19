@@ -57,6 +57,29 @@ scaled_actions[:, self.active_target_mask] = self._scale_actions_to_limits(actio
 3. **Vectorize Operations**: Think in tensors, not loops
 4. **Function Pointers**: Assign functions during init, not runtime branching
 
+### Fail-Fast for Required Dependencies
+When a component requires something to function, NEVER check if it exists before using it. This was the root cause of the viewer camera not focusing on startup.
+
+❌ WRONG - Defensive check that silently fails:
+```python
+# Update camera position if following robot
+if self.viewer_controller:
+    if self.hand_rigid_body_indices:  # Silent failure if None!
+        hand_positions = self.rigid_body_states[env_indices, self.hand_rigid_body_indices, :3]
+        self.viewer_controller.update_camera_position(hand_positions)
+```
+
+✅ CORRECT - Fail fast if required dependency is missing:
+```python
+# Camera MUST follow robot - fail if indices not initialized
+if self.hand_rigid_body_index is None:
+    raise RuntimeError("hand_rigid_body_index is None - initialization failed")
+hand_positions = self.rigid_body_states[:, self.hand_rigid_body_index, :3]
+self.viewer_controller.update_camera_position(hand_positions)
+```
+
+Key principle: If something is required for correct operation, it should NEVER be None after initialization. Don't check - just use it and let it fail fast if there's a bug.
+
 ## Critical Design Caveats
 
 ### Fixed Base with Relative Motion
