@@ -837,6 +837,30 @@ def create_contact_test_box(gym, sim, env_ptr, env_id):
         )
 
 
+class ContactTestTask(BaseTask):
+    """Test task that adds a contact test box for testing contact forces."""
+
+    def create_task_objects(self, gym, sim, env_ptr, env_id: int):
+        """Add a contact test box to the environment."""
+        # Call parent implementation first (though BaseTask doesn't add anything)
+        super().create_task_objects(gym, sim, env_ptr, env_id)
+        # Add our contact test box
+        create_contact_test_box(gym, sim, env_ptr, env_id)
+
+
+# For now, monkey patch BaseTask to add contact test box
+# This is done properly to ensure actors are created in the correct order
+def _patched_create_task_objects(self, gym, sim, env_ptr, env_id):
+    """Patched version that adds contact test box."""
+    # Call original implementation (which does nothing in BaseTask)
+    # Note: We don't call super() here since we're patching the class method
+    # BaseTask.create_task_objects doesn't do anything, so we can skip it
+    create_contact_test_box(gym, sim, env_ptr, env_id)
+
+
+BaseTask.create_task_objects = _patched_create_task_objects
+
+
 def main():
     """Main function to test the DexHand environment."""
     # Parse command line arguments
@@ -954,18 +978,6 @@ def main():
     # GPU pipeline is now automatically determined from sim_device
     # No need to set it in config
 
-    # Monkey patch BaseTask to add contact test box
-    logger.info("Monkey patching BaseTask to add contact test box...")
-    original_create_task_objects = BaseTask.create_task_objects
-
-    def patched_create_task_objects(self, gym, sim, env_ptr, env_id):
-        # Call original method first
-        original_create_task_objects(self, gym, sim, env_ptr, env_id)
-        # Then add our box
-        create_contact_test_box(gym, sim, env_ptr, env_id)
-
-    BaseTask.create_task_objects = patched_create_task_objects
-
     if args.debug:
         logger.debug("Configuration loaded:")
         logger.debug(yaml.dump(cfg))
@@ -1011,8 +1023,6 @@ def main():
 
         traceback.print_exc()
         return
-
-    # Box creation now happens automatically through the monkey-patched create_task_objects
 
     logger.info(f"Environment created with {env.num_envs} environments")
     logger.info(f"Observation space: {env.num_observations}")

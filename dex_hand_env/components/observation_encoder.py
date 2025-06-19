@@ -231,26 +231,56 @@ class ObservationEncoder:
         """Access fingertip indices from hand_initializer (single source of truth)."""
         if self.hand_initializer is None:
             raise RuntimeError("hand_initializer not set in ObservationEncoder")
-        # Return indices from first environment (local indices)
-        # All environments have the same local structure
-        return (
-            self.hand_initializer.fingertip_indices[0]
-            if self.hand_initializer.fingertip_indices
-            else []
-        )
+        # Get global indices from first environment
+        if not self.hand_initializer.fingertip_indices:
+            return []
+
+        global_indices = self.hand_initializer.fingertip_indices[0]
+        if not global_indices:
+            return []
+
+        # Convert global indices to local indices for tensor indexing
+        # Same logic as fingerpad_indices
+        rigid_body_states = self.tensor_manager.rigid_body_states
+        if rigid_body_states is not None and len(rigid_body_states.shape) >= 2:
+            num_bodies_per_env = rigid_body_states.shape[1]
+            # Convert global indices to local by taking modulo
+            local_indices = [idx % num_bodies_per_env for idx in global_indices]
+            return local_indices
+        else:
+            # Fallback: assume indices are already local (for single environment)
+            return global_indices
 
     @property
     def fingerpad_indices(self):
         """Access fingerpad indices from hand_initializer (single source of truth)."""
         if self.hand_initializer is None:
             raise RuntimeError("hand_initializer not set in ObservationEncoder")
-        # Return indices from first environment (local indices)
-        # All environments have the same local structure
-        return (
-            self.hand_initializer.fingerpad_indices[0]
-            if self.hand_initializer.fingerpad_indices
-            else []
-        )
+        # Get global indices from first environment
+        if not self.hand_initializer.fingerpad_indices:
+            return []
+
+        global_indices = self.hand_initializer.fingerpad_indices[0]
+        if not global_indices:
+            return []
+
+        # Convert global indices to local indices for tensor indexing
+        # All environments have the same local structure, so we can use env 0's indices
+        # but we need to convert them to be relative to the environment
+        # Since rigid_body_states has shape (num_envs, num_bodies_per_env, ...),
+        # we need local indices within each environment
+
+        # Get the number of rigid bodies per environment
+        # This is determined by looking at the rigid body state tensor shape
+        rigid_body_states = self.tensor_manager.rigid_body_states
+        if rigid_body_states is not None and len(rigid_body_states.shape) >= 2:
+            num_bodies_per_env = rigid_body_states.shape[1]
+            # Convert global indices to local by taking modulo
+            local_indices = [idx % num_bodies_per_env for idx in global_indices]
+            return local_indices
+        else:
+            # Fallback: assume indices are already local (for single environment)
+            return global_indices
 
     # set_control_dt method removed - control_dt now accessed via property decorator from physics_manager
 

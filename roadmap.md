@@ -22,21 +22,40 @@
 - **Verified**: Episodes now properly reset at configured length without continuous resets
 
 ### 3. th_rot_target Decreases Instead of Increasing
-- **Status**: 🟡 PENDING
-- **Problem**: With `--policy-controls-fingers=true`, th_rot_target decreases from step 20 to 25 in test script
-- **Expected**: Should increase linearly during this period
-- **Location**: Likely in action_processor.py finger coupling logic or test script action generation
-- **Impact**: Incorrect thumb rotation control
-- **Steps to reproduce**: Run `python examples/dexhand_test.py --policy-controls-fingers=true` and observe th_rot_target values
+- **Status**: ✅ FIXED
+- **Problem**: With `--policy-controls-fingers=true --policy-controls-base=true`, th_rot_target was decreasing when it should increase
+- **Root Cause**: Base and finger actions were tested sequentially, causing interference
+- **Fix**: Implemented concurrent testing mode where base and finger actions move together
+- **Changes**:
+  - Added base action descriptions in test script
+  - Implemented concurrent testing when both base and fingers are controlled
+  - Base and finger actions now use different patterns and cycle independently
+- **Verified**: Thumb rotation now increases correctly during concurrent control
 
-### 4. Multi-Environment Testing
+### 3. Multi-Environment Testing
+- **Status**: ✅ FIXED
+- **Problem**: Rigid body indexing failed with multiple environments
+- **Root Cause**: Global indices were used to index tensors expecting local indices
+- **Fix**: Added conversion from global to local indices in ObservationEncoder
+- **Changes**:
+  - Modified `fingertip_indices` and `fingerpad_indices` properties
+  - Convert global indices to local using modulo operation
+  - Works correctly for any number of environments
+- **Verified**: Successfully tested with 2 environments, no indexing errors
+
+### 4. Contact Force Visualization Enhancement
 - **Status**: 🟡 PENDING
-- **Problem**: Need to verify system works correctly with num_envs > 1
-- **Tasks**:
-  - Test with various num_envs (2, 4, 16, 64)
-  - Verify reset_idx works correctly with different environment indices
-  - Check performance scaling with multiple environments
-  - Ensure observations/actions are properly batched
+- **Problem**: fingertip_visualizer module is obsolete and should be replaced
+- **Solution**: Add contact force visualization directly to ViewerController
+- **Implementation**:
+  - Add option to highlight bodies when contact force > epsilon
+  - Use configurable contact force bodies from BaseTask.yaml
+  - Implement visual feedback (e.g., color change) for active contacts
+  - Remove dependency on separate fingertip_visualizer module
+- **Benefits**:
+  - Cleaner architecture with visualization in ViewerController
+  - Real-time visual debugging of contact forces
+  - Configurable for any body, not just fingertips
 
 ## 🔵 Future Architecture Improvements
 
