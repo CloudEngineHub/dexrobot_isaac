@@ -14,12 +14,12 @@
 - **Impact**: Contact force system is functional - just need proper contact setup
 
 ### 2. Episode Length Parameter Not Working
-- **Status**: 🟡 PENDING
+- **Status**: ✅ FIXED
 - **Problem**: The `--episode-length` parameter in test script does not properly limit episode duration
-- **Expected**: Episodes should reset after specified number of steps
-- **Location**: Likely in episode termination logic or reset handling
-- **Impact**: Test scripts run longer than intended, making debugging difficult
-- **Steps to reproduce**: Run `python examples/dexhand_test.py --episode-length 10` and observe it runs beyond 10 steps
+- **Root Cause**: `reset_buf` was not cleared after resetting environments, causing continuous resets
+- **Fix**: Added `self.reset_buf[env_ids] = 0` in `reset_manager.reset_idx()` following Isaac Gym standard
+- **Documentation**: Created `docs/guide_environment_resets.md` explaining the reset system
+- **Verified**: Episodes now properly reset at configured length without continuous resets
 
 ### 3. th_rot_target Decreases Instead of Increasing
 - **Status**: 🟡 PENDING
@@ -111,6 +111,11 @@ class AdvancedActionProcessor:
 - [ ] Record/playback functionality for demonstration learning
 - [ ] Add manipulation task environments (pick-and-place, in-hand rotation, tool use)
 - [ ] Implement contact-rich manipulation primitives
+- [ ] Support bimanual environment with two dexterous hands
+  - Extend HandInitializer to support multiple hands per environment
+  - Update observation/action spaces for dual hand control
+  - Add inter-hand coordination capabilities
+  - Create bimanual manipulation tasks (e.g., two-handed grasping, assembly)
 
 ## 📋 Implementation Guidelines
 

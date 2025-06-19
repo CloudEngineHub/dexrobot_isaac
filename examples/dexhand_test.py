@@ -1068,8 +1068,18 @@ def main():
     # Initialize actions tensor
     actions = torch.zeros((env.num_envs, env.num_actions), device=env.device)
 
+    # Define expected action mapping for base controls
+    base_action_map = [
+        ("ARTx", "Base Translation X"),
+        ("ARTy", "Base Translation Y"),
+        ("ARTz", "Base Translation Z"),
+        ("ARRx", "Base Rotation X"),
+        ("ARRy", "Base Rotation Y"),
+        ("ARRz", "Base Rotation Z"),
+    ]
+
     # Define expected action mapping for 12 finger controls with coupling
-    action_to_dof_map = [
+    finger_action_map = [
         # Finger Controls (12) with coupling logic:
         ("thumb_spread", "Thumb Spread (→ r_f_joint1_1)"),
         ("thumb_mcp", "Thumb MCP (→ r_f_joint1_2)"),
@@ -1096,10 +1106,19 @@ def main():
     if not env.policy_controls_fingers:
         logger.info("- Fingers will use RULE-BASED control (grasping motion)")
 
+    if env.policy_controls_hand_base:
+        logger.info(f"Testing {len(base_action_map)} base actions:")
+        for i, (dof_name, description) in enumerate(base_action_map):
+            logger.info(f"  Base Action {i:2d}: {dof_name:<15} - {description}")
+
     if env.policy_controls_fingers:
-        logger.info(f"Testing {len(action_to_dof_map)} finger actions:")
-        for i, (dof_name, description) in enumerate(action_to_dof_map):
-            logger.info(f"  Action {i:2d}: {dof_name:<15} - {description}")
+        logger.info(f"Testing {len(finger_action_map)} finger actions:")
+        for i, (dof_name, description) in enumerate(finger_action_map):
+            logger.info(f"  Finger Action {i:2d}: {dof_name:<15} - {description}")
+
+    if env.policy_controls_hand_base and env.policy_controls_fingers:
+        logger.info("\nNOTE: Base and finger actions will be tested CONCURRENTLY")
+
     logger.info("=" * 50)
 
     # Get initial DOF positions for reference
@@ -1120,8 +1139,12 @@ def main():
     logger.info(f"Total test duration: {12 * 100} steps")
     logger.info("=" * 50)
 
-    # Sequential action testing: each action goes from -1 → 1 → -1 over 100 steps
-    logger.info("\n>>> Testing Sequential Action Movement")
+    # Action testing: each action goes from -1 → 1 → -1 over 100 steps
+    if env.policy_controls_hand_base and env.policy_controls_fingers:
+        logger.info("\n>>> Testing Concurrent Base and Finger Movement")
+        logger.info("Base and finger actions will move together")
+    else:
+        logger.info("\n>>> Testing Sequential Action Movement")
     logger.info("Each action will move from -1 → 1 → -1 over 100 steps")
     logger.info(
         "Starting with all actions at -1, then testing each action individually"
@@ -1160,9 +1183,20 @@ def main():
             dof_idx = 6 + i  # finger DOFs start at index 6
             logger.debug(f"  {name}: {initial_dof_pos[dof_idx].item():.6f}")
 
-    # Total steps: 12 actions × 100 steps each = 1200 steps
-    total_steps = 12 * 100
+    # Calculate total steps based on control mode
     steps_per_action = 100
+    if env.policy_controls_hand_base and env.policy_controls_fingers:
+        # Concurrent testing: max of base (6) and finger (12) actions
+        total_actions = max(
+            env.action_processor.NUM_BASE_DOFS,
+            env.action_processor.NUM_ACTIVE_FINGER_DOFS,
+        )
+    elif env.policy_controls_hand_base:
+        total_actions = env.action_processor.NUM_BASE_DOFS
+    else:
+        total_actions = env.action_processor.NUM_ACTIVE_FINGER_DOFS
+
+    total_steps = total_actions * steps_per_action
 
     logger.info("\nStarting sequential action test:")
     logger.info(f"Total steps: {total_steps}")
@@ -1201,50 +1235,77 @@ def main():
         step_in_action = episode_step % steps_per_action
         action_value = 0.0  # Default for rule-based control
 
-        # For base joints: Create pattern 0 → -1 → 1 → 0 over 100 steps (base middle is default)
-        # For finger joints: Create pattern -1 → 1 → -1 over 100 steps (finger 0 is closed)
-        if env.policy_controls_hand_base and current_action_idx < base_actions_count:
-            # Base joints: 0 → -1 → 1 → 0 pattern
+        # Handle concurrent vs sequential testing
+        if env.policy_controls_hand_base and env.policy_controls_fingers:
+            # CONCURRENT TESTING: Test base and fingers together
+            base_action_idx = current_action_idx % base_actions_count
+            finger_action_idx = current_action_idx % finger_actions_count
+
+            # Base action pattern: 0 → -1 → 1 → 0 over 100 steps
             if step_in_action < 25:
-                # 0 → -1 (first quarter)
-                progress = step_in_action / 24.0
-                action_value = 0.0 - progress
+                base_progress = step_in_action / 24.0
+                base_action_value = 0.0 - base_progress
             elif step_in_action < 75:
-                # -1 → 1 (middle half)
-                progress = (step_in_action - 25) / 49.0
-                action_value = -1.0 + 2.0 * progress
+                base_progress = (step_in_action - 25) / 49.0
+                base_action_value = -1.0 + 2.0 * base_progress
             else:
-                # 1 → 0 (last quarter)
-                progress = (step_in_action - 75) / 24.0
-                action_value = 1.0 - progress
-        else:
-            # Finger joints: -1 → 1 → -1 pattern
+                base_progress = (step_in_action - 75) / 24.0
+                base_action_value = 1.0 - base_progress
+
+            # Finger action pattern: -1 → 1 → -1 over 100 steps
             if step_in_action < 50:
-                progress = step_in_action / 49.0
-                action_value = -1.0 + 2.0 * progress
+                finger_progress = step_in_action / 49.0
+                finger_action_value = -1.0 + 2.0 * finger_progress
             else:
-                progress = (step_in_action - 50) / 49.0
-                action_value = 1.0 - 2.0 * progress
+                finger_progress = (step_in_action - 50) / 49.0
+                finger_action_value = 1.0 - 2.0 * finger_progress
 
-        # For policy-controlled base
-        if env.policy_controls_hand_base:
-            base_action_idx = current_action_idx
+            # Apply base action
+            actions[0, base_action_idx] = base_action_value * 0.5  # Scale base actions
 
-            if base_action_idx < base_actions_count:
-                # Use range [-0.5, 0.5] for base joints to reduce fierce movements
-                scaled_base_action = action_value * 0.5
-                actions[0, base_action_idx] = scaled_base_action
+            # Apply finger action
+            actions[0, base_actions_count + finger_action_idx] = finger_action_value
 
-        # For policy-controlled fingers
-        if env.policy_controls_fingers:
-            # Apply to policy actions
-            action_start_idx = (
-                base_actions_count if env.policy_controls_hand_base else 0
-            )
-            finger_action_idx = current_action_idx
+        else:
+            # SEQUENTIAL TESTING: Original logic
+            if (
+                env.policy_controls_hand_base
+                and current_action_idx < base_actions_count
+            ):
+                # Base joints: 0 → -1 → 1 → 0 pattern
+                if step_in_action < 25:
+                    progress = step_in_action / 24.0
+                    action_value = 0.0 - progress
+                elif step_in_action < 75:
+                    progress = (step_in_action - 25) / 49.0
+                    action_value = -1.0 + 2.0 * progress
+                else:
+                    progress = (step_in_action - 75) / 24.0
+                    action_value = 1.0 - progress
 
-            if finger_action_idx < finger_actions_count:
-                actions[0, action_start_idx + finger_action_idx] = action_value
+                # Apply base action
+                actions[0, current_action_idx] = action_value * 0.5
+
+            elif env.policy_controls_fingers:
+                # Finger joints: -1 → 1 → -1 pattern
+                if step_in_action < 50:
+                    progress = step_in_action / 49.0
+                    action_value = -1.0 + 2.0 * progress
+                else:
+                    progress = (step_in_action - 50) / 49.0
+                    action_value = 1.0 - 2.0 * progress
+
+                # Apply finger action
+                finger_action_idx = (
+                    current_action_idx
+                    if not env.policy_controls_hand_base
+                    else current_action_idx - base_actions_count
+                )
+                if 0 <= finger_action_idx < finger_actions_count:
+                    action_start_idx = (
+                        base_actions_count if env.policy_controls_hand_base else 0
+                    )
+                    actions[0, action_start_idx + finger_action_idx] = action_value
 
         # Step the simulation (rule-based control is applied automatically in pre_physics_step)
         if step < 5:
@@ -1279,39 +1340,48 @@ def main():
             # Add random actions indicator to progress output
             random_mode_indicator = " [RANDOM]" if env.random_actions_enabled else ""
 
-            if (
+            if env.policy_controls_hand_base and env.policy_controls_fingers:
+                # CONCURRENT MODE: Show both base and finger actions
+                base_idx = current_action_idx % base_actions_count
+                finger_idx = current_action_idx % finger_actions_count
+                base_name = base_action_map[base_idx][0]
+                finger_name = finger_action_map[finger_idx][0]
+                base_val = actions[0, base_idx].item()
+                finger_val = actions[0, base_actions_count + finger_idx].item()
+
+                logger.info(
+                    f"  Step {step+1:4d}: Action {current_action_idx} - Base: {base_name:>6}={base_val:+5.2f}, Finger: {finger_name:>13}={finger_val:+5.2f} (substep {step_in_action+1:2d}/100){random_mode_indicator}"
+                )
+            elif (
                 env.policy_controls_hand_base
                 and current_action_idx < base_actions_count
             ):
-                base_action_names = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"]
-                action_name = base_action_names[current_action_idx]
-                action_sent = (
-                    actions[0, current_action_idx].item()
-                    if current_action_idx < actions.shape[1]
-                    else action_value
-                )
+                # BASE ONLY MODE
+                action_name = base_action_map[current_action_idx][0]
+                action_sent = actions[0, current_action_idx].item()
                 logger.info(
                     f"  Step {step+1:4d}: Base Action {current_action_idx} ({action_name:>13}) = {action_sent:+6.3f} (substep {step_in_action+1:2d}/100){random_mode_indicator}"
                 )
-            elif (
-                env.policy_controls_fingers
-                and current_action_idx < finger_actions_count
-            ):
-                action_name = action_to_dof_map[current_action_idx][0]
-                logger.info(
-                    f"  Step {step+1:4d}: Finger Action {current_action_idx} ({action_name:>13}) = {action_value:+6.3f} (substep {step_in_action+1:2d}/100){random_mode_indicator}"
+            elif env.policy_controls_fingers:
+                # FINGER ONLY MODE
+                finger_idx = (
+                    current_action_idx
+                    if not env.policy_controls_hand_base
+                    else current_action_idx - base_actions_count
                 )
-            elif not env.policy_controls_fingers:
-                logger.info(
-                    f"  Step {step+1:4d}: RULE-BASED finger control (substep {step_in_action+1:2d}/100){random_mode_indicator}"
-                )
-            elif not env.policy_controls_hand_base:
-                logger.info(
-                    f"  Step {step+1:4d}: RULE-BASED base control (substep {step_in_action+1:2d}/100){random_mode_indicator}"
-                )
+                if 0 <= finger_idx < finger_actions_count:
+                    action_name = finger_action_map[finger_idx][0]
+                    action_sent = actions[
+                        0,
+                        (base_actions_count if env.policy_controls_hand_base else 0)
+                        + finger_idx,
+                    ].item()
+                    logger.info(
+                        f"  Step {step+1:4d}: Finger Action {finger_idx} ({action_name:>13}) = {action_sent:+6.3f} (substep {step_in_action+1:2d}/100){random_mode_indicator}"
+                    )
             else:
                 logger.info(
-                    f"  Step {step+1:4d}: Test completed (substep {step_in_action+1:2d}/100){random_mode_indicator}"
+                    f"  Step {step+1:4d}: Test in progress (substep {step_in_action+1:2d}/100){random_mode_indicator}"
                 )
 
             # At transitions, show DOF changes for the current action
@@ -1322,8 +1392,17 @@ def main():
                 dof_change = current_dof_pos - initial_dof_pos
 
                 # Show changes for the joints controlled by this action
-                if current_action_idx < 12:
-                    action_name, description = action_to_dof_map[current_action_idx]
+                if env.policy_controls_hand_base and env.policy_controls_fingers:
+                    # Concurrent mode - show both base and finger changes
+                    base_idx = current_action_idx % base_actions_count
+                    finger_idx = current_action_idx % finger_actions_count
+                    base_name, base_desc = base_action_map[base_idx]
+                    finger_name, finger_desc = finger_action_map[finger_idx]
+                    logger.debug(f"    Base: {base_desc}, Finger: {finger_desc}")
+                elif env.policy_controls_fingers and current_action_idx < len(
+                    finger_action_map
+                ):
+                    action_name, description = finger_action_map[current_action_idx]
                     logger.debug(f"    {description}")
 
                     # Show finger DOF changes
