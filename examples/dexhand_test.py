@@ -480,11 +480,11 @@ def log_observation_data(env, step, cfg, env_idx=0):
                     "Plot_7_hand_quat_euler/arr_euler_yaw_rad", rr.Scalar(arr_euler[2])
                 )
 
-        # Plot 8: contact_force x,y,z component and magnitude for middle finger (index 2)
+        # Plot 8: contact_force x,y,z component and magnitude for middle finger distal phalanx
         if "contact_forces" in obs_dict:
             middle_finger_force = obs_encoder.get_contact_force_value(
-                2, obs_dict, env_idx
-            )  # Middle finger
+                "r_f_link3_4", obs_dict, env_idx
+            )  # Middle finger distal phalanx
             rr.log("Plot_8_contact/x", rr.Scalar(float(middle_finger_force[0])))
             rr.log("Plot_8_contact/y", rr.Scalar(float(middle_finger_force[1])))
             rr.log("Plot_8_contact/z", rr.Scalar(float(middle_finger_force[2])))
@@ -787,8 +787,8 @@ def log_observation_data(env, step, cfg, env_idx=0):
 def create_contact_test_box(gym, sim, env_ptr, env_id):
     """Create a box for contact testing."""
     # Create box asset
-    box_size = 0.05  # 5cm cube
-    box_x = 0.25  # Position beneath middle finger
+    box_size = 0.1  # 10cm cube
+    box_x = 0.3  # Position beneath middle finger
     box_y = 0.0
     box_z = box_size / 2.0  # Half the box height to place bottom on ground
     box_position = gymapi.Vec3(box_x, box_y, box_z)
@@ -947,6 +947,9 @@ def main():
 
     # Apply performance profiling configuration
     cfg["env"]["enablePerformanceProfiling"] = args.profile
+
+    # Override initial hand position for contact testing
+    cfg["env"]["initialHandPos"] = [0.0, 0.0, 0.15]  # Lower position for easier contact
 
     # GPU pipeline is now automatically determined from sim_device
     # No need to set it in config

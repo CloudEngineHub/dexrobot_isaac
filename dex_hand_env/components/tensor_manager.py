@@ -68,6 +68,13 @@ class TensorManager:
         # parent.device should already be a torch.device - fail fast if not
         return self.parent.device
 
+    @property
+    def rigid_body_index_to_name(self):
+        """Access rigid body name mapping from hand_initializer (single source of truth)."""
+        if self.parent.hand_initializer is None:
+            raise RuntimeError("hand_initializer is None - initialization failed")
+        return self.parent.hand_initializer.rigid_body_index_to_name
+
     def acquire_tensor_handles(self):
         """
         Acquire handles to simulation tensors.
@@ -127,12 +134,12 @@ class TensorManager:
             "actor_root_state": self.actor_root_state_tensor_handle,
         }
 
-    def setup_tensors(self, fingertip_indices=None):
+    def setup_tensors(self, contact_force_body_indices=None):
         """
         Set up tensors from handles.
 
         Args:
-            fingertip_indices: Indices of fingertips (for contact forces)
+            contact_force_body_indices: Indices of bodies to monitor for contact forces
 
         Returns:
             Dictionary of tensors
@@ -307,32 +314,34 @@ class TensorManager:
 
         logger.debug(f"Contact forces flat tensor shape: {contact_forces_flat.shape}")
 
-        # Reshape contact forces for fingertips
-        if fingertip_indices is None or len(fingertip_indices) == 0:
+        # Reshape contact forces for contact force bodies
+        if contact_force_body_indices is None or len(contact_force_body_indices) == 0:
             raise RuntimeError(
-                "No fingertip indices provided. Cannot set up contact forces."
+                "No contact force body indices provided. Cannot set up contact forces."
             )
 
-        # Number of fingers
-        num_fingers = len(fingertip_indices[0])
-        logger.debug(f"Number of fingers: {num_fingers}")
+        # Number of contact force bodies
+        num_contact_bodies = len(contact_force_body_indices[0])
+        logger.debug(f"Number of contact force bodies: {num_contact_bodies}")
 
         # Create tensor for contact forces
         self.contact_forces = torch.zeros(
-            (self.num_envs, num_fingers, 3), device=self.device
+            (self.num_envs, num_contact_bodies, 3), device=self.device
         )
         logger.debug(f"Contact forces tensor shape: {self.contact_forces.shape}")
 
-        # Copy contact forces for each fingertip
+        # Copy contact forces for each contact body
         for i in range(self.num_envs):
-            for j in range(num_fingers):
-                if i < len(fingertip_indices) and j < len(fingertip_indices[i]):
-                    # Get the rigid body index for this fingertip
-                    finger_idx = fingertip_indices[i][j]
+            for j in range(num_contact_bodies):
+                if i < len(contact_force_body_indices) and j < len(
+                    contact_force_body_indices[i]
+                ):
+                    # Get the rigid body index for this contact body
+                    body_idx = contact_force_body_indices[i][j]
 
-                    if finger_idx < contact_forces_flat.shape[0]:
+                    if body_idx < contact_forces_flat.shape[0]:
                         # Copy contact force (x, y, z)
-                        self.contact_forces[i, j, :] = contact_forces_flat[finger_idx]
+                        self.contact_forces[i, j, :] = contact_forces_flat[body_idx]
 
         # Mark tensors as initialized
         self.tensors_initialized = True
@@ -349,12 +358,12 @@ class TensorManager:
             "contact_forces": self.contact_forces,
         }
 
-    def refresh_tensors(self, fingertip_indices=None):
+    def refresh_tensors(self, contact_force_body_indices=None):
         """
         Refresh tensor data from simulation.
 
         Args:
-            fingertip_indices: Indices of fingertips (for contact forces)
+            contact_force_body_indices: Indices of bodies to monitor for contact forces
 
         Returns:
             Dictionary of refreshed tensors
@@ -382,9 +391,12 @@ class TensorManager:
             self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
 
             # Refresh contact forces
-            if fingertip_indices is None or len(fingertip_indices) == 0:
+            if (
+                contact_force_body_indices is None
+                or len(contact_force_body_indices) == 0
+            ):
                 raise RuntimeError(
-                    "No fingertip indices provided. Cannot refresh contact forces."
+                    "No contact force body indices provided. Cannot refresh contact forces."
                 )
 
             contact_forces_flat = gymtorch.wrap_tensor(
@@ -395,30 +407,51 @@ class TensorManager:
                     "Contact force tensor is empty or None during refresh"
                 )
 
-            # Number of fingers
-            num_fingers = len(fingertip_indices[0])
+            # Debug contact forces detection
+            if logger._core.min_level <= 10:  # Only if DEBUG level is enabled
+                nonzero_forces = torch.nonzero(contact_forces_flat.abs() > 0.001)
+                if nonzero_forces.numel() > 0:
+                    # Get unique rigid body indices with contact
+                    unique_contact_indices = torch.unique(nonzero_forces[:, 0])
 
-            # Copy contact forces for each fingertip
-            for i in range(self.num_envs):
-                if i >= len(fingertip_indices):
-                    raise RuntimeError(f"Fingertip indices missing for environment {i}")
-
-                for j in range(num_fingers):
-                    if j >= len(fingertip_indices[i]):
-                        raise RuntimeError(
-                            f"Fingertip index {j} missing for environment {i}"
+                    # Log each body with contact force
+                    for idx in unique_contact_indices:
+                        idx_int = idx.item()
+                        body_name = self.rigid_body_index_to_name.get(
+                            idx_int, "Unknown body"
+                        )
+                        force_vec = contact_forces_flat[idx_int]
+                        force_mag = torch.norm(force_vec).item()
+                        logger.debug(
+                            f"Contact on '{body_name}' (idx={idx_int}): magnitude={force_mag:.2f}N"
                         )
 
-                    # Get the rigid body index for this fingertip
-                    finger_idx = fingertip_indices[i][j]
+            # Number of contact force bodies
+            num_contact_bodies = len(contact_force_body_indices[0])
 
-                    if finger_idx >= contact_forces_flat.shape[0]:
+            # Copy contact forces for each contact body
+            for i in range(self.num_envs):
+                if i >= len(contact_force_body_indices):
+                    raise RuntimeError(
+                        f"Contact force body indices missing for environment {i}"
+                    )
+
+                for j in range(num_contact_bodies):
+                    if j >= len(contact_force_body_indices[i]):
                         raise RuntimeError(
-                            f"Fingertip index {finger_idx} exceeds contact forces size {contact_forces_flat.shape[0]}"
+                            f"Contact force body index {j} missing for environment {i}"
+                        )
+
+                    # Get the rigid body index for this contact body
+                    body_idx = contact_force_body_indices[i][j]
+
+                    if body_idx >= contact_forces_flat.shape[0]:
+                        raise RuntimeError(
+                            f"Contact body index {body_idx} exceeds contact forces size {contact_forces_flat.shape[0]}"
                         )
 
                     # Copy contact force (x, y, z)
-                    self.contact_forces[i, j, :] = contact_forces_flat[finger_idx]
+                    self.contact_forces[i, j, :] = contact_forces_flat[body_idx]
 
             return {
                 "dof_pos": self.dof_pos,

@@ -275,6 +275,12 @@ class DexHandBase(VecTask):
                 rot=self.cfg["env"].get("initialHandRot", [0.0, 0.0, 0.0, 1.0]),
             )
 
+        # Set contact force bodies from config
+        if "contactForceBodies" in self.cfg["env"]:
+            self.hand_initializer.set_contact_force_bodies(
+                self.cfg["env"]["contactForceBodies"]
+            )
+
         # Load hand asset
         self.hand_asset = self.hand_initializer.load_hand_asset(self.hand_asset_file)
 
@@ -320,6 +326,9 @@ class DexHandBase(VecTask):
 
         self.fingertip_indices = rigid_body_indices["fingertip_indices"]
         self.fingerpad_indices = rigid_body_indices["fingerpad_indices"]
+        self.contact_force_body_indices = rigid_body_indices[
+            "contact_force_body_indices"
+        ]
 
         # Create tensor manager after environment setup
         self.tensor_manager = TensorManager(parent=self)
@@ -338,7 +347,7 @@ class DexHandBase(VecTask):
         logger.debug("Simulation prepared successfully")
 
         # Set up tensors
-        tensors = self.tensor_manager.setup_tensors(self.fingertip_indices)
+        tensors = self.tensor_manager.setup_tensors(self.contact_force_body_indices)
         self.dof_state = tensors["dof_state"]
         self.dof_pos = tensors["dof_pos"]
         self.dof_vel = tensors["dof_vel"]
@@ -719,7 +728,7 @@ class DexHandBase(VecTask):
         """Process state after physics simulation step."""
         try:
             # Refresh tensors from simulation
-            self.tensor_manager.refresh_tensors(self.fingertip_indices)
+            self.tensor_manager.refresh_tensors(self.contact_force_body_indices)
 
             # Compute observations using the new simplified interface
             (

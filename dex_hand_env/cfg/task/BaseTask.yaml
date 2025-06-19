@@ -25,6 +25,14 @@ env:
   logLevel: "INFO"                # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
   enableComponentDebugLogs: false # Enable detailed debug logs for component internals
 
+  # Bodies to monitor for contact force observations
+  contactForceBodies:
+    - "r_f_link1_4"  # thumb distal phalanx
+    - "r_f_link2_4"  # index distal phalanx
+    - "r_f_link3_4"  # middle distal phalanx
+    - "r_f_link4_4"  # ring distal phalanx
+    - "r_f_link5_4"  # pinky distal phalanx
+
   # Controller parameters now loaded from MJCF model
 
   # Initial pose

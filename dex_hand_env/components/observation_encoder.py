@@ -213,6 +213,14 @@ class ObservationEncoder:
             (self.num_envs, self.num_observations), device=self.device
         )
 
+        # Build contact force body name to index mapping
+        self.contact_force_body_name_to_index = {}
+        if hasattr(self.hand_initializer, "contact_force_body_names"):
+            for i, body_name in enumerate(
+                self.hand_initializer.contact_force_body_names
+            ):
+                self.contact_force_body_name_to_index[body_name] = i
+
     @property
     def hand_index(self):
         """Access hand rigid body index from parent (single source of truth)."""
@@ -1158,21 +1166,26 @@ class ObservationEncoder:
                 return {"position": pose_data[:, :3], "orientation": pose_data[:, 3:7]}
 
     def get_contact_force_value(
-        self, finger_idx: int, obs_data=None, env_idx: int = None
+        self, body_name: str, obs_data=None, env_idx: int = None
     ):
         """
-        Get contact force by finger index.
+        Get contact force by body name.
 
         Args:
-            finger_idx: Finger index (0-4 for 5 fingers)
+            body_name: Name of the body to get contact force for (e.g., "r_f_link3_4")
             obs_data: Either observation tensor OR observation dictionary (not both)
             env_idx: Environment index (if None, returns data for all environments)
 
         Returns:
             Contact force - numpy array if env_idx specified, tensor if env_idx is None
         """
-        if finger_idx < 0 or finger_idx >= 5:
-            raise ValueError(f"Finger index must be 0-4, got {finger_idx}")
+        if body_name not in self.contact_force_body_name_to_index:
+            available_bodies = list(self.contact_force_body_name_to_index.keys())
+            raise ValueError(
+                f"Unknown contact force body: {body_name}. Available: {available_bodies}"
+            )
+
+        body_idx = self.contact_force_body_name_to_index[body_name]
 
         if obs_data is None:
             raise ValueError("obs_data must be provided")
@@ -1184,7 +1197,7 @@ class ObservationEncoder:
             if component_key not in obs_data:
                 raise ValueError(f"Component '{component_key}' not found in obs_dict")
 
-            force_start = finger_idx * 3
+            force_start = body_idx * 3
             force_end = force_start + 3
             force_data = obs_data[component_key][:, force_start:force_end]
 
@@ -1201,7 +1214,7 @@ class ObservationEncoder:
                 )
 
             component_start, _ = self.component_slice_indices[component_key]
-            force_start = component_start + finger_idx * 3
+            force_start = component_start + body_idx * 3
             force_end = force_start + 3
 
             if env_idx is not None:

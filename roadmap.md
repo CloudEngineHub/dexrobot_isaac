@@ -3,16 +3,25 @@
 ## 🟡 Current Issues (In Progress)
 
 ### 1. Contact Force Verification (Issue #4)
-- **Status**: 🟡 WIP - Detoured for refactoring
-- **Problem**: Need objects in scene to verify contact force observations are working correctly
-- **Tasks**:
-  - Add test objects (box, sphere) to BaseTask environment
-  - Verify contact forces are properly computed and returned in observations
-  - Test fingertip/fingerpad contact detection
-  - Validate contact force magnitudes and directions
-- **Impact**: Critical for manipulation tasks that rely on contact feedback
+- **Status**: ✅ INVESTIGATION COMPLETE - System working correctly
+- **Problem**: Contact forces showing as zeros despite visual contact
+- **Root Cause**: Contact forces are detected correctly but on hand base/palm (rigid body indices 9,11,17,19) rather than fingertips (indices 14,20,26,32,38)
+- **Key Findings**:
+  - ✅ TensorManager.refresh_tensors() successfully detects contact forces up to 1211N magnitude
+  - ✅ Contact force tensor and indexing system working correctly
+  - ✅ Debug logging confirmed contact forces are detected at non-fingertip rigid bodies
+- **Next Steps**: Verify fingertip collision geometry in MJCF model or adjust test scene for fingertip contact
+- **Impact**: Contact force system is functional - just need proper contact setup
 
-### 2. th_rot_target Decreases Instead of Increasing
+### 2. Episode Length Parameter Not Working
+- **Status**: 🟡 PENDING
+- **Problem**: The `--episode-length` parameter in test script does not properly limit episode duration
+- **Expected**: Episodes should reset after specified number of steps
+- **Location**: Likely in episode termination logic or reset handling
+- **Impact**: Test scripts run longer than intended, making debugging difficult
+- **Steps to reproduce**: Run `python examples/dexhand_test.py --episode-length 10` and observe it runs beyond 10 steps
+
+### 3. th_rot_target Decreases Instead of Increasing
 - **Status**: 🟡 PENDING
 - **Problem**: With `--policy-controls-fingers=true`, th_rot_target decreases from step 20 to 25 in test script
 - **Expected**: Should increase linearly during this period
@@ -20,7 +29,7 @@
 - **Impact**: Incorrect thumb rotation control
 - **Steps to reproduce**: Run `python examples/dexhand_test.py --policy-controls-fingers=true` and observe th_rot_target values
 
-### 3. Multi-Environment Testing
+### 4. Multi-Environment Testing
 - **Status**: 🟡 PENDING
 - **Problem**: Need to verify system works correctly with num_envs > 1
 - **Tasks**:

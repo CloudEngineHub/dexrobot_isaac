@@ -133,6 +133,9 @@ class HandInitializer:
             "r_f_link5_pad",
         ]
 
+        # Contact force body names will be set from config during initialize()
+        self.contact_force_body_names = []
+
         # Storage for handles and indices
         self.hand_handles = []
         self.fingertip_body_handles = []
@@ -143,9 +146,13 @@ class HandInitializer:
         )  # Temporary storage for verification - must be identical across envs
         self.fingertip_indices = []
         self.fingerpad_indices = []
+        self.contact_force_body_indices = []  # Indices for contact force sensing bodies
 
         # Optimized single index (after verification that all envs have same index)
         self.hand_rigid_body_index = None  # Single scalar index (same across envs)
+
+        # Rigid body index to name mapping for debug logging
+        self.rigid_body_index_to_name = {}  # Maps rigid body index -> body name
 
         # DOF names - will be populated during asset loading
         self._dof_names = None
@@ -186,6 +193,15 @@ class HandInitializer:
         self.initial_hand_pos = pos
         if rot is not None:
             self.initial_hand_rot = rot
+
+    def set_contact_force_bodies(self, body_names):
+        """
+        Set the contact force body names from config.
+
+        Args:
+            body_names: List of body names to monitor for contact forces
+        """
+        self.contact_force_body_names = body_names
 
     def load_hand_asset(self, asset_file=None):
         """
@@ -385,6 +401,24 @@ class HandInitializer:
                 "Rigid body indices have already been initialized. They should only be initialized once."
             )
 
+        # Build rigid body index to name mapping (only for first environment since all are identical)
+        if envs and self.hand_handles:
+            # Get all rigid body names for the hand
+            rigid_body_names = self.gym.get_actor_rigid_body_names(
+                envs[0], self.hand_handles[0]
+            )
+
+            # Build the mapping for all hand rigid bodies
+            for body_name in rigid_body_names:
+                body_idx = self.gym.find_actor_rigid_body_index(
+                    envs[0], self.hand_handles[0], body_name, gymapi.DOMAIN_SIM
+                )
+                self.rigid_body_index_to_name[body_idx] = body_name
+
+            logger.debug(
+                f"Built rigid body index mapping with {len(self.rigid_body_index_to_name)} bodies"
+            )
+
         # Acquire indices for each environment
         for i, (env, hand_handle) in enumerate(zip(envs, self.hand_handles)):
             # Get hand base rigid body index
@@ -410,6 +444,15 @@ class HandInitializer:
                 )
                 fingerpad_indices.append(body_idx)
             self.fingerpad_indices.append(fingerpad_indices)
+
+            # Get contact force body indices
+            contact_force_indices = []
+            for name in self.contact_force_body_names:
+                body_idx = self.gym.find_actor_rigid_body_index(
+                    env, hand_handle, name, gymapi.DOMAIN_SIM
+                )
+                contact_force_indices.append(body_idx)
+            self.contact_force_body_indices.append(contact_force_indices)
 
         # Convert global indices to local index
         # Since all environments have identical structure, the local index within each environment
@@ -441,4 +484,5 @@ class HandInitializer:
             "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
             "fingertip_indices": self.fingertip_indices,
             "fingerpad_indices": self.fingerpad_indices,
+            "contact_force_body_indices": self.contact_force_body_indices,  # Indices for force sensing
         }
