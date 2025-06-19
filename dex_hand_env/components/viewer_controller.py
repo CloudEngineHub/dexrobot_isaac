@@ -10,6 +10,7 @@ Keyboard Shortcuts:
     G     - Toggle between Global view and single robot view
     UP    - Previous robot (in single robot mode)
     DOWN  - Next robot (in single robot mode)
+    SPACE - Toggle random actions mode
 """
 
 # Import IsaacGym first
@@ -62,6 +63,9 @@ class ViewerController:
         )
         self.follow_robot_index = 0  # Which robot to follow in single mode
 
+        # Random actions toggle state
+        self.random_actions_enabled = False
+
         # Track whether keyboard events have been subscribed
         self._keyboard_subscribed = False
 
@@ -113,7 +117,8 @@ class ViewerController:
         - Enter: Toggle camera view mode (free, rear, right, bottom)
         - G: Toggle between single robot follow and global view
         - Up/Down arrows: Navigate to previous/next robot to follow (in single mode)
-        - P: Reset the currently selected environment
+        - E: Reset the currently selected environment
+        - Space: Toggle random actions mode
         """
         if self.viewer is None:
             return
@@ -133,6 +138,10 @@ class ViewerController:
         # Use KEY_E for "reset Environment" (single env) to avoid confusion with Pause
         self.gym.subscribe_viewer_keyboard_event(
             self.viewer, gymapi.KEY_E, "reset environment"
+        )
+        # Spacebar to toggle random actions
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_SPACE, "toggle random actions"
         )
 
         self._keyboard_subscribed = True
@@ -234,6 +243,13 @@ class ViewerController:
                     reset_callback(
                         torch.tensor([self.follow_robot_index], device=self.device)
                     )
+                elif evt.action == "toggle random actions" and evt.value > 0:
+                    # Toggle random actions mode
+                    self.random_actions_enabled = not self.random_actions_enabled
+                    state_text = (
+                        "ENABLED" if self.random_actions_enabled else "DISABLED"
+                    )
+                    logger.info(f"Random actions {state_text} (press SPACE to toggle)")
 
             return events_processed
         except Exception:

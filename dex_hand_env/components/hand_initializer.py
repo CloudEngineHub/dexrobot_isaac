@@ -14,6 +14,9 @@ from loguru import logger
 # Import IsaacGym
 from isaacgym import gymapi
 
+# Import PyTorch for tensor operations
+import torch
+
 
 class HardwareMapping(Enum):
     """Mapping between URDF and hardware joints"""
@@ -432,9 +435,24 @@ class HandInitializer:
             f"First env fingertip indices: {self.fingertip_indices[0] if self.fingertip_indices else 'None'}"
         )
 
-        return {
-            "hand_rigid_body_indices": self.hand_rigid_body_indices,  # Rigid body indices
-            "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
-            "fingertip_indices": self.fingertip_indices,
-            "fingerpad_indices": self.fingerpad_indices,
-        }
+        # Return the appropriate data structure based on whether indices are uniform
+        if self.hand_rigid_body_index is not None:
+            # All environments have the same index - return as constant
+            return {
+                "hand_rigid_body_index": self.hand_rigid_body_index,  # Single index (constant)
+                "hand_rigid_body_indices": None,  # Not needed when index is constant
+                "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
+                "fingertip_indices": self.fingertip_indices,
+                "fingerpad_indices": self.fingerpad_indices,
+            }
+        else:
+            # Different indices per environment - convert to tensor for efficient operations
+            return {
+                "hand_rigid_body_index": None,  # Not available when indices differ
+                "hand_rigid_body_indices": torch.tensor(
+                    self.hand_rigid_body_indices, dtype=torch.long
+                ),  # Tensor for vectorized ops
+                "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
+                "fingertip_indices": self.fingertip_indices,
+                "fingerpad_indices": self.fingerpad_indices,
+            }

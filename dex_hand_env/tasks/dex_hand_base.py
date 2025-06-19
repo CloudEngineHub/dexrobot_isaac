@@ -306,11 +306,25 @@ class DexHandBase(VecTask):
         #    - Stored in hand_actor_indices (list) and hand_actor_indices_tensor (tensor)
         #    - Points to the articulated actor in the environment
         # 2. Rigid body indices: Used for pose/state queries (rigid_body_states tensor)
-        #    - Stored in hand_rigid_body_indices (list)
+        #    - When all environments have the same index: stored as single constant
+        #    - When indices differ: stored as tensor for vectorized operations
         #    - Points to specific rigid bodies within the global rigid body array
         # These are NOT interchangeable - using the wrong index type will cause errors!
 
-        self.hand_rigid_body_indices = rigid_body_indices["hand_rigid_body_indices"]
+        # Store rigid body indices in the most appropriate format
+        if rigid_body_indices["hand_rigid_body_index"] is not None:
+            # All environments have the same index - store as constant
+            self.hand_rigid_body_index = rigid_body_indices["hand_rigid_body_index"]
+            self.hand_rigid_body_indices = None  # Not needed when index is constant
+        else:
+            # Different indices per environment - store as tensor
+            self.hand_rigid_body_index = None
+            self.hand_rigid_body_indices = rigid_body_indices["hand_rigid_body_indices"]
+            if not isinstance(self.hand_rigid_body_indices, torch.Tensor):
+                raise RuntimeError(
+                    "hand_rigid_body_indices must be a tensor when indices differ"
+                )
+
         self.fingertip_indices = rigid_body_indices["fingertip_indices"]
         self.fingerpad_indices = rigid_body_indices["fingerpad_indices"]
 
@@ -626,6 +640,17 @@ class DexHandBase(VecTask):
         """
         return self.episode_step_count.float() * self.physics_manager.control_dt
 
+    @property
+    def random_actions_enabled(self):
+        """Check if random actions mode is enabled via viewer controller.
+
+        Returns:
+            bool: True if random actions are enabled, False otherwise
+        """
+        if self.viewer_controller and self.viewer_controller.viewer:
+            return self.viewer_controller.random_actions_enabled
+        return False
+
     def get_episode_time(self, env_id=0):
         """Get current episode time in seconds for a specific environment.
 
@@ -671,6 +696,17 @@ class DexHandBase(VecTask):
 
         # Store actions
         self.actions = actions.clone()
+
+        # Check if random actions mode is enabled
+        if self.random_actions_enabled:
+            # Generate random actions in the range [-1, 1]
+            random_actions = 2.0 * torch.rand_like(self.actions) - 1.0
+            # Log occasionally to avoid spam
+            if self.step_count % 100 == 0:
+                logger.info(
+                    "Random actions mode active - generating random actions in range [-1, 1]"
+                )
+            self.actions = random_actions
 
         # Process actions using action processor
         try:

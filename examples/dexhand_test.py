@@ -1018,6 +1018,15 @@ def main():
     logger.info(f"Policy controls hand base: {env.policy_controls_hand_base}")
     logger.info(f"Policy controls fingers: {env.policy_controls_fingers}")
 
+    # Display keyboard shortcuts if not headless
+    if not args.headless:
+        logger.info("\nKeyboard shortcuts:")
+        logger.info("  SPACE - Toggle random actions mode")
+        logger.info("  E     - Reset current environment")
+        logger.info("  G     - Toggle between single robot and global view")
+        logger.info("  UP/DOWN - Navigate between robots")
+        logger.info("  ENTER - Toggle camera view mode")
+
     # Calculate expected action space size
     expected_actions = 0
     if env.policy_controls_hand_base:
@@ -1264,6 +1273,9 @@ def main():
 
         # Print progress every 25 steps and at key transitions
         if step_in_action % 25 == 0 or step_in_action == 49 or step_in_action == 99:
+            # Add random actions indicator to progress output
+            random_mode_indicator = " [RANDOM]" if env.random_actions_enabled else ""
+
             if (
                 env.policy_controls_hand_base
                 and current_action_idx < base_actions_count
@@ -1276,7 +1288,7 @@ def main():
                     else action_value
                 )
                 logger.info(
-                    f"  Step {step+1:4d}: Base Action {current_action_idx} ({action_name:>13}) = {action_sent:+6.3f} (substep {step_in_action+1:2d}/100)"
+                    f"  Step {step+1:4d}: Base Action {current_action_idx} ({action_name:>13}) = {action_sent:+6.3f} (substep {step_in_action+1:2d}/100){random_mode_indicator}"
                 )
             elif (
                 env.policy_controls_fingers
@@ -1284,19 +1296,19 @@ def main():
             ):
                 action_name = action_to_dof_map[current_action_idx][0]
                 logger.info(
-                    f"  Step {step+1:4d}: Finger Action {current_action_idx} ({action_name:>13}) = {action_value:+6.3f} (substep {step_in_action+1:2d}/100)"
+                    f"  Step {step+1:4d}: Finger Action {current_action_idx} ({action_name:>13}) = {action_value:+6.3f} (substep {step_in_action+1:2d}/100){random_mode_indicator}"
                 )
             elif not env.policy_controls_fingers:
                 logger.info(
-                    f"  Step {step+1:4d}: RULE-BASED finger control (substep {step_in_action+1:2d}/100)"
+                    f"  Step {step+1:4d}: RULE-BASED finger control (substep {step_in_action+1:2d}/100){random_mode_indicator}"
                 )
             elif not env.policy_controls_hand_base:
                 logger.info(
-                    f"  Step {step+1:4d}: RULE-BASED base control (substep {step_in_action+1:2d}/100)"
+                    f"  Step {step+1:4d}: RULE-BASED base control (substep {step_in_action+1:2d}/100){random_mode_indicator}"
                 )
             else:
                 logger.info(
-                    f"  Step {step+1:4d}: Test completed (substep {step_in_action+1:2d}/100)"
+                    f"  Step {step+1:4d}: Test completed (substep {step_in_action+1:2d}/100){random_mode_indicator}"
                 )
 
             # At transitions, show DOF changes for the current action
