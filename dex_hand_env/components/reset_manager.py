@@ -29,7 +29,7 @@ class ResetManager:
         dof_state,
         root_state_tensor,
         hand_actor_indices,
-        hand_rigid_body_indices,
+        hand_rigid_body_index,
         task,
         max_episode_length,
     ):
@@ -41,7 +41,7 @@ class ResetManager:
             dof_state: DOF state tensor reference
             root_state_tensor: Root state tensor reference
             hand_actor_indices: Hand actor indices for DOF operations
-            hand_rigid_body_indices: Hand rigid body indices for pose operations
+            hand_rigid_body_index: Hand rigid body index for pose operations (constant across envs)
             task: Task instance (may have reset_task method)
             max_episode_length: Maximum episode length from config
         """
@@ -54,14 +54,8 @@ class ResetManager:
         self.dof_state = dof_state
         self.root_state_tensor = root_state_tensor
         self.hand_actor_indices = hand_actor_indices
-        self.hand_rigid_body_indices = hand_rigid_body_indices
+        self.hand_rigid_body_index = hand_rigid_body_index
         self.task = task
-
-        # Check if we have constant or per-env rigid body indices
-        self.has_constant_rigid_body_index = (
-            hasattr(parent, "hand_rigid_body_index")
-            and parent.hand_rigid_body_index is not None
-        )
 
         # Reset and progress buffers - will be set by set_buffers()
         self.reset_buf = None
@@ -327,20 +321,13 @@ class ResetManager:
                     )
 
                 # Get hand indices for environments being reset
-                if self.has_constant_rigid_body_index:
-                    # All environments have the same rigid body index - use optimized approach
-                    hand_rigid_body_indices_to_reset = torch.full(
-                        (len(env_ids),),
-                        self.parent.hand_rigid_body_index,
-                        device=self.device,
-                        dtype=torch.long,
-                    )
-                else:
-                    # Different indices per environment - use vectorized tensor indexing
-                    # self.hand_rigid_body_indices is already a tensor
-                    hand_rigid_body_indices_to_reset = self.hand_rigid_body_indices[
-                        env_ids
-                    ]
+                # All environments have the same rigid body index
+                hand_rigid_body_indices_to_reset = torch.full(
+                    (len(env_ids),),
+                    self.hand_rigid_body_index,
+                    device=self.device,
+                    dtype=torch.long,
+                )
 
                 # Validate all hand indices
                 if torch.any(

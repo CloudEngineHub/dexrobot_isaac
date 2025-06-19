@@ -4,7 +4,6 @@ Base class for vectorized tasks in Isaac Gym.
 This module defines the VecTask abstract base class that all tasks should inherit from.
 """
 
-import sys
 from abc import ABC
 from typing import Dict, Any
 
@@ -189,7 +188,6 @@ class VecTask(Env):
         # Setup sim
         self.sim = None
         self.envs = []
-        self.viewer = None
 
         # Initialize buffers
         self.num_dof = 0
@@ -199,9 +197,6 @@ class VecTask(Env):
         self.reset_buf = None
         self.episode_step_count = None
         self.extras = {}
-
-        # Rendering
-        self.viewer = None
 
     def _parse_sim_params(
         self, physics_engine: str, config_sim: Dict[str, Any], num_envs: int
@@ -313,27 +308,13 @@ class VecTask(Env):
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""
-        # Default implementation - subclasses should override if they have viewer management
-        if self.viewer:
-            # Basic rendering for compatibility
-            if self.gym.query_viewer_has_closed(self.viewer):
-                sys.exit()
-
-            self.gym.fetch_results(self.sim, True)
-            self.gym.step_graphics(self.sim)
-            self.gym.draw_viewer(self.viewer, self.sim, True)
-            self.gym.sync_frame_time(self.sim)
-
-            if self.virtual_display and mode == "rgb_array":
-                img = self.virtual_display.grab()
-                return np.array(img)
+        # Subclasses should implement viewer rendering if needed
+        raise NotImplementedError(
+            "Subclasses must implement render() if they support rendering"
+        )
 
     def close(self):
         """Close the environment."""
-        if self.viewer:
-            self.gym.destroy_viewer(self.viewer)
-            self.viewer = None
-
         if self.sim:
             self.gym.destroy_sim(self.sim)
             self.sim = None

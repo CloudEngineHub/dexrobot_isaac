@@ -311,19 +311,12 @@ class DexHandBase(VecTask):
         #    - Points to specific rigid bodies within the global rigid body array
         # These are NOT interchangeable - using the wrong index type will cause errors!
 
-        # Store rigid body indices in the most appropriate format
-        if rigid_body_indices["hand_rigid_body_index"] is not None:
-            # All environments have the same index - store as constant
-            self.hand_rigid_body_index = rigid_body_indices["hand_rigid_body_index"]
-            self.hand_rigid_body_indices = None  # Not needed when index is constant
-        else:
-            # Different indices per environment - store as tensor
-            self.hand_rigid_body_index = None
-            self.hand_rigid_body_indices = rigid_body_indices["hand_rigid_body_indices"]
-            if not isinstance(self.hand_rigid_body_indices, torch.Tensor):
-                raise RuntimeError(
-                    "hand_rigid_body_indices must be a tensor when indices differ"
-                )
+        # Store rigid body indices - all environments must have identical structure
+        self.hand_rigid_body_index = rigid_body_indices["hand_rigid_body_index"]
+        if self.hand_rigid_body_index is None:
+            raise RuntimeError(
+                "hand_rigid_body_index is None - HandInitializer should have validated identical indices"
+            )
 
         self.fingertip_indices = rigid_body_indices["fingertip_indices"]
         self.fingerpad_indices = rigid_body_indices["fingerpad_indices"]
@@ -407,7 +400,7 @@ class DexHandBase(VecTask):
             dof_state=self.dof_state,
             root_state_tensor=self.actor_root_state_tensor,
             hand_actor_indices=self.hand_actor_indices_tensor,
-            hand_rigid_body_indices=self.hand_rigid_body_indices,
+            hand_rigid_body_index=self.hand_rigid_body_index,
             task=self.task,
             max_episode_length=self.max_episode_length,
         )
@@ -437,16 +430,10 @@ class DexHandBase(VecTask):
             headless=self.headless,
         )
 
-        # Update the parent's viewer reference
-        if self.viewer_controller.viewer is not None:
-            self.viewer = self.viewer_controller.viewer
-        else:
-            self.viewer = None
-
         # Create fingertip visualizer
         self.fingertip_visualizer = FingertipVisualizer(
             parent=self,
-            hand_rigid_body_indices=self.hand_rigid_body_indices,
+            hand_rigid_body_index=self.hand_rigid_body_index,
             fingerpad_handles=self.fingertip_body_handles,
         )
 
@@ -613,16 +600,6 @@ class DexHandBase(VecTask):
         self.extras = {}
 
     @property
-    def hand_rigid_body_indices_tensor(self):
-        """Access hand rigid body indices as tensor.
-
-        These indices point to the hand base rigid body in the rigid_body_states tensor.
-        Use these indices when accessing rigid body states (position, orientation, velocity).
-        For DOF operations, use hand_actor_indices_tensor instead.
-        """
-        return self.hand_rigid_body_indices
-
-    @property
     def hand_actor_indices_tensor(self):
         """Access hand actor indices as tensor for DOF operations."""
         import torch
@@ -784,17 +761,11 @@ class DexHandBase(VecTask):
             # Update camera position if following robot
             if self.viewer_controller:
                 # Get hand positions for camera following
-                hand_positions = None
-                # rigid_body_states and hand_rigid_body_indices must be initialized
-                if self.hand_rigid_body_indices:
-                    # Vectorized extraction of hand positions
-                    # rigid_body_states shape: [num_envs, num_bodies, 13]
-                    # Extract positions for all hands at once using advanced indexing
-                    env_indices = torch.arange(self.num_envs, device=self.device)
-                    hand_positions = self.rigid_body_states[
-                        env_indices, self.hand_rigid_body_indices, :3
-                    ]
-
+                # rigid_body_states shape: [num_envs, num_bodies, 13]
+                # Extract positions for all hands using the constant index
+                hand_positions = self.rigid_body_states[
+                    :, self.hand_rigid_body_index, :3
+                ]
                 self.viewer_controller.update_camera_position(hand_positions)
 
             # Reset environments that completed episodes
@@ -876,7 +847,7 @@ class DexHandBase(VecTask):
 
         # Render viewer if it exists
         render_start = time.time()
-        if self.viewer:
+        if self.viewer_controller and self.viewer_controller.viewer:
             self.render()
         render_time = time.time() - render_start
 
@@ -1167,10 +1138,11 @@ class DexHandBase(VecTask):
 
     def close(self):
         """Close the environment."""
-        if self.viewer:
-            self.gym.destroy_viewer(self.viewer)
-            self.viewer = None
+        # ViewerController handles viewer destruction
+        if self.viewer_controller and self.viewer_controller.viewer:
+            self.gym.destroy_viewer(self.viewer_controller.viewer)
 
+        # Destroy simulation
         if self.sim:
             self.gym.destroy_sim(self.sim)
             self.sim = None

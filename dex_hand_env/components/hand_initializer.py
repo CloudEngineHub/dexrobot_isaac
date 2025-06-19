@@ -15,7 +15,6 @@ from loguru import logger
 from isaacgym import gymapi
 
 # Import PyTorch for tensor operations
-import torch
 
 
 class HardwareMapping(Enum):
@@ -141,7 +140,7 @@ class HandInitializer:
         self.hand_actor_indices = []  # Actor indices for DOF operations
         self.hand_rigid_body_indices = (
             []
-        )  # Rigid body indices (per-env, but should be identical)
+        )  # Temporary storage for verification - must be identical across envs
         self.fingertip_indices = []
         self.fingerpad_indices = []
 
@@ -412,47 +411,34 @@ class HandInitializer:
                 fingerpad_indices.append(body_idx)
             self.fingerpad_indices.append(fingerpad_indices)
 
-        # Verify that all environments have the same rigid body index structure
-        # This is expected since we create identical actors in each environment
-        if self.hand_rigid_body_indices:
-            first_index = self.hand_rigid_body_indices[0]
-            if all(idx == first_index for idx in self.hand_rigid_body_indices):
-                self.hand_rigid_body_index = first_index
-                logger.debug(
-                    f"Verified: All {len(envs)} environments have identical hand rigid body index {first_index}"
-                )
-            else:
-                logger.warning(
-                    f"Hand rigid body indices differ across environments: {self.hand_rigid_body_indices}. "
-                    f"This is unexpected and may indicate an Isaac Gym setup issue."
-                )
-                self.hand_rigid_body_index = first_index  # Use first as fallback
+        # Convert global indices to local index
+        # Since all environments have identical structure, the local index within each environment
+        # is the same. We use the first environment's global index as the local index.
+        if not self.hand_rigid_body_indices:
+            raise RuntimeError(
+                "No hand rigid body indices found. This indicates a critical initialization error."
+            )
+
+        # The local index is simply the first environment's global index
+        # This works because environment 0 starts at global index 0
+        self.hand_rigid_body_index = self.hand_rigid_body_indices[0]
+
+        logger.debug(
+            f"Using hand rigid body index {self.hand_rigid_body_index} (from env 0 global index)"
+        )
+        logger.debug(f"All environment global indices: {self.hand_rigid_body_indices}")
 
         logger.debug(f"Initialized rigid body indices for {len(envs)} environments")
-        logger.debug(f"Hand rigid body indices: {self.hand_rigid_body_indices}")
+        logger.debug(f"Hand rigid body index: {self.hand_rigid_body_index}")
         logger.debug(f"Hand actor indices: {self.hand_actor_indices}")
         logger.debug(
             f"First env fingertip indices: {self.fingertip_indices[0] if self.fingertip_indices else 'None'}"
         )
 
-        # Return the appropriate data structure based on whether indices are uniform
-        if self.hand_rigid_body_index is not None:
-            # All environments have the same index - return as constant
-            return {
-                "hand_rigid_body_index": self.hand_rigid_body_index,  # Single index (constant)
-                "hand_rigid_body_indices": None,  # Not needed when index is constant
-                "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
-                "fingertip_indices": self.fingertip_indices,
-                "fingerpad_indices": self.fingerpad_indices,
-            }
-        else:
-            # Different indices per environment - convert to tensor for efficient operations
-            return {
-                "hand_rigid_body_index": None,  # Not available when indices differ
-                "hand_rigid_body_indices": torch.tensor(
-                    self.hand_rigid_body_indices, dtype=torch.long
-                ),  # Tensor for vectorized ops
-                "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
-                "fingertip_indices": self.fingertip_indices,
-                "fingerpad_indices": self.fingerpad_indices,
-            }
+        # Return rigid body indices as constants since all environments must be identical
+        return {
+            "hand_rigid_body_index": self.hand_rigid_body_index,  # Single index (constant)
+            "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
+            "fingertip_indices": self.fingertip_indices,
+            "fingerpad_indices": self.fingerpad_indices,
+        }

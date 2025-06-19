@@ -214,25 +214,35 @@ class ObservationEncoder:
         )
 
     @property
-    def hand_indices(self):
-        """Access hand rigid body indices from hand_initializer (single source of truth)."""
-        if self.hand_initializer is None:
-            raise RuntimeError("hand_initializer not set in ObservationEncoder")
-        return self.hand_initializer.hand_rigid_body_indices
+    def hand_index(self):
+        """Access hand rigid body index from parent (single source of truth)."""
+        return self.parent.hand_rigid_body_index
 
     @property
     def fingertip_indices(self):
         """Access fingertip indices from hand_initializer (single source of truth)."""
         if self.hand_initializer is None:
             raise RuntimeError("hand_initializer not set in ObservationEncoder")
-        return self.hand_initializer.fingertip_indices
+        # Return indices from first environment (local indices)
+        # All environments have the same local structure
+        return (
+            self.hand_initializer.fingertip_indices[0]
+            if self.hand_initializer.fingertip_indices
+            else []
+        )
 
     @property
     def fingerpad_indices(self):
         """Access fingerpad indices from hand_initializer (single source of truth)."""
         if self.hand_initializer is None:
             raise RuntimeError("hand_initializer not set in ObservationEncoder")
-        return self.hand_initializer.fingerpad_indices
+        # Return indices from first environment (local indices)
+        # All environments have the same local structure
+        return (
+            self.hand_initializer.fingerpad_indices[0]
+            if self.hand_initializer.fingerpad_indices
+            else []
+        )
 
     # set_control_dt method removed - control_dt now accessed via property decorator from physics_manager
 
@@ -433,12 +443,8 @@ class ObservationEncoder:
         # Hand pose (position and orientation)
         # hand_indices and rigid_body_states should never be None/empty during observation computation
         # If they are, that indicates an initialization bug that must be fixed
-        # Use optimized single index if available (since it's the same across all envs)
-        hand_base_idx = (
-            self.hand_initializer.hand_rigid_body_index
-            if self.hand_initializer.hand_rigid_body_index is not None
-            else self.hand_indices[0]
-        )
+        # Use constant index (same across all envs)
+        hand_base_idx = self.hand_index
 
         if hand_base_idx < 0 or hand_base_idx >= rigid_body_states.shape[1]:
             raise RuntimeError(
@@ -687,17 +693,12 @@ class ObservationEncoder:
             raise RuntimeError(
                 "rigid_body_states is None - this indicates tensor_manager initialization bug"
             )
-        if self.hand_indices is None or len(self.hand_indices) == 0:
+        # Get hand base index - use constant index
+        hand_base_idx = self.hand_index
+        if hand_base_idx is None:
             raise RuntimeError(
-                "hand_indices not properly initialized - this indicates hand_initializer bug"
+                "hand_index not properly initialized - this indicates initialization bug"
             )
-
-        # Get hand base index - use optimized single index if available
-        hand_base_idx = (
-            self.hand_initializer.hand_rigid_body_index
-            if self.hand_initializer.hand_rigid_body_index is not None
-            else self.hand_indices[0]
-        )
 
         if hand_base_idx < 0 or hand_base_idx >= rigid_body_states.shape[1]:
             raise RuntimeError(
