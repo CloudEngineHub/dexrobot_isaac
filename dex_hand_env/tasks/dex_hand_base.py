@@ -455,6 +455,7 @@ class DexHandBase(VecTask):
             parent=self,
             gym=self.gym,
             sim=self.sim,
+            env_handles=self.envs,
             headless=self.headless,
         )
 

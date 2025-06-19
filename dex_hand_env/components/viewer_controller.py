@@ -35,7 +35,7 @@ class ViewerController:
     - Update camera position based on the current mode
     """
 
-    def __init__(self, parent, gym, sim, headless):
+    def __init__(self, parent, gym, sim, env_handles, headless):
         """
         Initialize the viewer controller and create the viewer.
 
@@ -43,11 +43,13 @@ class ViewerController:
             parent: Parent object (typically DexHandBase) that provides shared properties
             gym: IsaacGym instance
             sim: Simulation instance
+            env_handles: List of environment handles for camera targeting
             headless: Whether running in headless mode
         """
         self.parent = parent
         self.gym = gym
         self.sim = sim
+        self.env_handles = env_handles
         self.headless = headless
 
         # Create viewer if not in headless mode
@@ -313,8 +315,32 @@ class ViewerController:
             )
             cam_target = gymapi.Vec3(target_pos[0], target_pos[1], target_pos[2])
 
-            # Update camera
-            self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
+            # Determine which environment to use for camera coordinate system
+            if self.camera_follow_mode == "single" and self.env_handles:
+                # Use the specific environment we're following
+                safe_index = min(self.follow_robot_index, len(self.env_handles) - 1)
+                env_handle = self.env_handles[safe_index]
+
+                # Debug: Log camera positioning for environment switching
+                from loguru import logger
+
+                if (
+                    hasattr(self, "_last_follow_index")
+                    and self._last_follow_index != safe_index
+                ):
+                    logger.debug(
+                        f"Camera switching from env {self._last_follow_index} to env {safe_index}"
+                    )
+                    logger.debug(
+                        f"  Target position: [{target_pos[0]:.3f}, {target_pos[1]:.3f}, {target_pos[2]:.3f}]"
+                    )
+                self._last_follow_index = safe_index
+            else:
+                # For global view or if no env handles available, use None (world coordinates)
+                env_handle = None
+
+            # Update camera with correct environment coordinate system
+            self.gym.viewer_camera_look_at(self.viewer, env_handle, cam_pos, cam_target)
             return True
         except Exception:
             # Handle exceptions silently - this can happen during initialization
