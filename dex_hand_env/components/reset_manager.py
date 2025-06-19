@@ -412,6 +412,9 @@ class ResetManager:
             # Reset action processor targets to avoid jumps after reset
             self.action_processor.reset_targets(env_ids)
 
+            # Clear reset buffer for environments that were reset (standard Isaac Gym pattern)
+            self.reset_buf[env_ids] = 0
+
             # Reset completed successfully
             return True
 
