@@ -290,6 +290,30 @@ class ActionProcessor:
         # Store full targets
         self.current_targets = full_targets
 
+        # Debug: Multi-environment CPU/GPU issue tracking (see roadmap.md #5)
+        if hasattr(self.parent, "_debug_step_counter"):
+            self.parent._debug_step_counter += 1
+        else:
+            self.parent._debug_step_counter = 0
+
+        if (
+            self.parent._debug_step_counter % 200 == 50
+            and self.parent._debug_step_counter > 0
+            and self.num_envs > 1
+        ):
+            logger.debug(
+                f"ActionProcessor Step {self.parent._debug_step_counter}: Multi-env targets"
+            )
+            logger.debug(
+                f"  Device: {self.device}, Shape: {self.current_targets.shape}"
+            )
+            # Check if targets are identical across environments
+            if self.num_envs >= 2:
+                identical = torch.allclose(
+                    self.current_targets[0], self.current_targets[1]
+                )
+                logger.debug(f"  Env 0 vs Env 1 targets identical: {identical}")
+
         # Apply targets to simulation
         self.gym.set_dof_position_target_tensor(
             self.sim, gymtorch.unwrap_tensor(self.current_targets)

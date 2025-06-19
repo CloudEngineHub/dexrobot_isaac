@@ -44,16 +44,50 @@
 - **Verified**: Successfully tested with 2 environments, no indexing errors
 
 ### 4. Actions Not Applied in Multi-Environment Setup
-- **Status**: 🟡 PENDING
-- **Problem**: When running with multiple environments (num_envs > 1), actions are not being applied
-- **Symptoms**: Hand doesn't move despite actions being sent
-- **Possible Causes**:
-  - Actor indices might be incorrect when boxes are added after hands
-  - DOF state tensor shape mismatch with additional actors
-  - Need to investigate if current_targets tensor shape matches actual DOF count
-- **Impact**: Multi-environment training/testing doesn't work properly
+- **Status**: ✅ FIXED
+- **Problem**: When running with multiple environments (num_envs > 1), actions were not being applied correctly when tasks added objects
+- **Root Cause**: Actor creation order was inconsistent - task objects were created before hands, causing incorrect actor indexing
+- **Fix**: Refactored actor creation flow to ensure consistent order:
+  1. Load task assets early (before any actors)
+  2. Create hands FIRST (always actor index 0)
+  3. Create task objects AFTER hands (actor indices 1+)
+- **Changes**:
+  - Modified factory.py to remove late asset loading
+  - Updated dex_hand_base.py to create actors in correct order
+  - Added set_tensor_references() to task interface
+  - Updated DexGraspTask to use correct actor indices
+  - Created comprehensive documentation in docs/guide_actor_creation.md
+- **Verified**: Actor indexing is now consistent across all environments
 
-### 5. Contact Force Visualization Enhancement
+### 5. CPU Pipeline Multi-Environment DOF Control Issue
+- **Status**: 🔴 CRITICAL BUG - Isaac Gym Issue
+- **Problem**: In CPU pipeline, `gym.set_dof_position_target_tensor()` only applies to environment 0, other environments ignored
+- **Symptoms**:
+  - Robot 0 moves correctly, robot 1+ remain stationary despite identical targets
+  - GPU pipeline works correctly - all environments move as expected
+- **Test Commands**:
+  - CPU (broken): `python examples/dexhand_test.py --device cpu --policy-controls-base true --num-envs 2`
+  - GPU (works): `python examples/dexhand_test.py --device cuda:0 --policy-controls-base true --num-envs 2`
+- **Investigation Results**:
+  - ✅ Actions applied correctly to all environments in test script
+  - ✅ ActionProcessor computes targets correctly for all environments
+  - ✅ `gym.set_dof_position_target_tensor()` receives correct tensor with all environment targets
+  - ❌ Isaac Gym CPU pipeline ignores environments 1+ (contradicts documentation)
+- **Evidence**:
+  - Debug logs show identical actions and targets for all environments
+  - DOF positions show only env 0 moving: `Env 0: [-0.051, ...]` vs `Env 1: [0.000, ...]`
+  - Same test on GPU works: both environments show movement
+- **Documentation Contradiction**: Isaac Gym docs state CPU pipeline has fewer restrictions than GPU pipeline
+- **Workaround**: Use GPU pipeline for multi-environment simulations
+- **Status**: Reported to Isaac Gym team (potential bug in CPU pipeline tensor handling)
+
+### 6. Camera Following Only Moves Slightly Between Robots
+- **Status**: 🟡 PENDING
+- **Problem**: Camera switch logs "Following robot 1" but camera barely moves
+- **Possible Cause**: Hand positions might be identical for all environments (same spawn location)
+- **Impact**: Debugging multi-environment setups is difficult
+
+### 7. Contact Force Visualization Enhancement
 - **Status**: 🟡 PENDING
 - **Problem**: fingertip_visualizer module is obsolete and should be replaced
 - **Solution**: Add contact force visualization directly to ViewerController

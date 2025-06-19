@@ -1270,11 +1270,24 @@ def main():
                 finger_progress = (step_in_action - 50) / 49.0
                 finger_action_value = 1.0 - 2.0 * finger_progress
 
-            # Apply base action
-            actions[0, base_action_idx] = base_action_value * 0.5  # Scale base actions
+            # Apply base action to all environments
+            actions[:, base_action_idx] = base_action_value * 0.5  # Scale base actions
 
-            # Apply finger action
-            actions[0, base_actions_count + finger_action_idx] = finger_action_value
+            # Apply finger action to all environments
+            actions[:, base_actions_count + finger_action_idx] = finger_action_value
+
+            # Debug: CPU/GPU multi-environment issue (see roadmap.md #5)
+            if step % 200 == 50 and step > 0 and env.num_envs > 1:
+                logger.debug(f"Step {step}: Multi-env debug - Device: {env.device}")
+                logger.debug(
+                    f"  Action shape: {actions.shape}, identical values: {torch.allclose(actions[0], actions[1])}"
+                )
+                if hasattr(env, "dof_pos"):
+                    for env_idx in range(min(env.num_envs, 2)):
+                        pos = env.dof_pos[env_idx, :3]  # First 3 DOFs
+                        logger.debug(
+                            f"  Env {env_idx} DOF pos: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}]"
+                        )
 
         else:
             # SEQUENTIAL TESTING: Original logic
@@ -1293,8 +1306,8 @@ def main():
                     progress = (step_in_action - 75) / 24.0
                     action_value = 1.0 - progress
 
-                # Apply base action
-                actions[0, current_action_idx] = action_value * 0.5
+                # Apply base action to all environments
+                actions[:, current_action_idx] = action_value * 0.5
 
             elif env.policy_controls_fingers:
                 # Finger joints: -1 → 1 → -1 pattern
@@ -1315,7 +1328,7 @@ def main():
                     action_start_idx = (
                         base_actions_count if env.policy_controls_hand_base else 0
                     )
-                    actions[0, action_start_idx + finger_action_idx] = action_value
+                    actions[:, action_start_idx + finger_action_idx] = action_value
 
         # Step the simulation (rule-based control is applied automatically in pre_physics_step)
         if step < 5:
