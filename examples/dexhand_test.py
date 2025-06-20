@@ -1039,6 +1039,7 @@ def main():
         logger.info("  G     - Toggle between single robot and global view")
         logger.info("  UP/DOWN - Navigate between robots")
         logger.info("  ENTER - Toggle camera view mode")
+        logger.info("  C     - Toggle contact force visualization")
 
     # Calculate expected action space size
     expected_actions = 0

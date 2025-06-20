@@ -11,6 +11,7 @@ Keyboard Shortcuts:
     UP    - Previous robot (in single robot mode)
     DOWN  - Next robot (in single robot mode)
     SPACE - Toggle random actions mode
+    C     - Toggle contact force visualization
 """
 
 # Import IsaacGym first
@@ -71,6 +72,32 @@ class ViewerController:
         # Track whether keyboard events have been subscribed
         self._keyboard_subscribed = False
 
+        # Contact force visualization settings - load from config if available
+        contact_viz_config = (
+            parent.cfg.get("env", {}).get("contactVisualization", {})
+            if hasattr(parent, "cfg")
+            else {}
+        )
+        self.enable_contact_visualization = contact_viz_config.get("enabled", True)
+        self.contact_force_threshold = contact_viz_config.get(
+            "forceThreshold", 1.0
+        )  # Newtons
+        self.contact_force_max_intensity = contact_viz_config.get(
+            "forceMaxIntensity", 10.0
+        )  # Newtons
+
+        # Load default color from config or use default gray
+        default_color = contact_viz_config.get("defaultColor", [0.7, 0.7, 0.7])
+        self.default_body_color = gymapi.Vec3(
+            default_color[0], default_color[1], default_color[2]
+        )
+
+        # Load base color from config or use default
+        base_color = contact_viz_config.get("baseColor", [1.0, 0.2, 0.2])
+        self.contact_base_color = gymapi.Vec3(
+            base_color[0], base_color[1], base_color[2]
+        )
+
         # Initialize keyboard events if viewer is available
         if self.viewer is not None:
             self.subscribe_keyboard_events()
@@ -121,6 +148,7 @@ class ViewerController:
         - Up/Down arrows: Navigate to previous/next robot to follow (in single mode)
         - E: Reset the currently selected environment
         - Space: Toggle random actions mode
+        - C: Toggle contact force visualization
         """
         if self.viewer is None:
             return
@@ -144,6 +172,10 @@ class ViewerController:
         # Spacebar to toggle random actions
         self.gym.subscribe_viewer_keyboard_event(
             self.viewer, gymapi.KEY_SPACE, "toggle random actions"
+        )
+        # C to toggle contact force visualization
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_C, "toggle contact visualization"
         )
 
         self._keyboard_subscribed = True
@@ -252,6 +284,21 @@ class ViewerController:
                         "ENABLED" if self.random_actions_enabled else "DISABLED"
                     )
                     logger.info(f"Random actions {state_text} (press SPACE to toggle)")
+                elif evt.action == "toggle contact visualization" and evt.value > 0:
+                    # Toggle contact force visualization
+                    self.enable_contact_visualization = (
+                        not self.enable_contact_visualization
+                    )
+                    if self.enable_contact_visualization:
+                        logger.info(
+                            f"Contact force visualization ENABLED (press C to toggle) - "
+                            f"Threshold: {self.contact_force_threshold}N, "
+                            f"Max intensity: {self.contact_force_max_intensity}N"
+                        )
+                    else:
+                        logger.info(
+                            "Contact force visualization DISABLED (press C to toggle)"
+                        )
 
             return events_processed
         except Exception:
@@ -346,6 +393,75 @@ class ViewerController:
             # Handle exceptions silently - this can happen during initialization
             return False
 
+    def update_contact_force_colors(self, contact_forces):
+        """
+        Update body colors based on contact forces.
+
+        Colors bodies red with intensity proportional to contact force magnitude.
+        Bodies with forces below threshold return to default color.
+
+        Args:
+            contact_forces: Tensor of contact forces [num_envs, num_bodies, 3]
+
+        Returns:
+            Boolean indicating whether colors were updated
+        """
+        if self.viewer is None or not self.enable_contact_visualization:
+            return False
+
+        # Get contact force body indices from parent
+        contact_body_indices = self.parent.contact_force_body_indices
+        if not contact_body_indices:
+            return False
+
+        # Calculate contact force magnitudes
+        force_magnitudes = torch.norm(contact_forces, dim=2)  # [num_envs, num_bodies]
+        has_contact = force_magnitudes > self.contact_force_threshold
+
+        # Update colors for each environment
+        for env_idx in range(self.num_envs):
+            # For each contact body in this environment
+            for body_idx, global_body_idx in enumerate(contact_body_indices[env_idx]):
+                if has_contact[env_idx, body_idx]:
+                    # Calculate color based on force magnitude
+                    force_mag = force_magnitudes[env_idx, body_idx].item()
+
+                    # Normalize force between threshold and max
+                    normalized_force = (force_mag - self.contact_force_threshold) / (
+                        self.contact_force_max_intensity - self.contact_force_threshold
+                    )
+                    normalized_force = max(
+                        0.0, min(1.0, normalized_force)
+                    )  # Clamp to [0, 1]
+
+                    # Interpolate between default color and base color
+                    color = gymapi.Vec3(
+                        self.default_body_color.x
+                        + (self.contact_base_color.x - self.default_body_color.x)
+                        * normalized_force,
+                        self.default_body_color.y
+                        + (self.contact_base_color.y - self.default_body_color.y)
+                        * normalized_force,
+                        self.default_body_color.z
+                        + (self.contact_base_color.z - self.default_body_color.z)
+                        * normalized_force,
+                    )
+                else:
+                    # No contact - use default color
+                    color = self.default_body_color
+
+                # Set the rigid body color
+                # Note: Using hand_handles from parent for actor handle
+                self.gym.set_rigid_body_color(
+                    self.envs[env_idx],
+                    self.parent.hand_handles[env_idx],
+                    global_body_idx,
+                    gymapi.MESH_VISUAL,
+                    color,
+                )
+
+        return True
+
     def render(self, mode="rgb_array", reset_callback=None):
         """
         Handle viewer rendering and keyboard events.
@@ -373,6 +489,10 @@ class ViewerController:
         # Fetch results if using GPU
         if hasattr(self.parent, "device") and self.parent.device != "cpu":
             self.gym.fetch_results(self.sim, True)
+
+        # Update contact force visualization if enabled
+        if self.enable_contact_visualization and hasattr(self.parent, "contact_forces"):
+            self.update_contact_force_colors(self.parent.contact_forces)
 
         # Step graphics and render
         self.gym.step_graphics(self.sim)

@@ -22,7 +22,6 @@ import torch
 
 # Import components
 from dex_hand_env.components.viewer_controller import ViewerController
-from dex_hand_env.components.fingertip_visualizer import FingertipVisualizer
 from dex_hand_env.components.success_failure_tracker import SuccessFailureTracker
 from dex_hand_env.components.reward_calculator import RewardCalculator
 from dex_hand_env.components.physics_manager import PhysicsManager
@@ -299,7 +298,6 @@ class DexHandBase(VecTask):
         # Create hands in the environments FIRST (before task objects)
         handles = self.hand_initializer.create_hands(self.envs, self.hand_asset)
         self.hand_handles = handles["hand_handles"]
-        self.fingertip_body_handles = handles["fingertip_body_handles"]
         self.fingerpad_body_handles = handles["fingerpad_body_handles"]
         self.dof_properties_from_asset = handles.get("dof_properties", None)
         self.hand_actor_indices = handles["hand_actor_indices"]
@@ -457,13 +455,6 @@ class DexHandBase(VecTask):
             sim=self.sim,
             env_handles=self.envs,
             headless=self.headless,
-        )
-
-        # Create fingertip visualizer
-        self.fingertip_visualizer = FingertipVisualizer(
-            parent=self,
-            hand_rigid_body_index=self.hand_rigid_body_index,
-            fingerpad_handles=self.fingertip_body_handles,
         )
 
         # Create success/failure tracker
@@ -778,11 +769,6 @@ class DexHandBase(VecTask):
                 self.reset_buf = self.reset_manager.check_termination()
 
             # Update fingertip visualization
-            if self.fingertip_visualizer:
-                self.fingertip_visualizer.update_fingertip_visualization(
-                    self.contact_forces
-                )
-
             # Update camera position if following robot
             if self.viewer_controller:
                 # Get hand positions for camera following
