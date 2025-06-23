@@ -4,61 +4,6 @@
 
 (Currently no pending issues)
 
-## 🔵 Future Architecture Improvements
-
-### Comprehensive Rule+Policy Control Framework
-A more flexible control architecture that supports pre-action rules, policy actions, and post-action safety filters.
-
-#### Proposed Architecture:
-```python
-class AdvancedActionProcessor:
-    def process_actions_with_rules(self, policy_actions, state):
-        # 1. Pre-action rules
-        rule_targets = self.pre_action_rule(state)
-        # Optionally provide rule targets as observation to policy
-
-        # 2. Policy action application
-        if self.action_mode == "overwrite":
-            targets = self.apply_policy_actions(policy_actions)
-        elif self.action_mode == "residual":
-            targets = rule_targets + self.residual_scale * policy_actions
-        elif self.action_mode == "selective":
-            # Policy controls subset of DOFs
-            targets = self.blend_targets(rule_targets, policy_actions)
-
-        # 3. Post-action safety filter
-        safe_targets = self.post_action_filter(targets, state)
-
-        return safe_targets
-```
-
-#### Key Features:
-1. **Pre-action Rules**:
-   - Generate baseline targets for all DOFs
-   - Can provide rule-based targets as observation to policy
-   - Examples: gravity compensation, default poses, trajectory following
-
-2. **Action Modes**:
-   - **Overwrite**: Policy completely replaces rule targets
-   - **Residual**: Policy adds corrections to rule targets
-   - **Selective**: Policy controls subset of DOFs, rules control others
-
-3. **Post-action Filters**:
-   - Safety limiting (velocity, acceleration, workspace)
-   - Collision avoidance
-   - Joint limit enforcement
-
-#### Benefits:
-- More flexible than current binary policy/rule control
-- Enables hierarchical control strategies
-- Safety guarantees through post-processing
-- Easier to implement complex behaviors
-
-#### Implementation Notes:
-- Similar patterns found in reference tasks (action scaling, transformations)
-- Would extend rather than replace current ActionProcessor
-- Consider using hooks/callbacks for extensibility
-
 ## 🟢 Future Development
 
 ### Phase 2 - Architecture & Quality
@@ -127,3 +72,9 @@ class AdvancedActionProcessor:
 - ✅ Scientific computing approach with vectorization throughout
 - ✅ Single source of truth via property decorators and constants
 - ✅ Proper logging and configuration management
+- ✅ **Functional Rule+Policy Control Framework**: Implemented comprehensive pipeline with pre-action rules, action rules, post-action filters, and coupling rules
+  - Pure functional approach with clear data flow
+  - Registry pattern for post-action filters
+  - Two-stage observation initialization to resolve circular dependencies
+  - Supports overwrite, residual, and selective action modes
+  - Properly handles rule-based control for uncontrolled DOFs

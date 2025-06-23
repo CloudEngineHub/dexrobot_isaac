@@ -40,14 +40,50 @@ active_prev_targets → pre_action_rule → active_rule_targets → action_rule 
 - **Purpose**: Map active DOFs to full DOF space with physical coupling
 - **Example**: Finger joint coupling for underactuated joints
 
-## Integration with Observations
+## Two-Stage Observation Initialization
 
-The pipeline integrates with the observation system in two stages:
+The system uses a two-stage initialization process to resolve a circular dependency between observations and pre-action rules:
 
-1. **Before pre-action rule**: Compute observations excluding `active_rule_targets`
-2. **After pre-action rule**: Add `active_rule_targets` to observations for policy
+### The Problem
+- Pre-action rules need observations to make decisions (e.g., gravity compensation based on hand orientation)
+- The policy needs to observe the output of pre-action rules (`active_rule_targets`) to understand the baseline behavior
+- This creates a circular dependency: observations → pre-action rule → active_rule_targets → observations
 
-This allows pre-action rules to use observations while providing rule targets to the policy.
+### The Solution
+The observation system is updated in two stages during each timestep:
+
+1. **Stage 1 - Partial Observations**:
+   - Compute all observations EXCEPT `active_rule_targets`
+   - This includes robot state, contact forces, previous actions, etc.
+   - Pass these partial observations to the pre-action rule
+
+2. **Stage 2 - Complete Observations**:
+   - Apply the pre-action rule using partial observations
+   - Add the resulting `active_rule_targets` to the observation dictionary
+   - Concatenate all observations for the policy
+
+### Implementation in DexHandBase
+```python
+# Stage 1: Compute partial observations (exclude active_rule_targets)
+obs_dict = self.observation_encoder.compute_observations(
+    exclude_components=['active_rule_targets']
+)
+
+# Stage 2: Apply pre-action rule with partial observations
+state = {'obs_dict': obs_dict, 'env': self}
+active_rule_targets = self.action_processor.apply_pre_action_rule(
+    self.action_processor.active_prev_targets, state
+)
+
+# Stage 3: Update observation with rule targets
+obs_dict['active_rule_targets'] = active_rule_targets
+self.obs_buf = self.observation_encoder.concatenate_observations(obs_dict)
+```
+
+This design ensures that:
+- Pre-action rules have access to all necessary state information
+- The policy can observe and learn from the baseline behavior set by rules
+- There are no circular dependencies in the computation graph
 
 ## Usage Example
 
@@ -84,34 +120,38 @@ env.action_processor.register_post_action_filter("workspace_limit", workspace_li
 # postActionFilters: ["velocity_clamp", "position_clamp", "workspace_limit"]
 ```
 
-## Migration from Rule-Based Control
+## Setting Up Action Rules
 
-The old `set_rule_based_controllers` method is replaced by pre-action rules:
+The action rule is required and must be set explicitly. There is no default action rule.
 
-**Old approach:**
 ```python
-env.set_rule_based_controllers(
-    base_controller=base_controller,
-    finger_controller=finger_controller
-)
-```
+# Define action rule for position control mode
+def position_action_rule(active_prev_targets, active_rule_targets, actions, config):
+    """Apply actions in position control mode."""
+    # Start with rule targets to preserve uncontrolled DOFs
+    targets = active_rule_targets.clone()
 
-**New approach:**
-```python
-def rule_based_pre_action(active_prev_targets, state):
-    env = state['env']
-    targets = active_prev_targets.clone()
+    # Get action processor reference
+    ap = env.action_processor
 
-    if base_controller and not env.policy_controls_hand_base:
-        targets[:, :6] = base_controller(env)
-
-    if finger_controller and not env.policy_controls_fingers:
-        targets[:, 6:] = finger_controller(env)
+    # Apply actions only to policy-controlled DOFs
+    if config['policy_controls_base'] and config['policy_controls_fingers']:
+        # Full control - scale actions to DOF limits
+        scaled = ap._scale_actions_to_limits(actions)
+        # Apply with velocity clamping...
+    elif config['policy_controls_base']:
+        # Base only - update first 6 DOFs
+        targets[:, :6] = # ... scaled base actions
+    elif config['policy_controls_fingers']:
+        # Fingers only - update DOFs 6-18
+        targets[:, 6:] = # ... scaled finger actions
 
     return targets
 
-env.action_processor.set_pre_action_rule(rule_based_pre_action)
+# Register the action rule (required!)
+env.action_processor.set_action_rule(position_action_rule)
 ```
+
 
 ## Key Benefits
 
