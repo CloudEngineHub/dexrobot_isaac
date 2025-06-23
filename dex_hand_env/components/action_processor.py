@@ -9,6 +9,7 @@ including action scaling, mapping, and PD control.
 import torch
 from loguru import logger
 from functools import wraps
+from typing import Callable, Dict, Any, Optional
 
 # Import IsaacGym
 from isaacgym import gymtorch
@@ -93,9 +94,14 @@ class ActionProcessor:
         self.policy_base_lin_velocity_limit = None
         self.policy_base_ang_velocity_limit = None
 
-        # Tensors
-        self.prev_active_targets = None  # Previous active targets (6D + 12D)
-        self.current_targets = None  # Current full DOF targets (26 DOFs)
+        # Tensors with clearer naming
+        self.active_prev_targets = (
+            None  # Previous active targets (18D: 6 base + 12 finger)
+        )
+        self.active_rule_targets = None  # Output of pre-action rule (18D)
+        self.active_raw_targets = None  # Output of action rule (18D)
+        self.active_next_targets = None  # Output of post-action filters (18D)
+        self.full_dof_targets = None  # Full DOF targets after coupling (26D)
         self.actions = None
 
         # Precomputed limits for active DOFs
@@ -120,6 +126,17 @@ class ActionProcessor:
 
         # Flag to ensure setup is complete
         self._initialized = False
+
+        # Functional rule components
+        self._pre_action_rule = None  # PreActionRule function
+        self._action_rule = None  # ActionRule function
+        self._post_action_filter_registry = (
+            {}
+        )  # Dict of name -> PostActionFilter function
+        self._enabled_post_action_filters = (
+            []
+        )  # List of enabled filter names from config
+        self._coupling_rule = None  # CouplingRule function
 
     @property
     def num_envs(self):
@@ -166,6 +183,7 @@ class ActionProcessor:
                 - finger_vel_limit: float (required)
                 - base_lin_vel_limit: float (required)
                 - base_ang_vel_limit: float (required)
+                - post_action_filters: list of str (optional, default: ["velocity_clamp", "position_clamp"])
         """
         # Set control mode
         self.action_control_mode = config["control_mode"]
@@ -192,14 +210,19 @@ class ActionProcessor:
         else:
             raise RuntimeError("DOF properties must be a tensor")
 
-        # Initialize tensors
+        # Initialize tensors with clearer naming
         # Active targets: base (6) + fingers (12)
         num_active = self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS
-        self.prev_active_targets = torch.zeros(
+        self.active_prev_targets = torch.zeros(
             (self.num_envs, num_active), device=self.device
         )
-        self.current_targets = torch.zeros(
+        self.full_dof_targets = torch.zeros(
             (self.num_envs, self.num_dof), device=self.device
+        )
+
+        # Configure which post-action filters are enabled
+        self._enabled_post_action_filters = config.get(
+            "post_action_filters", ["velocity_clamp", "position_clamp"]
         )
 
         # Precompute active DOF limits
@@ -211,11 +234,8 @@ class ActionProcessor:
         # Precompute action to active target mask
         self._precompute_action_mask()
 
-        # Assign function pointers based on control mode
-        if self.action_control_mode == "position":
-            self._compute_targets_fn = self._compute_targets_position
-        else:  # position_delta
-            self._compute_targets_fn = self._compute_targets_position_delta
+        # Initialize functional rules with defaults
+        self._initialize_default_rules()
 
         logger.info(
             f"ActionProcessor initialized: control_mode={self.action_control_mode}, "
@@ -240,15 +260,35 @@ class ActionProcessor:
         self._initialized = True
         logger.debug(f"ActionProcessor finalized with control_dt={self.control_dt}")
 
-    def process_actions(self, actions):
-        """
-        Process actions to generate DOF position targets.
+        # Initialize post-action filters now that control_dt is available
+        self._initialize_post_action_filters()
 
-        Note: For two-stage initialization, this method can be called before finalize_setup().
-        In that case, it will set zero targets to prevent undefined behavior.
+    def apply_pre_action_rule(
+        self, active_prev_targets: torch.Tensor, state: Dict[str, Any]
+    ) -> torch.Tensor:
+        """
+        Apply pre-action rule separately (called before main processing).
+
+        Args:
+            active_prev_targets: Previous active targets (18D)
+            state: State dict with 'obs_dict' and 'env' keys
+
+        Returns:
+            active_rule_targets: Output of pre-action rule (18D)
+        """
+        if self._pre_action_rule is not None:
+            return self._pre_action_rule(active_prev_targets, state)
+        else:
+            # Default: identity function
+            return active_prev_targets.clone()
+
+    def process_actions(self, actions: torch.Tensor, active_rule_targets: torch.Tensor):
+        """
+        Process actions with pre-computed rule targets.
 
         Args:
             actions: Action tensor from policy (batch_size, num_actions)
+            active_rule_targets: Pre-computed rule targets (18D)
 
         Returns:
             Success flag
@@ -259,36 +299,60 @@ class ActionProcessor:
 
         # Store actions
         self.actions = actions.clone()
+        self.active_rule_targets = active_rule_targets
 
         # Special handling for two-stage initialization
         # If called before finalize_setup(), set zero targets
         if not self._initialized:
-            # Ensure current_targets exists
-            if self.current_targets is None:
-                self.current_targets = torch.zeros(
+            # Ensure full_dof_targets exists
+            if self.full_dof_targets is None:
+                self.full_dof_targets = torch.zeros(
                     (self.num_envs, self.num_dof), device=self.device
                 )
             # Set all targets to zero
-            self.current_targets.zero_()
+            self.full_dof_targets.zero_()
 
             # Apply zero targets to simulation
             self.gym.set_dof_position_target_tensor(
-                self.sim, gymtorch.unwrap_tensor(self.current_targets)
+                self.sim, gymtorch.unwrap_tensor(self.full_dof_targets)
             )
             return True
 
         # Normal processing after initialization
-        # Step 1: Compute active targets (6D + 12D) from previous active targets and actions
-        active_targets = self._compute_targets_fn(actions)
+        # Step 1: Apply action rule
+        config = {
+            "control_mode": self.action_control_mode,
+            "policy_controls_base": self.policy_controls_hand_base,
+            "policy_controls_fingers": self.policy_controls_fingers,
+        }
+        if self._action_rule is None:
+            raise RuntimeError(
+                "No action rule set. Call set_action_rule() to define how actions are processed."
+            )
+        self.active_raw_targets = self._action_rule(
+            self.active_prev_targets, active_rule_targets, actions, config
+        )
 
-        # Step 2: Apply coupling to get full DOF targets (6D + 20D)
-        full_targets = self.apply_coupling(active_targets)
+        # Step 2: Apply post-action filters
+        self.active_next_targets = self.active_raw_targets
+        for filter_name in self._enabled_post_action_filters:
+            if filter_name in self._post_action_filter_registry:
+                filter_fn = self._post_action_filter_registry[filter_name]
+                self.active_next_targets = filter_fn(
+                    self.active_prev_targets,
+                    active_rule_targets,
+                    self.active_next_targets,
+                )
+            else:
+                logger.warning(
+                    f"Post-action filter '{filter_name}' enabled but not registered"
+                )
 
-        # Update active targets for next iteration
-        self.prev_active_targets = active_targets.clone()
+        # Step 3: Apply coupling rule
+        self.full_dof_targets = self._coupling_rule(self.active_next_targets)
 
-        # Store full targets
-        self.current_targets = full_targets
+        # Update state for next iteration
+        self.active_prev_targets = self.active_next_targets.clone()
 
         # Debug: Multi-environment CPU/GPU issue tracking (see roadmap.md #5)
         if hasattr(self.parent, "_debug_step_counter"):
@@ -305,18 +369,18 @@ class ActionProcessor:
                 f"ActionProcessor Step {self.parent._debug_step_counter}: Multi-env targets"
             )
             logger.debug(
-                f"  Device: {self.device}, Shape: {self.current_targets.shape}"
+                f"  Device: {self.device}, Shape: {self.full_dof_targets.shape}"
             )
             # Check if targets are identical across environments
             if self.num_envs >= 2:
                 identical = torch.allclose(
-                    self.current_targets[0], self.current_targets[1]
+                    self.full_dof_targets[0], self.full_dof_targets[1]
                 )
                 logger.debug(f"  Env 0 vs Env 1 targets identical: {identical}")
 
         # Apply targets to simulation
         self.gym.set_dof_position_target_tensor(
-            self.sim, gymtorch.unwrap_tensor(self.current_targets)
+            self.sim, gymtorch.unwrap_tensor(self.full_dof_targets)
         )
 
         return True
@@ -339,10 +403,10 @@ class ActionProcessor:
             Active targets (6D + 12D)
         """
         # Start with previous targets
-        new_targets = self.prev_active_targets.clone()
+        new_targets = self.active_prev_targets.clone()
 
         # Create scaled actions tensor (full 18D)
-        scaled_actions = torch.zeros_like(self.prev_active_targets)
+        scaled_actions = torch.zeros_like(self.active_prev_targets)
 
         # Scale and place actions in the controlled portions
         scaled_actions[:, self.active_target_mask] = self._scale_actions_to_limits(
@@ -350,17 +414,17 @@ class ActionProcessor:
         )
 
         # Compute diff only for controlled portions
-        diff = torch.zeros_like(self.prev_active_targets)
+        diff = torch.zeros_like(self.active_prev_targets)
         diff[:, self.active_target_mask] = (
             scaled_actions[:, self.active_target_mask]
-            - self.prev_active_targets[:, self.active_target_mask]
+            - self.active_prev_targets[:, self.active_target_mask]
         )
 
         # Clamp diff based on velocity limits
         clamped_diff = torch.clamp(diff, -self.max_deltas, self.max_deltas)
 
         # Apply diff to get new targets
-        new_targets = self.prev_active_targets + clamped_diff
+        new_targets = self.active_prev_targets + clamped_diff
 
         return new_targets
 
@@ -381,10 +445,10 @@ class ActionProcessor:
             Active targets (6D + 12D)
         """
         # Start with previous targets
-        new_targets = self.prev_active_targets.clone()
+        new_targets = self.active_prev_targets.clone()
 
         # Create scaled deltas tensor (full 18D)
-        scaled_deltas = torch.zeros_like(self.prev_active_targets)
+        scaled_deltas = torch.zeros_like(self.active_prev_targets)
 
         # Scale actions to velocity deltas for controlled portions
         scaled_deltas[:, self.active_target_mask] = (
@@ -392,7 +456,7 @@ class ActionProcessor:
         )
 
         # Apply deltas
-        new_targets = self.prev_active_targets + scaled_deltas
+        new_targets = self.active_prev_targets + scaled_deltas
 
         # Clamp to DOF limits
         clamped_targets = torch.clamp(
@@ -565,22 +629,22 @@ class ActionProcessor:
         """
         if env_ids is None:
             # Reset all environments
-            self.prev_active_targets.zero_()
+            self.active_prev_targets.zero_()
         else:
             # Reset specific environments
-            self.prev_active_targets[env_ids] = 0.0
+            self.active_prev_targets[env_ids] = 0.0
 
-        # Also reset current targets to ensure consistency
-        if self.current_targets is not None:
+        # Also reset full targets to ensure consistency
+        if self.full_dof_targets is not None:
             if env_ids is None:
-                self.current_targets.zero_()
+                self.full_dof_targets.zero_()
             else:
-                self.current_targets[env_ids] = 0.0
+                self.full_dof_targets[env_ids] = 0.0
 
         # Apply the reset targets to the simulation to ensure DOFs move to reset position
-        if self.current_targets is not None:
+        if self.full_dof_targets is not None:
             self.gym.set_dof_position_target_tensor(
-                self.sim, gymtorch.unwrap_tensor(self.current_targets)
+                self.sim, gymtorch.unwrap_tensor(self.full_dof_targets)
             )
 
     @post_initialization_only
@@ -629,3 +693,139 @@ class ActionProcessor:
             full_targets[:, self.middle_finger_spread_idx] = 0.0
 
         return full_targets
+
+    # ============================================================================
+    # Functional Rule System
+    # ============================================================================
+
+    def _initialize_default_rules(self):
+        """Initialize default functional rules."""
+        # Pre-action rule: identity by default
+        self._pre_action_rule = None  # Will use identity in apply_pre_action_rule
+
+        # Action rule: must be set explicitly, no default
+        self._action_rule = None
+
+        # Coupling rule: use existing apply_coupling wrapped in functional interface
+        self._coupling_rule = self.apply_coupling
+
+        # Post-action filters will be initialized in _initialize_post_action_filters
+
+    def _initialize_post_action_filters(self):
+        """Initialize post-action filter registry with built-in filters."""
+        # Register built-in filters
+        self._post_action_filter_registry[
+            "velocity_clamp"
+        ] = self._velocity_clamp_filter
+        self._post_action_filter_registry[
+            "position_clamp"
+        ] = self._position_clamp_filter
+
+        # Log which filters are enabled
+        logger.debug(
+            f"Post-action filters enabled: {self._enabled_post_action_filters}"
+        )
+        logger.debug(
+            f"Post-action filters registered: {list(self._post_action_filter_registry.keys())}"
+        )
+
+    def _velocity_clamp_filter(
+        self,
+        active_prev_targets: torch.Tensor,
+        active_rule_targets: torch.Tensor,
+        active_targets: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Clamp target changes to respect velocity limits.
+
+        Args:
+            active_prev_targets: Previous targets (18D)
+            active_rule_targets: Rule targets (18D) - not used
+            active_targets: Current targets to filter (18D)
+
+        Returns:
+            Filtered targets with velocity constraints applied (18D)
+        """
+        # Compute delta from previous targets
+        delta = active_targets - active_prev_targets
+
+        # Clamp delta to max velocity
+        clamped_delta = torch.clamp(delta, -self.max_deltas, self.max_deltas)
+
+        # Apply clamped delta
+        return active_prev_targets + clamped_delta
+
+    def _position_clamp_filter(
+        self,
+        active_prev_targets: torch.Tensor,
+        active_rule_targets: torch.Tensor,
+        active_targets: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Clamp targets to DOF position limits.
+
+        Args:
+            active_prev_targets: Previous targets (18D) - not used
+            active_rule_targets: Rule targets (18D) - not used
+            active_targets: Current targets to filter (18D)
+
+        Returns:
+            Filtered targets with position constraints applied (18D)
+        """
+        return torch.clamp(
+            active_targets, self.active_lower_limits, self.active_upper_limits
+        )
+
+    # ============================================================================
+    # Public API for Rule Registration
+    # ============================================================================
+
+    def set_pre_action_rule(
+        self, rule: Optional[Callable[[torch.Tensor, Dict[str, Any]], torch.Tensor]]
+    ):
+        """
+        Set custom pre-action rule.
+
+        Args:
+            rule: Function (active_prev_targets, state) -> active_rule_targets
+                  or None to use identity function
+        """
+        self._pre_action_rule = rule
+
+    def set_action_rule(
+        self,
+        rule: Callable[
+            [torch.Tensor, torch.Tensor, torch.Tensor, Dict[str, Any]], torch.Tensor
+        ],
+    ):
+        """
+        Set custom action rule.
+
+        Args:
+            rule: Function (active_prev_targets, active_rule_targets, actions, config) -> active_raw_targets
+        """
+        self._action_rule = rule
+
+    def set_coupling_rule(self, rule: Callable[[torch.Tensor], torch.Tensor]):
+        """
+        Set custom coupling rule.
+
+        Args:
+            rule: Function (active_targets) -> full_dof_targets
+        """
+        self._coupling_rule = rule
+
+    def register_post_action_filter(
+        self,
+        name: str,
+        filter_fn: Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor],
+    ):
+        """
+        Register a custom post-action filter.
+
+        Args:
+            name: Name for the filter (used in config to enable)
+            filter_fn: Function (active_prev_targets, active_rule_targets, active_targets) -> filtered_targets
+        """
+        self._post_action_filter_registry[name] = filter_fn
+        logger.debug(f"Registered post-action filter: {name}")

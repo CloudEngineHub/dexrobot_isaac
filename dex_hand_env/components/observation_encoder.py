@@ -7,7 +7,7 @@ including proprioceptive states, sensor readings, and task-specific observations
 
 # Import standard libraries
 import torch
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 from loguru import logger
 
 # Import gym for spaces
@@ -320,12 +320,19 @@ class ObservationEncoder:
 
         return velocity
 
-    def compute_observations(self) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def compute_observations(
+        self, exclude_components: List[str] = None
+    ) -> Union[Dict[str, torch.Tensor], Tuple[torch.Tensor, Dict[str, torch.Tensor]]]:
         """
         Compute the observation vector and dictionary.
 
+        Args:
+            exclude_components: List of component names to exclude from computation
+                               If provided, returns only obs_dict without concatenation
+
         Returns:
-            Tuple of (observation tensor, observation dictionary)
+            If exclude_components is provided: observation dictionary only
+            Otherwise: Tuple of (observation tensor, observation dictionary)
         """
         # Step 1: Compute default observations
         default_obs_dict = self._compute_default_observations()
@@ -336,6 +343,13 @@ class ObservationEncoder:
         # Step 3: Merge dictionaries
         merged_obs_dict = {**default_obs_dict, **task_obs_dict}
 
+        # If excluding components, return dict only (no concatenation)
+        if exclude_components:
+            # Remove excluded components from dict
+            for component in exclude_components:
+                merged_obs_dict.pop(component, None)
+            return merged_obs_dict
+
         # Step 4: Concat selected observations into final observation buffer
         self.obs_buf = self._concat_selected_observations(merged_obs_dict)
 
@@ -343,6 +357,22 @@ class ObservationEncoder:
         self.states_buf = self.obs_buf.clone()
 
         return self.obs_buf, merged_obs_dict
+
+    def concatenate_observations(
+        self, obs_dict: Dict[str, torch.Tensor]
+    ) -> torch.Tensor:
+        """
+        Concatenate observation dictionary into tensor.
+
+        Args:
+            obs_dict: Pre-computed observation dictionary
+
+        Returns:
+            Concatenated observation tensor
+        """
+        self.obs_buf = self._concat_selected_observations(obs_dict)
+        self.states_buf = self.obs_buf.clone()
+        return self.obs_buf
 
     def _compute_active_finger_dof_indices(self) -> torch.Tensor:
         """
@@ -517,25 +547,35 @@ class ObservationEncoder:
             )
         obs_dict["prev_actions"] = self.prev_actions
 
+        # Active previous targets (18D: 6 base + 12 finger)
+        if (
+            hasattr(self.action_processor, "active_prev_targets")
+            and self.action_processor.active_prev_targets is not None
+        ):
+            obs_dict["active_prev_targets"] = self.action_processor.active_prev_targets
+
+        # Active rule targets (18D: 6 base + 12 finger) - will be added by DexHandBase
+        # This is computed after pre-action rule is applied, so not available here
+
         # Base DOF targets (6 DOFs: x, y, z, rx, ry, rz)
         # action_processor and its current_targets must be initialized
         # If they are not, that indicates an initialization bug that must be fixed
-        if self.action_processor.current_targets is None:
+        if self.action_processor.full_dof_targets is None:
             raise RuntimeError(
-                "ActionProcessor current_targets is None. This indicates action_processor was not properly initialized."
+                "ActionProcessor full_dof_targets is None. This indicates action_processor was not properly initialized."
             )
 
-        obs_dict["base_dof_target"] = self.action_processor.current_targets[
+        obs_dict["base_dof_target"] = self.action_processor.full_dof_targets[
             :, : self.NUM_BASE_DOFS
         ]
 
         # Active finger DOF targets (12 active finger controls) - for RL observation tensor
-        obs_dict["active_finger_dof_target"] = self.action_processor.current_targets[
+        obs_dict["active_finger_dof_target"] = self.action_processor.full_dof_targets[
             :, self.active_finger_dof_indices
         ]
 
         # All finger DOF targets (20 finger DOFs) - always available for semantic access
-        obs_dict["all_finger_dof_target"] = self.action_processor.current_targets[
+        obs_dict["all_finger_dof_target"] = self.action_processor.full_dof_targets[
             :, all_finger_dof_indices
         ]
 

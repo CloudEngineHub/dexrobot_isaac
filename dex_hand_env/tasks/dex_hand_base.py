@@ -231,7 +231,15 @@ class DexHandBase(VecTask):
         dummy_actions = torch.zeros(
             (self.num_envs, self.num_actions), device=self.device
         )
-        self.action_processor.process_actions(dummy_actions)
+        # For initialization, use zero rule targets
+        num_active = (
+            self.action_processor.NUM_BASE_DOFS
+            + self.action_processor.NUM_ACTIVE_FINGER_DOFS
+        )
+        dummy_rule_targets = torch.zeros(
+            (self.num_envs, num_active), device=self.device
+        )
+        self.action_processor.process_actions(dummy_actions, dummy_rule_targets)
 
         # Step physics
         self.physics_manager.step_physics(refresh_tensors=True)
@@ -701,25 +709,41 @@ class DexHandBase(VecTask):
                 )
             self.actions = random_actions
 
-        # Process actions using action processor
+        # Stage 1: Compute partial observations (exclude active_rule_targets)
         try:
-            self.action_processor.process_actions(actions=self.actions)
+            # This will be implemented in observation_encoder
+            obs_dict = self.observation_encoder.compute_observations(
+                exclude_components=["active_rule_targets"]
+            )
+        except Exception as e:
+            logger.error(f"ERROR in compute_observations: {e}")
+            import traceback
+
+            traceback.print_exc()
+            raise
+
+        # Stage 2: Apply pre-action rule with partial observations
+        state = {"obs_dict": obs_dict, "env": self}
+        active_rule_targets = self.action_processor.apply_pre_action_rule(
+            self.action_processor.active_prev_targets, state
+        )
+
+        # Stage 3: Update observation with rule targets
+        obs_dict["active_rule_targets"] = active_rule_targets
+        self.obs_buf = self.observation_encoder.concatenate_observations(obs_dict)
+        self.obs_dict = obs_dict
+
+        # Stage 4: Process actions (action rule + post filters + coupling)
+        try:
+            self.action_processor.process_actions(
+                actions=self.actions, active_rule_targets=active_rule_targets
+            )
         except Exception as e:
             logger.error(f"ERROR in action_processor.process_actions: {e}")
             import traceback
 
             traceback.print_exc()
             raise
-
-        # Apply rule-based control for uncontrolled DOFs
-        try:
-            self._apply_rule_based_control()
-        except Exception as e:
-            logger.error(f"ERROR in _apply_rule_based_control: {e}")
-            import traceback
-
-            traceback.print_exc()
-            # Don't re-raise to avoid breaking the simulation
 
         # Update action in observation encoder for next frame
         try:
@@ -737,14 +761,9 @@ class DexHandBase(VecTask):
             # Refresh tensors from simulation
             self.tensor_manager.refresh_tensors(self.contact_force_body_indices)
 
-            # Compute observations using the new simplified interface
-            (
-                self.obs_buf,
-                self.obs_dict,
-            ) = self.observation_encoder.compute_observations()
-
-            # Task-specific observations are now handled internally by the observation encoder
-            # via the _compute_task_observations method
+            # Observations were already computed in pre_physics_step
+            # We just need to return them here
+            # The obs_buf and obs_dict are already set from pre_physics_step
 
             # Get task rewards
             if hasattr(self.task, "compute_task_rewards"):

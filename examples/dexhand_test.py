@@ -1058,7 +1058,110 @@ def main():
         )
         return
 
-    # Set up rule-based controllers for uncontrolled DOFs
+    # First, set up the action rule based on control mode
+    # This must be done before any actions are processed
+    if env.action_control_mode == "position":
+
+        def position_action_rule(
+            active_prev_targets, active_rule_targets, actions, config
+        ):
+            """Position mode action rule that respects rule targets for uncontrolled DOFs."""
+            # Start with rule targets - this preserves rule-based control for uncontrolled DOFs
+            targets = active_rule_targets.clone()
+
+            # Get action processor for scaling logic
+            ap = env.action_processor
+
+            # Apply position control logic only to policy-controlled DOFs
+            if config["policy_controls_base"] and config["policy_controls_fingers"]:
+                # Both base and fingers controlled by policy
+                # Scale actions to DOF limits
+                scaled_actions = torch.zeros_like(targets)
+                scaled_actions[:, ap.active_target_mask] = ap._scale_actions_to_limits(
+                    actions
+                )
+
+                # Compute diff and apply velocity clamping
+                diff = scaled_actions - active_prev_targets
+                clamped_diff = torch.clamp(diff, -ap.max_deltas, ap.max_deltas)
+                targets = active_prev_targets + clamped_diff
+
+            elif config["policy_controls_base"]:
+                # Only base controlled by policy
+                # Scale base actions
+                base_lower = ap.active_lower_limits[:6]
+                base_upper = ap.active_upper_limits[:6]
+                scaled_base = (actions + 1.0) * 0.5 * (
+                    base_upper - base_lower
+                ) + base_lower
+
+                # Apply velocity clamping to base
+                base_diff = scaled_base - active_prev_targets[:, :6]
+                clamped_base_diff = torch.clamp(
+                    base_diff, -ap.max_deltas[:6], ap.max_deltas[:6]
+                )
+                targets[:, :6] = active_prev_targets[:, :6] + clamped_base_diff
+
+            elif config["policy_controls_fingers"]:
+                # Only fingers controlled by policy
+                # Scale finger actions
+                finger_lower = ap.active_lower_limits[6:]
+                finger_upper = ap.active_upper_limits[6:]
+                scaled_fingers = (actions + 1.0) * 0.5 * (
+                    finger_upper - finger_lower
+                ) + finger_lower
+
+                # Apply velocity clamping to fingers
+                finger_diff = scaled_fingers - active_prev_targets[:, 6:]
+                clamped_finger_diff = torch.clamp(
+                    finger_diff, -ap.max_deltas[6:], ap.max_deltas[6:]
+                )
+                targets[:, 6:] = active_prev_targets[:, 6:] + clamped_finger_diff
+
+            return targets
+
+        env.action_processor.set_action_rule(position_action_rule)
+
+    else:  # position_delta mode
+
+        def position_delta_action_rule(
+            active_prev_targets, active_rule_targets, actions, config
+        ):
+            """Position delta mode action rule that respects rule targets for uncontrolled DOFs."""
+            # Start with rule targets - this preserves rule-based control for uncontrolled DOFs
+            targets = active_rule_targets.clone()
+
+            # Get action processor for scaling logic
+            ap = env.action_processor
+
+            # Apply position delta logic only to policy-controlled DOFs
+            if config["policy_controls_base"] and config["policy_controls_fingers"]:
+                # Both base and fingers controlled by policy
+                scaled_deltas = actions * ap.max_deltas[ap.active_target_mask]
+                targets[:, ap.active_target_mask] = (
+                    active_prev_targets[:, ap.active_target_mask] + scaled_deltas
+                )
+
+            elif config["policy_controls_base"]:
+                # Only base controlled by policy
+                scaled_base_deltas = actions * ap.max_deltas[:6]
+                targets[:, :6] = active_prev_targets[:, :6] + scaled_base_deltas
+
+            elif config["policy_controls_fingers"]:
+                # Only fingers controlled by policy
+                scaled_finger_deltas = actions * ap.max_deltas[6:]
+                targets[:, 6:] = active_prev_targets[:, 6:] + scaled_finger_deltas
+
+            # Clamp to DOF limits
+            targets = torch.clamp(
+                targets, ap.active_lower_limits, ap.active_upper_limits
+            )
+
+            return targets
+
+        env.action_processor.set_action_rule(position_delta_action_rule)
+
+    # Now set up rule-based controllers for uncontrolled DOFs
     base_controller = (
         None if env.policy_controls_hand_base else create_rule_based_base_controller()
     )
@@ -1066,15 +1169,35 @@ def main():
         None if env.policy_controls_fingers else create_rule_based_finger_controller()
     )
 
+    # Set up pre-action rule if any controllers are needed
     if base_controller or finger_controller:
-        logger.info("Setting up rule-based controllers:")
+        logger.info("Setting up pre-action rule for uncontrolled DOFs:")
         if base_controller:
             logger.info("- Base controller: Active (circular motion)")
         if finger_controller:
             logger.info("- Finger controller: Active (adaptive grasping with 5x speed)")
-        env.set_rule_based_controllers(
-            base_controller=base_controller, finger_controller=finger_controller
-        )
+
+        # Define pre-action rule that applies rule-based control
+        def rule_based_pre_action(active_prev_targets, state):
+            """Pre-action rule with rule-based controllers."""
+            env = state["env"]
+
+            active_targets = active_prev_targets.clone()
+
+            # Apply base controller if not policy-controlled
+            if base_controller and not env.policy_controls_hand_base:
+                base_targets = base_controller(env)
+                active_targets[:, :6] = base_targets
+
+            # Apply finger controller if not policy-controlled
+            if finger_controller and not env.policy_controls_fingers:
+                finger_targets = finger_controller(env)
+                active_targets[:, 6:] = finger_targets
+
+            return active_targets
+
+        # Register the pre-action rule
+        env.action_processor.set_pre_action_rule(rule_based_pre_action)
 
     # Initialize actions tensor
     actions = torch.zeros((env.num_envs, env.num_actions), device=env.device)
