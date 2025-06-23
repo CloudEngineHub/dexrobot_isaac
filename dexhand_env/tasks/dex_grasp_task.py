@@ -13,8 +13,8 @@ from isaacgym import gymapi
 # Then import PyTorch
 import torch
 
-from dex_hand_env.tasks.base_task import BaseTask
-from dex_hand_env.utils.coordinate_transforms import point_in_hand_frame
+from dexhand_env.tasks.base_task import BaseTask
+from dexhand_env.utils.coordinate_transforms import point_in_hand_frame
 
 
 class DexGraspTask(BaseTask):

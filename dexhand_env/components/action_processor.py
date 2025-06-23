@@ -15,7 +15,7 @@ from typing import Callable, Dict, Any, Optional
 from isaacgym import gymtorch
 
 # Import constants
-from dex_hand_env.constants import (
+from dexhand_env.constants import (
     NUM_BASE_DOFS,
     NUM_ACTIVE_FINGER_DOFS,
     FINGER_COUPLING_MAP,

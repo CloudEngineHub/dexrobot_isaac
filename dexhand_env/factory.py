@@ -11,9 +11,9 @@ import torch
 # Import loguru
 from loguru import logger
 
-from dex_hand_env.tasks.dex_hand_base import DexHandBase
-from dex_hand_env.tasks.dex_grasp_task import DexGraspTask
-from dex_hand_env.tasks.base_task import BaseTask
+from dexhand_env.tasks.dexhand_base import DexHandBase
+from dexhand_env.tasks.dex_grasp_task import DexGraspTask
+from dexhand_env.tasks.base_task import BaseTask
 
 
 def create_dex_env(

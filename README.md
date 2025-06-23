@@ -14,7 +14,7 @@ The codebase has been refactored to use a component-based architecture, offering
 - A standardized task interface for easier creation of new tasks
 - Better code organization and reusability
 
-The new architecture is available in the `dex_hand_env` package. For details, see [dex_hand_env/README.md](dex_hand_env/README.md).
+The new architecture is available in the `dexhand_env` package. For details, see [dexhand_env/README.md](dexhand_env/README.md).
 
 ### Installation
 
@@ -50,7 +50,7 @@ For more options, see [examples/README_simple_dexhand_test.md](examples/README_s
 
 ### Training with the New Architecture
 
-Refer to the documentation in the [dex_hand_env](dex_hand_env/README.md) directory for instructions on training with the new component-based architecture.
+Refer to the documentation in the [dexhand_env](dexhand_env/README.md) directory for instructions on training with the new component-based architecture.
 
 ### Legacy Implementation
 
@@ -60,11 +60,11 @@ The original implementation has been moved to the `legacy` directory and is kept
 
 The environment and training parameters can be customized through config files in the new architecture:
 
-- See the configuration files in the `dex_hand_env/cfg` directory
+- See the configuration files in the `dexhand_env/cfg` directory
 
 ### Video Recording and Multi-GPU Training
 
-The new architecture supports video recording and multi-GPU training. Refer to the documentation in the [dex_hand_env](dex_hand_env/README.md) directory for details.
+The new architecture supports video recording and multi-GPU training. Refer to the documentation in the [dexhand_env](dexhand_env/README.md) directory for details.
 
 ## Code Structure
 
@@ -74,8 +74,8 @@ The repository contains two implementations of the dexterous manipulation enviro
    - Located in the `legacy/DexHandEnv_obsolete` directory
    - Kept for reference purposes only
 
-2. **Current Implementation (dex_hand_env)**: New component-based architecture
-   - Located in the `dex_hand_env` directory
+2. **Current Implementation (dexhand_env)**: New component-based architecture
+   - Located in the `dexhand_env` directory
    - Features modular components and a standardized task interface
    - Provides improved functionality with better code organization
 

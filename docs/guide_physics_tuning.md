@@ -17,7 +17,7 @@ This guide explains how to tune physics parameters for stable simulation, partic
 ## Starting Configuration
 
 ### Current Default Settings (Optimized for Performance)
-Location: `dex_hand_env/cfg/task/BaseTask.yaml`
+Location: `dexhand_env/cfg/task/BaseTask.yaml`
 
 ```yaml
 sim:

@@ -17,10 +17,10 @@ import gym
 from isaacgym.torch_utils import quat_mul, quat_conjugate
 
 # Import utilities
-from dex_hand_env.utils.coordinate_transforms import point_in_hand_frame
+from dexhand_env.utils.coordinate_transforms import point_in_hand_frame
 
 # Import constants
-from dex_hand_env.constants import NUM_BASE_DOFS, NUM_ACTIVE_FINGER_DOFS
+from dexhand_env.constants import NUM_BASE_DOFS, NUM_ACTIVE_FINGER_DOFS
 
 
 class ObservationEncoder:
@@ -395,7 +395,7 @@ class ObservationEncoder:
             )
 
         # Import HardwareMapping to get the authoritative control-to-joint mapping
-        from dex_hand_env.components.hand_initializer import HardwareMapping
+        from dexhand_env.components.hand_initializer import HardwareMapping
 
         # Pre-build mappings for vectorized lookup
         # Create dict of control_name -> HardwareMapping

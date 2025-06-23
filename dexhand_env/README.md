@@ -42,7 +42,7 @@ python examples/run_dex_grasp.py --num_envs 4
 To create a custom task, extend the `BaseTask` class:
 
 ```python
-from dex_hand_env.tasks.base_task import BaseTask
+from dexhand_env.tasks.base_task import BaseTask
 
 class MyCustomTask(BaseTask):
     def __init__(self, sim, gym, device, num_envs, cfg):

@@ -1,4 +1,4 @@
-"""Installation script for the 'dex_hand' python package."""
+"""Installation script for the 'dexhand' python package."""
 
 from __future__ import absolute_import
 from __future__ import print_function
@@ -31,7 +31,7 @@ INSTALL_REQUIRES = [
 
 # Installation operation
 setup(
-    name="dex_hand_env",
+    name="dexhand_env",
     author="DexRobot Inc.",
     version="0.1.0",
     description="Reinforcement learning environment for dexterous manipulation with robotic hands",

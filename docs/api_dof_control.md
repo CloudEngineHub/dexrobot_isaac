@@ -74,7 +74,7 @@ The 12 finger actions control 19 finger DOFs through coupling:
 - **DIP Controls**: Each finger's `*_dip` control simultaneously moves both the `*_3` and `*_4` joints (coupled 1:1)
 - **Finger Spread (Action 9/3)**: Controls spread motion of index, ring, and pinky fingers simultaneously
   - r_f_joint2_1 (index) moves with 1.0x scale
-  - r_f_joint4_1 (ring) moves with 1.0x scale  
+  - r_f_joint4_1 (ring) moves with 1.0x scale
   - r_f_joint5_1 (pinky) moves with 2.0x scale (twice the motion)
 
 ## Action Scaling Formula
@@ -130,8 +130,8 @@ Key observations for DOF control:
 
 ## Implementation Locations
 
-- **Action Processing**: `dex_hand_env/components/action_processor.py:380-400`
-- **Coupling Map**: `dex_hand_env/components/action_processor.py:75-88`
-- **DOF Initialization**: `dex_hand_env/components/hand_initializer.py:243-261`
-- **Configuration**: `dex_hand_env/cfg/task/BaseTask.yaml`
-- **Observation System**: `dex_hand_env/components/observation_encoder.py`
+- **Action Processing**: `dexhand_env/components/action_processor.py:380-400`
+- **Coupling Map**: `dexhand_env/components/action_processor.py:75-88`
+- **DOF Initialization**: `dexhand_env/components/hand_initializer.py:243-261`
+- **Configuration**: `dexhand_env/cfg/task/BaseTask.yaml`
+- **Observation System**: `dexhand_env/components/observation_encoder.py`

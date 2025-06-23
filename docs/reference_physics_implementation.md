@@ -222,13 +222,13 @@ This difference is critical for GPU pipeline compatibility.
 ## Implementation Locations
 
 ### Key Components
-- **Physics Manager**: `dex_hand_env/components/physics_manager.py`
-- **Tensor Manager**: `dex_hand_env/components/tensor_manager.py`
-- **Hand Initializer**: `dex_hand_env/components/hand_initializer.py`
+- **Physics Manager**: `dexhand_env/components/physics_manager.py`
+- **Tensor Manager**: `dexhand_env/components/tensor_manager.py`
+- **Hand Initializer**: `dexhand_env/components/hand_initializer.py`
 - **Model Generation**: `assets/dexrobot_mujoco/utils/mjcf_utils.py`
 
 ### Configuration Files
-- **Physics Config**: `dex_hand_env/cfg/task/BaseTask.yaml`
+- **Physics Config**: `dexhand_env/cfg/task/BaseTask.yaml`
 - **Model Files**: `assets/dexrobot_mujoco/dexrobot_mujoco/models/`
 
 ## See Also

@@ -11,7 +11,7 @@ from typing import Dict, Optional, Tuple
 # Import PyTorch
 import torch
 
-from dex_hand_env.tasks.task_interface import DexTask
+from dexhand_env.tasks.task_interface import DexTask
 
 
 class BaseTask(DexTask):

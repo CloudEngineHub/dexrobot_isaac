@@ -32,7 +32,7 @@ The observation system implements a clear separation between data availability a
 Observations are selected via the `observation_keys` list in config:
 
 ```yaml
-# dex_hand_env/cfg/task/BaseTask.yaml
+# dexhand_env/cfg/task/BaseTask.yaml
 env:
   observation_keys:
     - hand_pose           # 7D: position (3) + quaternion (4)

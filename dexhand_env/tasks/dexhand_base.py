@@ -21,27 +21,27 @@ from isaacgym import gymapi, gymtorch
 import torch
 
 # Import components
-from dex_hand_env.components.viewer_controller import ViewerController
-from dex_hand_env.components.success_failure_tracker import SuccessFailureTracker
-from dex_hand_env.components.reward_calculator import RewardCalculator
-from dex_hand_env.components.physics_manager import PhysicsManager
-from dex_hand_env.components.hand_initializer import HandInitializer
-from dex_hand_env.components.action_processor import ActionProcessor
-from dex_hand_env.components.observation_encoder import ObservationEncoder
-from dex_hand_env.components.reset_manager import ResetManager
-from dex_hand_env.components.tensor_manager import TensorManager
+from dexhand_env.components.viewer_controller import ViewerController
+from dexhand_env.components.success_failure_tracker import SuccessFailureTracker
+from dexhand_env.components.reward_calculator import RewardCalculator
+from dexhand_env.components.physics_manager import PhysicsManager
+from dexhand_env.components.hand_initializer import HandInitializer
+from dexhand_env.components.action_processor import ActionProcessor
+from dexhand_env.components.observation_encoder import ObservationEncoder
+from dexhand_env.components.reset_manager import ResetManager
+from dexhand_env.components.tensor_manager import TensorManager
 
 # Import utilities
-from dex_hand_env.utils.coordinate_transforms import point_in_hand_frame
+from dexhand_env.utils.coordinate_transforms import point_in_hand_frame
 
 # Import task interface
-from dex_hand_env.tasks.task_interface import DexTask
+from dexhand_env.tasks.task_interface import DexTask
 
 # Import base task class
-from dex_hand_env.tasks.base.vec_task import VecTask
+from dexhand_env.tasks.base.vec_task import VecTask
 
 # Import constants
-from dex_hand_env.constants import (
+from dexhand_env.constants import (
     NUM_BASE_DOFS,
     NUM_ACTIVE_FINGER_DOFS,
     BASE_JOINT_NAMES,
@@ -156,7 +156,7 @@ class DexHandBase(VecTask):
         # Define joint names (imported from constants.py)
         self.base_joint_names = BASE_JOINT_NAMES
         # Note: FINGER_JOINT_NAMES in constants.py includes all 20 joints (including fixed joint3_1)
-        # but dex_hand_base.py excludes joint3_1, so we need to filter it out
+        # but dexhand_base.py excludes joint3_1, so we need to filter it out
         self.finger_joint_names = [
             name for name in FINGER_JOINT_NAMES if name != "r_f_joint3_1"
         ]

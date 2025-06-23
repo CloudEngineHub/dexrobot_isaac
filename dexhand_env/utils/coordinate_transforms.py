@@ -6,10 +6,12 @@ between different coordinate frames.
 """
 
 # Import IsaacGym first
-from isaacgym.torch_utils import quat_mul, quat_conjugate, quat_rotate, quat_rotate_inverse
+from isaacgym.torch_utils import (
+    quat_rotate,
+    quat_rotate_inverse,
+)
 
 # Then import PyTorch
-import torch
 
 
 def point_in_hand_frame(pos_world, hand_pos, hand_rot):

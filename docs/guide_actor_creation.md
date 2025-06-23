@@ -30,7 +30,7 @@ env = DexHandBase(cfg, task, ...)
 # Environment handles asset loading and actor creation internally
 ```
 
-### 2. Environment Initialization (dex_hand_base.py)
+### 2. Environment Initialization (dexhand_base.py)
 
 ```python
 def _init_components(self):

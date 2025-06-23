@@ -27,8 +27,8 @@ import torch  # noqa: E402
 from loguru import logger  # noqa: E402
 
 # Import factory and task
-from dex_hand_env.factory import create_dex_env  # noqa: E402
-from dex_hand_env.tasks.base_task import BaseTask  # noqa: E402
+from dexhand_env.factory import create_dex_env  # noqa: E402
+from dexhand_env.tasks.base_task import BaseTask  # noqa: E402
 
 # Global variables for velocity integration tracking
 arr_integrated_pos = None
@@ -103,7 +103,7 @@ def load_config(config_path=None):
     if config_path is None:
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "dex_hand_env/cfg/task/BaseTask.yaml",
+            "dexhand_env/cfg/task/BaseTask.yaml",
         )
 
     logger.info(f"Loading config from {config_path}")

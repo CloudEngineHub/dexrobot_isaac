@@ -6,7 +6,7 @@ This directory contains the implementation of the dexterous hand tasks using the
 
 The tasks follow a component-based architecture:
 
-- `dex_hand_base.py`: Base class for all dexterous hand tasks
+- `dexhand_base.py`: Base class for all dexterous hand tasks
 - `task_interface.py`: Interface that all task implementations must implement
 - `base/vec_task.py`: Base class for vector tasks (inherited by DexHandBase)
 

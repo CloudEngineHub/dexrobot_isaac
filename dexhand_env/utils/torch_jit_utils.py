@@ -5,8 +5,6 @@ This module provides JIT-compiled utility functions for vector and quaternion op
 """
 
 # Import IsaacGym first
-import isaacgym
-from isaacgym.torch_utils import to_torch, tensor_clamp, quat_mul, quat_conjugate
 
 # Then import PyTorch
 import torch
@@ -35,8 +33,8 @@ def quat_to_euler(q):
     sinp = 2.0 * (q[..., qw] * q[..., qy] - q[..., qz] * q[..., qx])
     pitch = torch.where(
         torch.abs(sinp) >= 1,
-        torch.sign(sinp) * torch.tensor(np.pi/2, device=q.device, dtype=q.dtype),
-        torch.asin(sinp)
+        torch.sign(sinp) * torch.tensor(np.pi / 2, device=q.device, dtype=q.dtype),
+        torch.asin(sinp),
     )
 
     # yaw (z-axis rotation)

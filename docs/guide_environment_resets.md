@@ -80,4 +80,4 @@ Environment reset detected at step 30
 ## References
 - Isaac Gym's VecTask base class: `isaacgymenvs/tasks/base/vec_task.py`
 - Example implementation: `isaacgymenvs/tasks/cartpole.py`
-- DexHand reset implementation: `dex_hand_env/components/reset_manager.py`
+- DexHand reset implementation: `dexhand_env/components/reset_manager.py`
