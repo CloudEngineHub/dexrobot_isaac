@@ -107,7 +107,11 @@ def main():
     parser.add_argument(
         "--graphics-device-id", type=int, default=0, help="Graphics device ID"
     )
-    parser.add_argument("--headless", action="store_true", help="Run in headless mode")
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Enable rendering (default is headless mode)",
+    )
 
     # Training arguments
     parser.add_argument(
@@ -144,6 +148,16 @@ def main():
     parser.add_argument(
         "--log-interval", type=int, default=10, help="Logging interval (episodes)"
     )
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="info",
+        choices=["debug", "info", "warning", "error"],
+        help="Set logging level",
+    )
+    parser.add_argument(
+        "--no-log-file", action="store_true", help="Disable logging to file"
+    )
 
     args = parser.parse_args()
 
@@ -156,11 +170,27 @@ def main():
     output_dir = Path("runs") / args.experiment_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Configure logging level
+    logger.remove()  # Remove default handler
+    logger.add(
+        sys.stderr,
+        level=args.log_level.upper(),
+        format="<green>{time:HH:mm:ss}</green> | <level>{level:8}</level> | <level>{message}</level>",
+        colorize=True,
+    )
+
+    # Add file logging unless disabled
+    if not args.no_log_file:
+        logger.add(
+            output_dir / "train.log",
+            level=args.log_level.upper(),
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level:8} | {message}",
+        )
+
     # Save command line arguments
     with open(output_dir / "args.yaml", "w") as f:
         yaml.dump(vars(args), f)
 
-    logger.add(output_dir / "train.log")
     logger.info(f"Starting training with arguments: {args}")
 
     # Set seed
@@ -197,7 +227,7 @@ def main():
         sim_device=args.sim_device,
         rl_device=args.rl_device,
         graphics_device_id=args.graphics_device_id,
-        headless=args.headless,
+        headless=not args.render,  # Default to headless, use --render to enable viewer
     )
 
     # Update environment creator in config
