@@ -8,8 +8,8 @@
 
 ### Phase 2 - Architecture & Quality
 - [x] Standardize naming (dex_hand vs dexhand) throughout codebase - refactored to use "dexhand"
-- [ ] Update README files with current architecture documentation
-- [ ] Document the fail-fast philosophy with concrete examples from this project
+- [x] Update README files with current architecture documentation - simplified to focus on usage
+- [x] Document the fail-fast philosophy with concrete examples from this project - documented in CLAUDE.md
 
 ### Phase 3 - RL Integration
 - [ ] Test with PPO/SAC algorithms
