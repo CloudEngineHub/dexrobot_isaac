@@ -1526,16 +1526,17 @@ def main():
         total_actions = env.action_processor.NUM_ACTIVE_FINGER_DOFS
 
     total_steps = total_actions * steps_per_action
+    action_cycles = (args.steps + total_steps - 1) // total_steps  # Ceiling division
 
     logger.info("\nStarting sequential action test:")
-    logger.info(f"Total steps: {total_steps}")
+    logger.info(f"User requested steps: {args.steps}")
+    logger.info(f"Actions to test: {total_actions}")
     logger.info(f"Steps per action: {steps_per_action}")
+    logger.info(f"One complete action cycle: {total_steps} steps")
+    logger.info(f"Action cycles to complete: {action_cycles}")
     logger.info("=" * 60)
 
-    for step in range(total_steps):
-        # Exit early if we've reached the requested number of steps
-        if step >= args.steps:
-            break
+    for step in range(args.steps):
         # Initialize policy actions with proper defaults:
         # - Base DOFs: 0.0 (middle of range, neutral position)
         # - Finger DOFs: -1.0 (minimum of range, closed/contracted position)
@@ -1558,11 +1559,13 @@ def main():
         finger_actions_count = env.action_processor.NUM_ACTIVE_FINGER_DOFS
         base_actions_count = env.action_processor.NUM_BASE_DOFS
 
-        # Use episode_step_count to determine action so it resets properly
-        episode_step = env.episode_step_count[0].item()
-        current_action_idx = episode_step // steps_per_action
-        step_in_action = episode_step % steps_per_action
+        # Use global step count to determine action (cycles through all actions)
+        current_action_idx = step // steps_per_action
+        step_in_action = step % steps_per_action
         action_value = 0.0  # Default for rule-based control
+
+        # Also get episode step for reset detection
+        episode_step = env.episode_step_count[0].item()
 
         # Handle concurrent vs sequential testing
         if env.policy_controls_hand_base and env.policy_controls_fingers:
