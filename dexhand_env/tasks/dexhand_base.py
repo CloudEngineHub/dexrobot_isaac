@@ -22,7 +22,7 @@ import torch
 
 # Import components
 from dexhand_env.components.viewer_controller import ViewerController
-from dexhand_env.components.success_failure_tracker import SuccessFailureTracker
+from dexhand_env.components.termination_manager import TerminationManager
 from dexhand_env.components.reward_calculator import RewardCalculator
 from dexhand_env.components.physics_manager import PhysicsManager
 from dexhand_env.components.hand_initializer import HandInitializer
@@ -543,8 +543,8 @@ class DexHandBase(VecTask):
             headless=self.headless,
         )
 
-        # Create success/failure tracker
-        self.success_tracker = SuccessFailureTracker(parent=self, cfg=self.cfg)
+        # Create termination manager
+        self.termination_manager = TerminationManager(parent=self, cfg=self.cfg)
 
         # Create reward calculator
         self.reward_calculator = RewardCalculator(parent=self, cfg=self.cfg)
@@ -630,9 +630,9 @@ class DexHandBase(VecTask):
             (self.num_envs,), device=self.device, dtype=torch.long
         )
 
-        # Share buffers with reset manager
+        # Share episode step count buffer with reset manager
         # reset_manager must exist after _init_components()
-        self.reset_manager.set_buffers(self.reset_buf, self.episode_step_count)
+        self.reset_manager.set_episode_step_count_buffer(self.episode_step_count)
 
         # Set default DOF positions for reset
         default_dof_pos = torch.zeros(self.num_dof, device=self.device)
@@ -843,6 +843,36 @@ class DexHandBase(VecTask):
             # We just need to return them here
             # The obs_buf and obs_dict are already set from pre_physics_step
 
+            # Update episode progress directly first
+            self.episode_step_count += 1
+
+            # Check for episode termination using TerminationManager
+            builtin_success = {}
+            task_success = {}
+            builtin_failure = {}
+            task_failure = {}
+
+            # Get task-specific success/failure criteria
+            if hasattr(self.task, "check_task_success_criteria"):
+                task_success = self.task.check_task_success_criteria()
+            if hasattr(self.task, "check_task_failure_criteria"):
+                task_failure = self.task.check_task_failure_criteria()
+
+            # Evaluate termination conditions
+            (
+                should_reset,
+                termination_info,
+                episode_rewards,
+            ) = self.termination_manager.evaluate(
+                self.episode_step_count,
+                builtin_success,
+                task_success,
+                builtin_failure,
+                task_failure,
+            )
+
+            self.reset_buf = should_reset
+
             # Get task rewards
             if hasattr(self.task, "compute_task_rewards"):
                 self.rew_buf[:], task_rewards = self.task.compute_task_rewards(
@@ -852,22 +882,18 @@ class DexHandBase(VecTask):
                 # Store reward components for logging
                 self.last_reward_components = task_rewards
 
-                # Track successes
-                if "success" in task_rewards:
-                    self.success_tracker.update(task_rewards["success"])
+                # Track successes for curriculum learning
+                if "success" in termination_info:
+                    self.termination_manager.update_consecutive_successes(
+                        termination_info["success"]
+                    )
             else:
                 self.rew_buf[:] = 0
                 self.last_reward_components = {}
 
-            # Update episode progress
-            self.reset_manager.increment_progress()
-
-            # Check for episode termination
-            if hasattr(self.task, "check_task_reset"):
-                task_reset = self.task.check_task_reset()
-                self.reset_buf = self.reset_manager.check_termination(task_reset)
-            else:
-                self.reset_buf = self.reset_manager.check_termination()
+            # Add termination rewards to total rewards
+            for reward_type, reward_tensor in episode_rewards.items():
+                self.rew_buf += reward_tensor
 
             # Update fingertip visualization
             # Update camera position if following robot
@@ -882,7 +908,10 @@ class DexHandBase(VecTask):
 
             # Reset environments that completed episodes
             if torch.any(self.reset_buf):
-                self.reset_idx(torch.nonzero(self.reset_buf).flatten())
+                env_ids_to_reset = torch.nonzero(self.reset_buf).flatten()
+                self.reset_idx(env_ids_to_reset)
+                # Reset termination tracking for environments that were reset
+                self.termination_manager.reset_tracking(env_ids_to_reset)
 
             # Physics step count tracking for auto-detecting steps per control
             self.physics_manager.mark_control_step()
@@ -892,10 +921,13 @@ class DexHandBase(VecTask):
 
             # Update extras
             self.extras = {
-                "consecutive_successes": self.success_tracker.consecutive_successes
-                if hasattr(self, "success_tracker")
+                "consecutive_successes": self.termination_manager.consecutive_successes
+                if hasattr(self, "termination_manager")
                 else 0
             }
+
+            # Add termination info to extras for logging
+            self.extras.update(termination_info)
 
             # Add reward components to extras for logging
             if "reward_components" in task_rewards:

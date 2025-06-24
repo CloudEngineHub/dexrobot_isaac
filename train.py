@@ -211,6 +211,10 @@ def main():
     train_cfg["params"]["config"]["device"] = args.rl_device
     train_cfg["params"]["config"]["full_experiment_name"] = args.experiment_name
 
+    # Configure TensorBoard logging
+    if train_cfg["params"]["config"].get("use_tensorboard", False):
+        train_cfg["params"]["config"]["tensorboard_logdir"] = str(output_dir)
+
     # Set checkpoint if provided
     if args.checkpoint:
         train_cfg["params"]["load_checkpoint"] = True

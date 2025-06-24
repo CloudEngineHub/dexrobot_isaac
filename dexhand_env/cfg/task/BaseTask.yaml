@@ -113,13 +113,6 @@ env:
     hand_angular_acceleration: 0.05  # Penalize rapid angular velocity changes
     contact_stability: 0.2        # Reward consistent contacts
 
-    # Task-specific rewards (to be implemented by specific tasks)
-    pose: 0.0                     # Scale for pose matching reward
-    action: 0.0                   # Scale for action smoothness reward
-    energy: 0.0                   # Scale for energy efficiency reward
-    contact: 0.0                  # Scale for contact reward
-    success: 0.0                  # Scale for task success reward
-
 # These parameters are passed to training algorithms
 task:
   randomize: false                # Whether to use domain randomization

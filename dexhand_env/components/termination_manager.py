@@ -1,31 +1,35 @@
 """
-Success/Failure tracker component for DexHand environment.
+Termination manager component for DexHand environment.
 
-This module provides functionality to track success and failure criteria
-for dexterous manipulation tasks.
+This module provides functionality to evaluate episode termination conditions
+and determine when environments should be reset.
 """
 
-# Import PyTorch
 import torch
 
 
-class SuccessFailureTracker:
+class TerminationManager:
     """
-    Tracks success and failure criteria for dexterous manipulation tasks.
+    Manages episode termination decisions for the DexHand environment.
 
     This component provides functionality to:
-    - Evaluate success and failure criteria
-    - Track which criteria triggered for each environment
-    - Generate episode termination signals and information
+    - Evaluate termination conditions (success/failure/timeout)
+    - Generate termination signals and rewards
+    - Track termination statistics for logging
+
+    Three types of termination:
+    - Success: Task completed successfully (positive reward)
+    - Failure: Task failed due to violation (negative reward)
+    - Timeout: Episode reached max length (neutral reward)
     """
 
     def __init__(self, parent, cfg):
         """
-        Initialize the success/failure tracker.
+        Initialize the termination manager.
 
         Args:
             parent: Parent object (typically DexHandBase) that provides shared properties
-            cfg: Configuration dictionary (unique to this component)
+            cfg: Configuration dictionary containing termination settings
         """
         self.parent = parent
         self.cfg = cfg
@@ -48,12 +52,13 @@ class SuccessFailureTracker:
         self.success_reasons = {}
         self.failure_reasons = {}
 
-        # Maximum episode length
+        # Maximum episode length for timeout termination
         self.max_episode_length = cfg["env"]["episodeLength"]
 
-        # Success and failure rewards
+        # Termination rewards
         self.success_reward = cfg["env"].get("successReward", 10.0)
         self.failure_penalty = cfg["env"].get("failurePenalty", 5.0)
+        self.timeout_reward = cfg["env"].get("timeoutReward", 0.0)
 
         # Track consecutive successes for curriculum learning
         self.consecutive_successes = 0
@@ -78,10 +83,7 @@ class SuccessFailureTracker:
         task_failure,
     ):
         """
-        Evaluate success and failure criteria and update episode status.
-
-        This method checks all active success and failure criteria and determines
-        which environments have completed episodes (success or failure).
+        Evaluate termination conditions and determine which environments should reset.
 
         Args:
             episode_step_count: Buffer tracking episode step count
@@ -92,11 +94,12 @@ class SuccessFailureTracker:
 
         Returns:
             Tuple containing:
-                done_buf: Tensor indicating which environments are done
-                info: Dictionary with episode information (success/failure criteria)
+                should_reset: Boolean tensor indicating which environments should reset
+                termination_info: Dictionary with termination type information
+                episode_rewards: Dictionary with reward components
         """
-        # Initialize episode info
-        info = {}
+        # Initialize termination info
+        termination_info = {}
 
         # Track active criteria and their results
         active_success = {}
@@ -106,27 +109,27 @@ class SuccessFailureTracker:
         for name, criterion in builtin_success.items():
             if name in self.active_success_criteria or not self.active_success_criteria:
                 active_success[name] = criterion
-                info[f"success_{name}"] = criterion.float().mean().item()
+                termination_info[f"success_{name}"] = criterion.float().mean().item()
 
         # Process task-specific success criteria
         for name, criterion in task_success.items():
             if name in self.active_success_criteria or not self.active_success_criteria:
                 active_success[name] = criterion
-                info[f"success_{name}"] = criterion.float().mean().item()
+                termination_info[f"success_{name}"] = criterion.float().mean().item()
 
         # Process built-in failure criteria
         for name, criterion in builtin_failure.items():
             if name in self.active_failure_criteria or not self.active_failure_criteria:
                 active_failure[name] = criterion
-                info[f"failure_{name}"] = criterion.float().mean().item()
+                termination_info[f"failure_{name}"] = criterion.float().mean().item()
 
         # Process task-specific failure criteria
         for name, criterion in task_failure.items():
             if name in self.active_failure_criteria or not self.active_failure_criteria:
                 active_failure[name] = criterion
-                info[f"failure_{name}"] = criterion.float().mean().item()
+                termination_info[f"failure_{name}"] = criterion.float().mean().item()
 
-        # Initialize success and failure tensors
+        # Initialize termination type tensors
         episode_success = torch.zeros(
             self.num_envs, device=self.device, dtype=torch.bool
         )
@@ -134,7 +137,7 @@ class SuccessFailureTracker:
             self.num_envs, device=self.device, dtype=torch.bool
         )
 
-        # Check for any success or failure conditions
+        # Check for success conditions
         for name, criterion in active_success.items():
             # Initialize tracking tensor for this reason if it doesn't exist
             if name not in self.success_reasons:
@@ -151,6 +154,7 @@ class SuccessFailureTracker:
             # Update overall success status
             episode_success = episode_success | criterion
 
+        # Check for failure conditions
         for name, criterion in active_failure.items():
             # Initialize tracking tensor for this reason if it doesn't exist
             if name not in self.failure_reasons:
@@ -167,68 +171,90 @@ class SuccessFailureTracker:
             # Update overall failure status
             episode_failure = episode_failure | criterion
 
+        # Check for timeout termination
+        timeout = episode_step_count >= self.max_episode_length - 1
+
         # Store episode outcomes
         self.episode_success = episode_success
         self.episode_failure = episode_failure
 
-        # Episode is done if it's a success or failure, or if max steps reached
-        max_steps_done = episode_step_count >= self.max_episode_length - 1
-        done_buf = episode_success | episode_failure | max_steps_done
+        # Determine which environments should reset
+        should_reset = episode_success | episode_failure | timeout
 
-        # Create tensors indicating termination reasons
-        timeout_done = max_steps_done & ~episode_success & ~episode_failure
+        # Create termination type indicators (mutually exclusive)
+        success_termination = episode_success & should_reset
+        failure_termination = episode_failure & ~episode_success & should_reset
+        timeout_termination = (
+            timeout & ~episode_success & ~episode_failure & should_reset
+        )
 
-        # Track termination reasons as tensors (num_envs,)
-        info["success"] = episode_success
-        info["failure"] = episode_failure
-        info["timeout"] = timeout_done
+        # Add termination type information
+        termination_info["success"] = success_termination
+        termination_info["failure"] = failure_termination
+        termination_info["timeout"] = timeout_termination
 
         # Track specific success/failure reasons
         for name, reason_mask in self.success_reasons.items():
-            info[f"success_reason_{name}"] = reason_mask
+            termination_info[f"success_reason_{name}"] = reason_mask
 
         for name, reason_mask in self.failure_reasons.items():
-            info[f"failure_reason_{name}"] = reason_mask
+            termination_info[f"failure_reason_{name}"] = reason_mask
 
-        # Record overall statistics for easy logging
-        success_count = episode_success.sum().item()
-        failure_count = episode_failure.sum().item()
-        timeout_count = (
-            (max_steps_done & ~episode_success & ~episode_failure).sum().item()
+        # Calculate termination statistics
+        success_count = success_termination.sum().item()
+        failure_count = failure_termination.sum().item()
+        timeout_count = timeout_termination.sum().item()
+
+        termination_info["success_rate"] = success_count / self.num_envs
+        termination_info["failure_rate"] = failure_count / self.num_envs
+        termination_info["timeout_rate"] = timeout_count / self.num_envs
+
+        # Generate episode rewards
+        episode_rewards = self._get_termination_rewards(
+            success_termination, failure_termination, timeout_termination
         )
 
-        info["success_rate"] = success_count / self.num_envs
-        info["failure_rate"] = failure_count / self.num_envs
-        info["timeout_rate"] = timeout_count / self.num_envs
+        return should_reset, termination_info, episode_rewards
 
-        return done_buf, info
-
-    def get_rewards(self):
+    def _get_termination_rewards(
+        self, success_termination, failure_termination, timeout_termination
+    ):
         """
-        Get success and failure rewards based on episode status.
+        Get rewards based on termination type.
+
+        Args:
+            success_termination: Boolean tensor for success terminations
+            failure_termination: Boolean tensor for failure terminations
+            timeout_termination: Boolean tensor for timeout terminations
 
         Returns:
-            Dictionary with success and failure rewards
+            Dictionary with reward components
         """
         rewards = {}
 
-        # Add success reward
+        # Success rewards
         success_reward = torch.zeros(self.num_envs, device=self.device)
-        if torch.any(self.episode_success):
-            success_reward[self.episode_success] = self.success_reward
+        if torch.any(success_termination):
+            success_reward[success_termination] = self.success_reward
         rewards["success"] = success_reward
 
-        # Add failure penalty
+        # Failure penalties
         failure_penalty = torch.zeros(self.num_envs, device=self.device)
-        if torch.any(self.episode_failure):
-            failure_penalty[self.episode_failure] = -self.failure_penalty
+        if torch.any(failure_termination):
+            failure_penalty[failure_termination] = -self.failure_penalty
         rewards["failure"] = failure_penalty
+
+        # Timeout rewards (usually neutral)
+        timeout_reward = torch.zeros(self.num_envs, device=self.device)
+        if torch.any(timeout_termination):
+            timeout_reward[timeout_termination] = self.timeout_reward
+        rewards["timeout"] = timeout_reward
 
         return rewards
 
-    def update(self, success_tensor):
+    def update_consecutive_successes(self, success_tensor):
         """
-        Update success tracking.
+        Update consecutive success tracking.
 
         Args:
             success_tensor: Boolean tensor indicating success for each environment
@@ -244,9 +270,9 @@ class SuccessFailureTracker:
             self.consecutive_successes, self.max_consecutive_successes
         )
 
-    def reset(self, env_ids):
+    def reset_tracking(self, env_ids):
         """
-        Reset success/failure tracking for specified environments.
+        Reset termination tracking for specified environments.
 
         Args:
             env_ids: Environment indices to reset

@@ -8,6 +8,9 @@ manipulation tasks.
 # Import PyTorch
 import torch
 
+# Import constants
+from dexhand_env.constants import NUM_BASE_DOFS
+
 
 class RewardCalculator:
     """
@@ -32,6 +35,12 @@ class RewardCalculator:
         # Initialize reward weights from config
         self.reward_weights = cfg["env"].get("rewardWeights", {})
 
+        # State tracking for acceleration and contact stability rewards
+        self.prev_finger_dof_vel = None
+        self.prev_hand_vel = None
+        self.prev_hand_ang_vel = None
+        self.prev_contacts = None
+
     @property
     def num_envs(self):
         """Access num_envs from parent (single source of truth)."""
@@ -42,48 +51,44 @@ class RewardCalculator:
         """Access device from parent (single source of truth)."""
         return self.parent.device
 
-    def compute_common_reward_terms(
-        self,
-        obs_dict,
-        hand_vel,
-        hand_ang_vel,
-        dof_vel,
-        dof_pos,
-        dof_lower_limits,
-        dof_upper_limits,
-        prev_dof_vel,
-        prev_hand_vel,
-        prev_hand_ang_vel,
-        prev_contacts,
-    ):
+    def compute_common_reward_terms(self, obs_dict, parent_env):
         """
         Compute common reward components available to all tasks.
 
         This includes:
         1. alive - Small constant reward for each timestep (staying alive)
         2. height_safety - Penalizes when fingertips get too close to the ground
-        3. Velocity penalties
-        4. Joint limit penalties
-        5. Acceleration penalties
+        3. Velocity penalties (separated: finger vs hand)
+        4. Joint limit penalties (finger joints only)
+        5. Acceleration penalties (separated: finger vs hand)
         6. Contact stability
 
         Args:
             obs_dict: Dictionary of observations
-            hand_vel: Hand linear velocity
-            hand_ang_vel: Hand angular velocity
-            dof_vel: DOF velocities
-            dof_pos: DOF positions
-            dof_lower_limits: Lower joint limits
-            dof_upper_limits: Upper joint limits
-            prev_dof_vel: Previous DOF velocities
-            prev_hand_vel: Previous hand linear velocity
-            prev_hand_ang_vel: Previous hand angular velocity
-            prev_contacts: Previous contact state
+            parent_env: Parent DexHandBase instance for accessing simulation state
 
         Returns:
             Dictionary of common reward components
         """
         rewards = {}
+
+        # Get current simulation state from parent environment
+        hand_vel = parent_env.rigid_body_states[
+            :, parent_env.hand_local_rigid_body_index, 7:10
+        ]
+        hand_ang_vel = parent_env.rigid_body_states[
+            :, parent_env.hand_local_rigid_body_index, 10:13
+        ]
+        dof_vel = parent_env.dof_vel
+        dof_pos = parent_env.dof_pos
+
+        # Separate finger DOFs from base DOFs
+        finger_dof_vel = dof_vel[:, NUM_BASE_DOFS:]  # Finger DOFs only (indices 6+)
+        finger_dof_pos = dof_pos[:, NUM_BASE_DOFS:]  # Finger DOFs only
+
+        # Get DOF limits for finger joints only (base DOFs don't have meaningful limits)
+        finger_dof_lower_limits = parent_env.tensor_manager.dof_props[NUM_BASE_DOFS:, 4]
+        finger_dof_upper_limits = parent_env.tensor_manager.dof_props[NUM_BASE_DOFS:, 5]
 
         # Add alive bonus - small reward for each step the agent survives
         rewards["alive"] = torch.ones(self.num_envs, device=self.device)
@@ -91,26 +96,22 @@ class RewardCalculator:
         # 1. Height safety reward: penalize when fingertips get too close to the ground
         min_height = 0.02  # Minimum safe height above ground
 
-        # Extract fingertip positions from fingertip_poses_world
+        # Extract fingertip positions from fingertip_poses_world (FAIL FAST - no fallbacks)
         # fingertip_poses_world is (num_envs, 35) where each fingertip has 7 values (x,y,z,qx,qy,qz,qw)
         # 5 fingertips * 7 values = 35
-        fingertip_poses = obs_dict.get("fingertip_poses_world", None)
-        if fingertip_poses is not None:
-            # Reshape to (num_envs, 5, 7) and extract z coordinates
-            fingertip_poses_reshaped = fingertip_poses.view(self.num_envs, 5, 7)
-            fingertip_heights = fingertip_poses_reshaped[:, :, 2]  # Z coordinates
-            min_fingertip_height = torch.min(fingertip_heights, dim=1)[0]
-        else:
-            # Fallback if not available
-            min_fingertip_height = torch.ones(self.num_envs, device=self.device) * 0.1
+        fingertip_poses = obs_dict["fingertip_poses_world"]  # Fail if missing
+        # Reshape to (num_envs, 5, 7) and extract z coordinates
+        fingertip_poses_reshaped = fingertip_poses.view(self.num_envs, 5, 7)
+        fingertip_heights = fingertip_poses_reshaped[:, :, 2]  # Z coordinates
+        min_fingertip_height = torch.min(fingertip_heights, dim=1)[0]
         height_safety = torch.clamp(
             1.0 - torch.exp(-(min_fingertip_height - min_height) * 20), 0.0, 1.0
         )
         rewards["height_safety"] = height_safety
 
-        # 2. Velocity penalties: penalize high velocities
-        # 2a. Finger velocity penalty: penalize high finger joint velocities
-        finger_vel_norm = torch.norm(dof_vel, dim=1)
+        # 2. Velocity penalties: penalize high velocities (separated finger vs hand)
+        # 2a. Finger velocity penalty: penalize high finger joint velocities ONLY
+        finger_vel_norm = torch.norm(finger_dof_vel, dim=1)
         finger_vel_penalty = torch.exp(-0.1 * finger_vel_norm)
         rewards["finger_velocity"] = finger_vel_penalty
 
@@ -124,55 +125,70 @@ class RewardCalculator:
         hand_ang_vel_penalty = torch.exp(-0.2 * hand_ang_vel_norm)
         rewards["hand_angular_velocity"] = hand_ang_vel_penalty
 
-        # 3. Joint limit penalty: penalize when joints are close to their limits
-        # Normalize joint positions to [-1, 1] range based on limits
-        joint_ranges = dof_upper_limits - dof_lower_limits
-        normalized_joints = 2.0 * (dof_pos - dof_lower_limits) / joint_ranges - 1.0
+        # 3. Joint limit penalty: penalize when FINGER joints are close to their limits
+        # (Base DOFs don't have meaningful limits, so exclude them)
+        finger_joint_ranges = finger_dof_upper_limits - finger_dof_lower_limits
+        normalized_finger_joints = (
+            2.0 * (finger_dof_pos - finger_dof_lower_limits) / finger_joint_ranges - 1.0
+        )
         # Penalize when |normalized_joints| > 0.8 (i.e., within 10% of limits)
         joint_limit_margin = 0.8
         joint_limit_penalties = torch.clamp(
-            torch.abs(normalized_joints) - joint_limit_margin, 0.0, 1.0
+            torch.abs(normalized_finger_joints) - joint_limit_margin, 0.0, 1.0
         )
-        joint_limit_penalty = torch.sum(joint_limit_penalties, dim=1) / dof_pos.shape[1]
+        joint_limit_penalty = (
+            torch.sum(joint_limit_penalties, dim=1) / finger_dof_pos.shape[1]
+        )
         rewards["joint_limit"] = 1.0 - joint_limit_penalty
 
         # 4. Acceleration penalties: penalize rapid changes in velocities
-        # 4a. Finger acceleration penalty: penalize rapid changes in finger joint velocities
-        finger_acc = dof_vel - prev_dof_vel
+        # Initialize previous states on first call
+        if self.prev_finger_dof_vel is None:
+            self.prev_finger_dof_vel = finger_dof_vel.clone()
+            self.prev_hand_vel = hand_vel.clone()
+            self.prev_hand_ang_vel = hand_ang_vel.clone()
+
+        # 4a. Finger acceleration penalty: penalize rapid changes in FINGER joint velocities ONLY
+        finger_acc = finger_dof_vel - self.prev_finger_dof_vel
         finger_acc_norm = torch.norm(finger_acc, dim=1)
         finger_acc_penalty = torch.exp(-2.0 * finger_acc_norm)
         rewards["finger_acceleration"] = finger_acc_penalty
 
         # 4b. Hand acceleration penalty: penalize rapid changes in hand velocity
-        hand_accel = torch.norm(hand_vel - prev_hand_vel, dim=1)
+        hand_accel = torch.norm(hand_vel - self.prev_hand_vel, dim=1)
         hand_acc_penalty = torch.exp(-0.5 * hand_accel)
         rewards["hand_acceleration"] = hand_acc_penalty
 
         # 4c. Hand angular acceleration penalty: penalize rapid changes in hand angular velocity
-        hand_ang_accel = torch.norm(hand_ang_vel - prev_hand_ang_vel, dim=1)
+        hand_ang_accel = torch.norm(hand_ang_vel - self.prev_hand_ang_vel, dim=1)
         hand_ang_acc_penalty = torch.exp(-0.5 * hand_ang_accel)
         rewards["hand_angular_acceleration"] = hand_ang_acc_penalty
 
-        # 5. Contact stability: reward consistent contacts
-        if "contact_forces" in obs_dict and prev_contacts is not None:
-            # Calculate contact state (boolean tensor: is each fingertip touching something?)
-            # contact_forces is flattened to (num_envs, num_bodies * 3)
-            # Reshape it back to (num_envs, num_bodies, 3) for norm calculation
-            contact_forces_flat = obs_dict["contact_forces"]
-            num_bodies = contact_forces_flat.shape[1] // 3
-            contact_forces_3d = contact_forces_flat.view(self.num_envs, num_bodies, 3)
-            contact_force_norm = torch.norm(contact_forces_3d, dim=2)
-            contacts = contact_force_norm > 0.1
+        # 5. Contact stability: reward consistent contacts (FAIL FAST - no fallbacks)
+        # Calculate contact state (boolean tensor: is each fingertip touching something?)
+        # contact_forces is flattened to (num_envs, num_bodies * 3)
+        contact_forces_flat = obs_dict["contact_forces"]  # Fail if missing
+        num_bodies = contact_forces_flat.shape[1] // 3
+        contact_forces_3d = contact_forces_flat.view(self.num_envs, num_bodies, 3)
+        contact_force_norm = torch.norm(contact_forces_3d, dim=2)
+        contacts = contact_force_norm > 0.1
 
-            # Compute changes in contact state
-            contact_changes = torch.sum(
-                torch.logical_xor(contacts, prev_contacts).float(), dim=1
-            )
-            contact_stability = torch.exp(-contact_changes)
-            rewards["contact_stability"] = contact_stability
-        else:
-            # No contact info available yet, assume stable contacts
-            rewards["contact_stability"] = torch.ones(self.num_envs, device=self.device)
+        # Initialize previous contacts on first call
+        if self.prev_contacts is None:
+            self.prev_contacts = contacts.clone()
+
+        # Compute changes in contact state
+        contact_changes = torch.sum(
+            torch.logical_xor(contacts, self.prev_contacts).float(), dim=1
+        )
+        contact_stability = torch.exp(-contact_changes)
+        rewards["contact_stability"] = contact_stability
+
+        # Update previous states for next iteration
+        self.prev_finger_dof_vel = finger_dof_vel.clone()
+        self.prev_hand_vel = hand_vel.clone()
+        self.prev_hand_ang_vel = hand_ang_vel.clone()
+        self.prev_contacts = contacts.clone()
 
         return rewards
 

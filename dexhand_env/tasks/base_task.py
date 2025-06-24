@@ -42,12 +42,6 @@ class BaseTask(DexTask):
         self.num_envs = num_envs
         self.cfg = cfg
 
-        # Initialize state tracking for reward computation
-        self.prev_dof_vel = None
-        self.prev_hand_vel = None
-        self.prev_hand_ang_vel = None
-        self.prev_contacts = None
-
         # Reference to parent environment (set by DexHandBase)
         self.parent_env = None
 
@@ -63,70 +57,17 @@ class BaseTask(DexTask):
         Returns:
             Tuple of (reward tensor, reward terms dictionary)
         """
-        # Check if we have access to parent environment
+        # Check if we have access to parent environment (FAIL FAST - no fallbacks)
         if self.parent_env is None:
-            # Fallback to zero rewards if parent not set
-            rewards = torch.zeros(self.num_envs, device=self.device)
-            reward_terms = {}
-            return rewards, reward_terms
+            raise RuntimeError("parent_env is None - initialization failed")
 
-        # Debug: Check what's in obs_dict
+        # Check if obs_dict is valid (FAIL FAST - no fallbacks)
         if not obs_dict:
-            # Empty obs_dict, return zero rewards
-            rewards = torch.zeros(self.num_envs, device=self.device)
-            reward_terms = {}
-            return rewards, reward_terms
+            raise RuntimeError("obs_dict is empty - observation computation failed")
 
-        # Get current states from parent environment
-        hand_vel = self.parent_env.rigid_body_states[
-            :, self.parent_env.hand_local_rigid_body_index, 7:10
-        ]
-        hand_ang_vel = self.parent_env.rigid_body_states[
-            :, self.parent_env.hand_local_rigid_body_index, 10:13
-        ]
-        dof_vel = self.parent_env.dof_vel
-        dof_pos = self.parent_env.dof_pos
-
-        # Get DOF limits from tensor manager's DOF properties
-        # dof_props shape: (num_dofs, 6) where index 4 is lower limit, 5 is upper limit
-        dof_lower_limits = self.parent_env.tensor_manager.dof_props[:, 4]
-        dof_upper_limits = self.parent_env.tensor_manager.dof_props[:, 5]
-
-        # Initialize previous states on first call
-        if self.prev_dof_vel is None:
-            self.prev_dof_vel = dof_vel.clone()
-            self.prev_hand_vel = hand_vel.clone()
-            self.prev_hand_ang_vel = hand_ang_vel.clone()
-            # Initialize contact state
-            if "contact_forces" in obs_dict:
-                # contact_forces is flattened to (num_envs, num_bodies * 3)
-                contact_forces_flat = obs_dict["contact_forces"]
-                num_bodies = contact_forces_flat.shape[1] // 3
-                contact_forces_3d = contact_forces_flat.view(
-                    self.num_envs, num_bodies, 3
-                )
-                contact_force_norm = torch.norm(contact_forces_3d, dim=2)
-                self.prev_contacts = contact_force_norm > 0.1
-            else:
-                # If contact forces not available yet, initialize to zeros
-                # Assume 5 contact bodies (based on typical hand config)
-                self.prev_contacts = torch.zeros(
-                    (self.num_envs, 5), dtype=torch.bool, device=self.device
-                )
-
-        # Compute common reward terms
+        # Compute common reward terms using simplified API
         common_rewards = self.parent_env.reward_calculator.compute_common_reward_terms(
-            obs_dict=obs_dict,
-            hand_vel=hand_vel,
-            hand_ang_vel=hand_ang_vel,
-            dof_vel=dof_vel,
-            dof_pos=dof_pos,
-            dof_lower_limits=dof_lower_limits,
-            dof_upper_limits=dof_upper_limits,
-            prev_dof_vel=self.prev_dof_vel,
-            prev_hand_vel=self.prev_hand_vel,
-            prev_hand_ang_vel=self.prev_hand_ang_vel,
-            prev_contacts=self.prev_contacts,
+            obs_dict, self.parent_env
         )
 
         # Base task has no task-specific rewards
@@ -140,17 +81,6 @@ class BaseTask(DexTask):
             common_rewards=common_rewards,
             task_rewards=task_rewards,
         )
-
-        # Update previous states for next iteration
-        self.prev_dof_vel = dof_vel.clone()
-        self.prev_hand_vel = hand_vel.clone()
-        self.prev_hand_ang_vel = hand_ang_vel.clone()
-        # Update contact state
-        contact_forces_flat = obs_dict["contact_forces"]
-        num_bodies = contact_forces_flat.shape[1] // 3
-        contact_forces_3d = contact_forces_flat.view(self.num_envs, num_bodies, 3)
-        contact_force_norm = torch.norm(contact_forces_3d, dim=2)
-        self.prev_contacts = contact_force_norm > 0.1
 
         return total_rewards, reward_components
 

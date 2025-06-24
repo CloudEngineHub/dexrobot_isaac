@@ -57,8 +57,7 @@ class ResetManager:
         self.hand_local_rigid_body_index = hand_local_rigid_body_index
         self.task = task
 
-        # Reset and progress buffers - will be set by set_buffers()
-        self.reset_buf = None
+        # Episode step count buffer - will be set by set_episode_step_count_buffer()
         self.episode_step_count = None
 
         # Random state for reproducibility
@@ -137,15 +136,13 @@ class ResetManager:
         if dof_range is not None:
             self.dof_position_randomization_range = dof_range
 
-    def set_buffers(self, reset_buf, episode_step_count):
+    def set_episode_step_count_buffer(self, episode_step_count):
         """
-        Set the shared reset and progress buffers.
+        Set the shared episode step count buffer.
 
         Args:
-            reset_buf: Shared reset buffer from main environment
             episode_step_count: Shared episode step count buffer from main environment
         """
-        self.reset_buf = reset_buf
         self.episode_step_count = episode_step_count
 
     def set_default_state(self, dof_pos=None, hand_pos=None, hand_rot=None):
@@ -184,63 +181,6 @@ class ResetManager:
         if self.rng_state is not None:
             torch.set_rng_state(self.rng_state)
             self.rng_state = None
-
-    def check_termination(self, task_reset=None):
-        """
-        Check for episode termination.
-
-        Args:
-            task_reset: Optional task-specific reset conditions
-
-        Returns:
-            Updated reset buffer
-        """
-        try:
-            # Reset environments that have reached max episode length
-            condition = self.episode_step_count >= self.max_episode_length - 1
-
-            self.reset_buf = torch.where(
-                condition, torch.ones_like(self.reset_buf), self.reset_buf
-            )
-
-            # Apply task-specific reset conditions if provided
-            if task_reset is not None:
-                self.reset_buf = torch.logical_or(self.reset_buf, task_reset)
-
-            # Convert to boolean
-            self.reset_buf = self.reset_buf.bool()
-
-            return self.reset_buf
-        except Exception as e:
-            logger.critical(f"CRITICAL ERROR in reset_manager.check_termination: {e}")
-            import traceback
-
-            traceback.print_exc()
-            raise
-
-    def increment_progress(self):
-        """
-        Increment progress buffers.
-
-        Returns:
-            Updated progress buffer
-        """
-        try:
-            # Check if progress buffer is set
-            if self.episode_step_count is None:
-                raise RuntimeError(
-                    "Episode step count buffer not set. Call set_buffers() first."
-                )
-
-            # Increment progress
-            self.episode_step_count += 1
-            return self.episode_step_count
-        except Exception as e:
-            logger.error(f"ERROR in increment_progress: {e}")
-            import traceback
-
-            traceback.print_exc()
-            raise
 
     def reset_idx(self, env_ids):
         """
@@ -401,8 +341,7 @@ class ResetManager:
             # Reset action processor targets to avoid jumps after reset
             self.action_processor.reset_targets(env_ids)
 
-            # Clear reset buffer for environments that were reset (standard Isaac Gym pattern)
-            self.reset_buf[env_ids] = 0
+            # Note: reset_buf is now managed by the calling code (BaseTask)
 
             # Reset completed successfully
             return True

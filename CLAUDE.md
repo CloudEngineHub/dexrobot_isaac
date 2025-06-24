@@ -136,6 +136,8 @@ action_processor.finalize_setup()  # Now control_dt available
 - Rerun visualization integration (16 plots in examples/dexhand_test.py)
 - Euler angle conversion for debugging
 - PPO training integration with rl_games (tested at ~1000 fps)
+- **TerminationManager refactor**: Clean separation of termination decisions vs reset execution
+- **TensorBoard logging**: Episodes terminate correctly and rewards are logged properly
 
 ### 🔧 Current Issues
 - **Contact Force Verification** (Issue #4): Need objects in scene to verify contact observations work
