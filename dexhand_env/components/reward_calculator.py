@@ -90,12 +90,19 @@ class RewardCalculator:
 
         # 1. Height safety reward: penalize when fingertips get too close to the ground
         min_height = 0.02  # Minimum safe height above ground
-        fingertip_heights = obs_dict["fingertip_pos"][
-            :, :, 2
-        ]  # Z-coordinate of all fingertips
-        min_fingertip_height = torch.min(fingertip_heights, dim=1)[
-            0
-        ]  # Minimum height across all fingertips
+
+        # Extract fingertip positions from fingertip_poses_world
+        # fingertip_poses_world is (num_envs, 35) where each fingertip has 7 values (x,y,z,qx,qy,qz,qw)
+        # 5 fingertips * 7 values = 35
+        fingertip_poses = obs_dict.get("fingertip_poses_world", None)
+        if fingertip_poses is not None:
+            # Reshape to (num_envs, 5, 7) and extract z coordinates
+            fingertip_poses_reshaped = fingertip_poses.view(self.num_envs, 5, 7)
+            fingertip_heights = fingertip_poses_reshaped[:, :, 2]  # Z coordinates
+            min_fingertip_height = torch.min(fingertip_heights, dim=1)[0]
+        else:
+            # Fallback if not available
+            min_fingertip_height = torch.ones(self.num_envs, device=self.device) * 0.1
         height_safety = torch.clamp(
             1.0 - torch.exp(-(min_fingertip_height - min_height) * 20), 0.0, 1.0
         )
@@ -147,16 +154,25 @@ class RewardCalculator:
         rewards["hand_angular_acceleration"] = hand_ang_acc_penalty
 
         # 5. Contact stability: reward consistent contacts
-        # Calculate contact state (boolean tensor: is each fingertip touching something?)
-        contact_force_norm = torch.norm(obs_dict["contact_forces"], dim=2)
-        contacts = contact_force_norm > 0.1
+        if "contact_forces" in obs_dict and prev_contacts is not None:
+            # Calculate contact state (boolean tensor: is each fingertip touching something?)
+            # contact_forces is flattened to (num_envs, num_bodies * 3)
+            # Reshape it back to (num_envs, num_bodies, 3) for norm calculation
+            contact_forces_flat = obs_dict["contact_forces"]
+            num_bodies = contact_forces_flat.shape[1] // 3
+            contact_forces_3d = contact_forces_flat.view(self.num_envs, num_bodies, 3)
+            contact_force_norm = torch.norm(contact_forces_3d, dim=2)
+            contacts = contact_force_norm > 0.1
 
-        # Compute changes in contact state
-        contact_changes = torch.sum(
-            torch.logical_xor(contacts, prev_contacts).float(), dim=1
-        )
-        contact_stability = torch.exp(-contact_changes)
-        rewards["contact_stability"] = contact_stability
+            # Compute changes in contact state
+            contact_changes = torch.sum(
+                torch.logical_xor(contacts, prev_contacts).float(), dim=1
+            )
+            contact_stability = torch.exp(-contact_changes)
+            rewards["contact_stability"] = contact_stability
+        else:
+            # No contact info available yet, assume stable contacts
+            rewards["contact_stability"] = torch.ones(self.num_envs, device=self.device)
 
         return rewards
 

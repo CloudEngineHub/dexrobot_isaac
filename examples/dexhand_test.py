@@ -290,6 +290,17 @@ def setup_rerun_logging():
         ("Plot_14_raw_DOFs", "Raw vs active DOFs"),
         ("Plot_15_ARR_integration", "ARR velocity integration check (Issue #1)"),
         ("Plot_16_finger_integration", "Finger joint velocity integration check"),
+        # Reward plots
+        ("Plot_17_rewards_common", "Common reward components"),
+        ("Plot_18_rewards_weighted", "Weighted reward contributions"),
+        ("Plot_19_rewards_total", "Total reward over time"),
+        ("Plot_20_reward_alive", "Alive and height safety rewards"),
+        ("Plot_21_reward_velocities", "Velocity penalty rewards"),
+        ("Plot_22_reward_limits", "Joint limit penalty rewards"),
+        ("Plot_23_reward_accelerations", "Acceleration penalty rewards"),
+        ("Plot_24_reward_contact", "Contact stability reward"),
+        ("Plot_25_reward_breakdown", "Reward breakdown by category"),
+        ("Plot_26_reward_cumulative", "Cumulative rewards"),
     ]
 
     # Set up each plot with a clear structure
@@ -779,6 +790,190 @@ def log_observation_data(env, step, cfg, env_idx=0):
 
     except Exception as e:
         logger.error(f"Error logging data at step {step}: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+
+def log_reward_data(env, rewards, reward_components, step, env_idx=0):
+    """Log reward data to Rerun for visualization."""
+    if not RERUN_AVAILABLE:
+        return
+
+    try:
+        # Initialize cumulative reward tracking
+        if not hasattr(log_reward_data, "cumulative_reward"):
+            log_reward_data.cumulative_reward = 0.0
+
+        # Get total reward for this environment
+        total_reward = rewards[env_idx].item() if rewards is not None else 0.0
+        log_reward_data.cumulative_reward += total_reward
+
+        # Plot 17: Common reward components (raw values)
+        if reward_components:
+            # Common rewards
+            for name in [
+                "alive",
+                "height_safety",
+                "finger_velocity",
+                "hand_velocity",
+                "hand_angular_velocity",
+                "joint_limit",
+                "finger_acceleration",
+                "hand_acceleration",
+                "hand_angular_acceleration",
+                "contact_stability",
+            ]:
+                if name in reward_components:
+                    value = reward_components[name][env_idx].item()
+                    rr.log(f"Plot_17_rewards_common/{name}", rr.Scalar(float(value)))
+
+        # Plot 18: Weighted reward contributions
+        if reward_components:
+            for name in [
+                "alive",
+                "height_safety",
+                "finger_velocity",
+                "hand_velocity",
+                "hand_angular_velocity",
+                "joint_limit",
+                "finger_acceleration",
+                "hand_acceleration",
+                "hand_angular_acceleration",
+                "contact_stability",
+            ]:
+                weighted_name = f"{name}_weighted"
+                if weighted_name in reward_components:
+                    value = reward_components[weighted_name][env_idx].item()
+                    rr.log(f"Plot_18_rewards_weighted/{name}", rr.Scalar(float(value)))
+
+        # Plot 19: Total reward over time
+        rr.log("Plot_19_rewards_total/total", rr.Scalar(float(total_reward)))
+        rr.log(
+            "Plot_19_rewards_total/cumulative",
+            rr.Scalar(float(log_reward_data.cumulative_reward)),
+        )
+
+        # Plot 20: Alive and height safety rewards (detailed)
+        if reward_components:
+            if "alive" in reward_components:
+                rr.log(
+                    "Plot_20_reward_alive/alive",
+                    rr.Scalar(float(reward_components["alive"][env_idx].item())),
+                )
+            if "height_safety" in reward_components:
+                rr.log(
+                    "Plot_20_reward_alive/height_safety",
+                    rr.Scalar(
+                        float(reward_components["height_safety"][env_idx].item())
+                    ),
+                )
+
+        # Plot 21: Velocity penalty rewards
+        if reward_components:
+            for name in ["finger_velocity", "hand_velocity", "hand_angular_velocity"]:
+                if name in reward_components:
+                    value = reward_components[name][env_idx].item()
+                    rr.log(f"Plot_21_reward_velocities/{name}", rr.Scalar(float(value)))
+
+        # Plot 22: Joint limit penalty
+        if reward_components and "joint_limit" in reward_components:
+            rr.log(
+                "Plot_22_reward_limits/joint_limit",
+                rr.Scalar(float(reward_components["joint_limit"][env_idx].item())),
+            )
+
+        # Plot 23: Acceleration penalties
+        if reward_components:
+            for name in [
+                "finger_acceleration",
+                "hand_acceleration",
+                "hand_angular_acceleration",
+            ]:
+                if name in reward_components:
+                    value = reward_components[name][env_idx].item()
+                    rr.log(
+                        f"Plot_23_reward_accelerations/{name}", rr.Scalar(float(value))
+                    )
+
+        # Plot 24: Contact stability
+        if reward_components and "contact_stability" in reward_components:
+            rr.log(
+                "Plot_24_reward_contact/stability",
+                rr.Scalar(
+                    float(reward_components["contact_stability"][env_idx].item())
+                ),
+            )
+
+        # Plot 25: Reward breakdown by category
+        if reward_components:
+            # Sum up different categories
+            safety_rewards = 0.0
+            velocity_rewards = 0.0
+            acceleration_rewards = 0.0
+            contact_rewards = 0.0
+
+            # Safety (alive + height_safety + joint_limit)
+            for name in [
+                "alive_weighted",
+                "height_safety_weighted",
+                "joint_limit_weighted",
+            ]:
+                if name in reward_components:
+                    safety_rewards += reward_components[name][env_idx].item()
+
+            # Velocity penalties
+            for name in [
+                "finger_velocity_weighted",
+                "hand_velocity_weighted",
+                "hand_angular_velocity_weighted",
+            ]:
+                if name in reward_components:
+                    velocity_rewards += reward_components[name][env_idx].item()
+
+            # Acceleration penalties
+            for name in [
+                "finger_acceleration_weighted",
+                "hand_acceleration_weighted",
+                "hand_angular_acceleration_weighted",
+            ]:
+                if name in reward_components:
+                    acceleration_rewards += reward_components[name][env_idx].item()
+
+            # Contact
+            if "contact_stability_weighted" in reward_components:
+                contact_rewards = reward_components["contact_stability_weighted"][
+                    env_idx
+                ].item()
+
+            rr.log("Plot_25_reward_breakdown/safety", rr.Scalar(float(safety_rewards)))
+            rr.log(
+                "Plot_25_reward_breakdown/velocity", rr.Scalar(float(velocity_rewards))
+            )
+            rr.log(
+                "Plot_25_reward_breakdown/acceleration",
+                rr.Scalar(float(acceleration_rewards)),
+            )
+            rr.log(
+                "Plot_25_reward_breakdown/contact", rr.Scalar(float(contact_rewards))
+            )
+
+        # Plot 26: Cumulative rewards
+        rr.log(
+            "Plot_26_reward_cumulative/total",
+            rr.Scalar(float(log_reward_data.cumulative_reward)),
+        )
+
+        # Reset cumulative on environment reset
+        if (
+            hasattr(env, "episode_step_count")
+            and env.episode_step_count[env_idx].item() == 0
+            and step > 0
+        ):
+            log_reward_data.cumulative_reward = total_reward  # Reset to current reward
+
+    except Exception as e:
+        logger.error(f"Error logging reward data at step {step}: {e}")
         import traceback
 
         traceback.print_exc()
@@ -1481,6 +1676,11 @@ def main():
         if plotting_enabled:
             rr.set_time_sequence("step", step)
             log_observation_data(env, step, cfg, args.plot_env_idx)
+
+            # Log reward data
+            # Get reward components from info if available
+            reward_components = info.get("reward_components", {}) if info else {}
+            log_reward_data(env, rewards, reward_components, step, args.plot_env_idx)
 
         # Print progress every 25 steps and at key transitions
         if step_in_action % 25 == 0 or step_in_action == 49 or step_in_action == 99:

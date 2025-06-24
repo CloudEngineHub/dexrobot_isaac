@@ -99,13 +99,26 @@ env:
     # - "all_finger_dof_vel"     # All finger DOF velocities (20 finger DOFs) - semantic access only
     # - "all_finger_dof_target"  # All finger DOF targets (20 finger DOFs) - semantic access only
 
-  # Reward parameters
-  rewardScales:
-    pose: 1.0                     # Scale for pose matching reward
-    action: 0.1                   # Scale for action smoothness reward
-    energy: 0.1                   # Scale for energy efficiency reward
-    contact: 0.5                  # Scale for contact reward
-    success: 10.0                 # Scale for task success reward
+  # Reward parameters (weights for different reward components)
+  rewardWeights:
+    # Common rewards (implemented in RewardCalculator)
+    alive: 0.1                    # Small constant reward per timestep
+    height_safety: 1.0            # Penalize fingertips too close to ground
+    finger_velocity: 0.1          # Penalize high finger joint velocities
+    hand_velocity: 0.1            # Penalize high hand movement speed
+    hand_angular_velocity: 0.1    # Penalize high rotational speed
+    joint_limit: 0.5              # Penalize joints near their limits
+    finger_acceleration: 0.05     # Penalize rapid finger velocity changes
+    hand_acceleration: 0.05       # Penalize rapid hand velocity changes
+    hand_angular_acceleration: 0.05  # Penalize rapid angular velocity changes
+    contact_stability: 0.2        # Reward consistent contacts
+
+    # Task-specific rewards (to be implemented by specific tasks)
+    pose: 0.0                     # Scale for pose matching reward
+    action: 0.0                   # Scale for action smoothness reward
+    energy: 0.0                   # Scale for energy efficiency reward
+    contact: 0.0                  # Scale for contact reward
+    success: 0.0                  # Scale for task success reward
 
 # These parameters are passed to training algorithms
 task:

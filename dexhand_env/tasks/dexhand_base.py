@@ -124,6 +124,8 @@ class DexHandBase(VecTask):
 
         # Update task device to match environment device
         self.task.device = self.device
+        # Set parent environment reference for reward computation
+        self.task.parent_env = self
 
         # Task specific parameters
         self.max_episode_length = self.cfg["env"]["episodeLength"]
@@ -757,7 +759,13 @@ class DexHandBase(VecTask):
         env_ids = torch.arange(self.num_envs, device=self.device)
         self.reset_idx(env_ids)
 
-        # Call post_physics_step to compute initial observations
+        # Compute observations after reset
+        # This ensures obs_dict is populated before computing rewards
+        obs_buf, obs_dict = self.observation_encoder.compute_observations()
+        self.obs_buf = obs_buf
+        self.obs_dict = obs_dict
+
+        # Call post_physics_step to compute initial rewards
         obs, rew, done, info = self.post_physics_step()
         return obs
 
@@ -841,11 +849,15 @@ class DexHandBase(VecTask):
                     self.obs_dict
                 )
 
+                # Store reward components for logging
+                self.last_reward_components = task_rewards
+
                 # Track successes
                 if "success" in task_rewards:
                     self.success_tracker.update(task_rewards["success"])
             else:
                 self.rew_buf[:] = 0
+                self.last_reward_components = {}
 
             # Update episode progress
             self.reset_manager.increment_progress()
@@ -884,6 +896,12 @@ class DexHandBase(VecTask):
                 if hasattr(self, "success_tracker")
                 else 0
             }
+
+            # Add reward components to extras for logging
+            if "reward_components" in task_rewards:
+                self.extras["reward_components"] = task_rewards["reward_components"]
+            elif hasattr(self, "last_reward_components"):
+                self.extras["reward_components"] = self.last_reward_components
 
             return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
 
