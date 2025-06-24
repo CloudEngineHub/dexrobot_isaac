@@ -409,10 +409,13 @@ class ViewerController:
         if self.viewer is None or not self.enable_contact_visualization:
             return False
 
-        # Get contact force body indices from parent
-        contact_body_indices = self.parent.contact_force_body_indices
-        if not contact_body_indices:
+        # Get LOCAL contact force body indices from parent
+        contact_body_local_indices = self.parent.contact_force_local_body_indices
+        if not contact_body_local_indices:
             return False
+
+        # Get number of bodies per environment for global index computation
+        num_bodies_per_env = self.parent.rigid_body_states.shape[1]
 
         # Calculate contact force magnitudes
         force_magnitudes = torch.norm(contact_forces, dim=2)  # [num_envs, num_bodies]
@@ -420,8 +423,11 @@ class ViewerController:
 
         # Update colors for each environment
         for env_idx in range(self.num_envs):
-            # For each contact body in this environment
-            for body_idx, global_body_idx in enumerate(contact_body_indices[env_idx]):
+            # For each contact body (using local indices)
+            for body_idx, local_body_idx in enumerate(contact_body_local_indices):
+                # Compute global body index for Isaac Gym API
+                global_body_idx = env_idx * num_bodies_per_env + local_body_idx
+
                 if has_contact[env_idx, body_idx]:
                     # Calculate color based on force magnitude
                     force_mag = force_magnitudes[env_idx, body_idx].item()

@@ -49,6 +49,9 @@ class PhysicsManager:
         # control_dt will be set by measurement
         self.control_dt = None
 
+        # Number of actors per environment (TODO: make this configurable for multi-actor support)
+        self.num_actors_per_env = 1
+
     @property
     def device(self):
         """Access device from parent (single source of truth)."""
@@ -102,51 +105,37 @@ class PhysicsManager:
             logger.exception("Traceback:")
             return False
 
-    def apply_dof_states(self, gym, sim, env_ids, dof_state, actor_indices):
+    def apply_dof_states(self, gym, sim, env_ids, dof_state, actor_index=0):
         """
-        Apply DOF states to specified actors.
+        Apply DOF states to specified actor in given environments.
 
         Args:
             gym: The isaacgym gym instance
             sim: The isaacgym simulation instance
-            env_ids: Tensor of environment IDs
-            dof_state: Tensor of DOF states (wrapped PyTorch tensor) [num_envs, num_dofs, 2]
-            actor_indices: Tensor of actor indices for each environment
+            env_ids: Tensor of environment IDs to update
+            dof_state: Tensor of DOF states [num_envs, num_dofs, 2]
+            actor_index: Local actor index within each environment (default: 0)
 
         Returns:
             Boolean indicating success
         """
         try:
-            # Extract actor indices for the environments we're updating
-            indices_to_use = torch.zeros(
-                len(env_ids), dtype=torch.int32, device=self.device
-            )
-            for i, env_id in enumerate(env_ids):
-                if env_id < len(actor_indices):
-                    indices_to_use[i] = actor_indices[env_id]
-                else:
-                    raise RuntimeError(
-                        f"Environment ID {env_id} out of range for actor_indices"
-                    )
+            # Compute global actor indices
+            # For environment i with local actor j, global index = i * num_actors_per_env + j
+            global_actor_indices = env_ids * self.num_actors_per_env + actor_index
 
-            # Debug: Log what we're applying
-            logger.debug(
-                f"Applying DOF states for env_ids {env_ids.tolist()} -> actor_indices {indices_to_use.tolist()}"
-            )
-            if len(env_ids) > 0:
-                logger.debug(
-                    f"First env DOF positions: {dof_state[env_ids[0], :6, 0].tolist()}"
-                )
+            # Ensure indices are int32 for Isaac Gym
+            global_actor_indices = global_actor_indices.to(torch.int32)
 
-            # Apply DOF states
-            # dof_state has shape [num_envs, num_dofs, 2]
-            # Extract states for the specific environments and flatten
+            # Extract DOF states for specified environments and flatten
+            # Shape: [len(env_ids), num_dofs, 2] -> [len(env_ids) * num_dofs, 2]
             dof_states_to_apply = dof_state[env_ids].reshape(-1, 2)
 
+            # Apply DOF states using Isaac Gym API
             self.gym.set_dof_state_tensor_indexed(
                 self.sim,
                 gymtorch.unwrap_tensor(dof_states_to_apply),
-                gymtorch.unwrap_tensor(indices_to_use),
+                gymtorch.unwrap_tensor(global_actor_indices),
                 len(env_ids),
             )
 

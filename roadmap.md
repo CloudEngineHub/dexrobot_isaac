@@ -12,7 +12,12 @@
 - [x] Document the fail-fast philosophy with concrete examples from this project - documented in CLAUDE.md
 
 ### Phase 3 - RL Integration
-- [ ] Test with PPO/SAC algorithms
+- [x] Test with PPO/SAC algorithms
+  - ✅ Fixed config loading issues (duplicate sim sections)
+  - ✅ Removed deprecated use_gpu_pipeline key
+  - ✅ Fixed num_actions fail-fast property access
+  - ✅ Verified environment creation, reset, and step work correctly
+  - ✅ Basic PPO training loop tested successfully
 - [ ] Implement modular reward system (reaching, grasping, manipulation components)
 - [ ] Add reward visualization in rerun for debugging
 - [ ] Create training scripts with DexHand-specific hyperparameters

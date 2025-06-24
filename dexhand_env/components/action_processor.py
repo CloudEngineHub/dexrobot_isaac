@@ -6,13 +6,15 @@ including action scaling, mapping, and PD control.
 """
 
 # Import standard libraries
-import torch
 from loguru import logger
 from functools import wraps
 from typing import Callable, Dict, Any, Optional
 
-# Import IsaacGym
+# Import IsaacGym first (before torch)
 from isaacgym import gymtorch
+
+# Then import torch
+import torch
 
 # Import constants
 from dexhand_env.constants import (

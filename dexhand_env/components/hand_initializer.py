@@ -140,19 +140,22 @@ class HandInitializer:
         self.hand_handles = []
         self.fingertip_body_handles = []
         self.fingerpad_body_handles = []
-        self.hand_actor_indices = []  # Actor indices for DOF operations
-        self.hand_rigid_body_indices = (
+
+        # Store LOCAL indices (within each environment)
+        self.hand_local_actor_index = 0  # For single-actor environments, always 0
+        self.hand_local_rigid_body_index = None  # Local index of hand base
+        self.fingertip_local_indices = []  # Local indices for fingertips
+        self.fingerpad_local_indices = []  # Local indices for fingerpads
+        self.contact_force_local_body_indices = (
             []
-        )  # Temporary storage for verification - must be identical across envs
-        self.fingertip_indices = []
-        self.fingerpad_indices = []
-        self.contact_force_body_indices = []  # Indices for contact force sensing bodies
+        )  # Local indices for contact force bodies
 
-        # Optimized single index (after verification that all envs have same index)
-        self.hand_rigid_body_index = None  # Single scalar index (same across envs)
+        # Temporary storage for computing local from global indices
+        self._env0_first_body_global_idx = None  # First body's global index in env 0
+        self._num_bodies_per_env = None  # Total bodies per environment
 
-        # Rigid body index to name mapping for debug logging
-        self.rigid_body_index_to_name = {}  # Maps rigid body index -> body name
+        # Local rigid body index to name mapping for debug logging
+        self.local_rigid_body_index_to_name = {}  # Maps local body index -> body name
 
         # DOF names - will be populated during asset loading
         self._dof_names = None
@@ -267,10 +270,6 @@ class HandInitializer:
         self.hand_handles = []
         self.fingertip_body_handles = []
         self.fingerpad_body_handles = []
-        self.hand_actor_indices = []  # Actor indices for DOF operations
-        self.hand_rigid_body_indices = []  # Rigid body indices
-        self.fingertip_indices = []
-        self.fingerpad_indices = []
 
         # Note: We'll get DOF properties from the first actor after creation
         # to avoid issues with GPU pipeline
@@ -288,9 +287,8 @@ class HandInitializer:
                 env, hand_asset, hand_pose, f"hand_{i}", i, 0
             )
 
-            # Get actor index (for DOF operations)
-            actor_idx = self.gym.get_actor_index(env, hand_handle, gymapi.DOMAIN_SIM)
-            self.hand_actor_indices.append(actor_idx)
+            # Note: For single-actor environments, local actor index is always 0
+            # We don't need to store global actor indices
 
             # Get DOF properties from actor (not asset) for GPU pipeline compatibility
             hand_dof_props = self.gym.get_actor_dof_properties(env, hand_handle)
@@ -361,7 +359,7 @@ class HandInitializer:
             "fingertip_body_handles": self.fingertip_body_handles,
             "fingerpad_body_handles": self.fingerpad_body_handles,
             "dof_properties": self.original_dof_props,  # Add DOF properties to return value
-            "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
+            "hand_local_actor_index": self.hand_local_actor_index,  # Local actor index (0 for single-actor envs)
         }
 
     def get_dof_mapping(self):
@@ -396,93 +394,112 @@ class HandInitializer:
         logger.debug("Initializing rigid body indices after all actor creation...")
 
         # Ensure we only initialize once
-        if self.hand_rigid_body_indices:
+        if self.hand_local_rigid_body_index is not None:
             raise RuntimeError(
                 "Rigid body indices have already been initialized. They should only be initialized once."
             )
 
-        # Build rigid body index to name mapping (only for first environment since all are identical)
+        # First, we need to determine the first body's global index in env 0
+        # This will be our reference point for computing local indices
         if envs and self.hand_handles:
-            # Get all rigid body names for the hand
+            # Get the first rigid body's global index in env 0
             rigid_body_names = self.gym.get_actor_rigid_body_names(
                 envs[0], self.hand_handles[0]
             )
-
-            # Build the mapping for all hand rigid bodies
-            for body_name in rigid_body_names:
-                body_idx = self.gym.find_actor_rigid_body_index(
-                    envs[0], self.hand_handles[0], body_name, gymapi.DOMAIN_SIM
+            if rigid_body_names:
+                first_body_global_idx = self.gym.find_actor_rigid_body_index(
+                    envs[0],
+                    self.hand_handles[0],
+                    rigid_body_names[0],
+                    gymapi.DOMAIN_SIM,
                 )
-                self.rigid_body_index_to_name[body_idx] = body_name
+                self._env0_first_body_global_idx = first_body_global_idx
 
+                # Build local index to name mapping
+                for body_name in rigid_body_names:
+                    global_idx = self.gym.find_actor_rigid_body_index(
+                        envs[0], self.hand_handles[0], body_name, gymapi.DOMAIN_SIM
+                    )
+                    local_idx = global_idx - self._env0_first_body_global_idx
+                    self.local_rigid_body_index_to_name[local_idx] = body_name
+
+                self._num_bodies_per_env = len(rigid_body_names)
+                logger.debug(
+                    f"Built local rigid body index mapping with {len(self.local_rigid_body_index_to_name)} bodies"
+                )
+                logger.debug(
+                    f"Environment 0 first body global index: {self._env0_first_body_global_idx}"
+                )
+
+        # Get indices from environment 0 and compute local indices
+        if envs and self.hand_handles:
+            env0 = envs[0]
+            hand0 = self.hand_handles[0]
+
+            # Get hand base local index
+            hand_base_global_idx = self.gym.find_actor_rigid_body_index(
+                env0, hand0, "right_hand_base", gymapi.DOMAIN_SIM
+            )
+            self.hand_local_rigid_body_index = (
+                hand_base_global_idx - self._env0_first_body_global_idx
+            )
             logger.debug(
-                f"Built rigid body index mapping with {len(self.rigid_body_index_to_name)} bodies"
+                f"Hand base local rigid body index: {self.hand_local_rigid_body_index}"
             )
 
-        # Acquire indices for each environment
-        for i, (env, hand_handle) in enumerate(zip(envs, self.hand_handles)):
-            # Get hand base rigid body index
-            hand_base_idx = self.gym.find_actor_rigid_body_index(
-                env, hand_handle, "right_hand_base", gymapi.DOMAIN_SIM
-            )
-            self.hand_rigid_body_indices.append(hand_base_idx)
-
-            # Get fingertip indices
-            fingertip_indices = []
+            # Get fingertip local indices
+            self.fingertip_local_indices = []
             for name in self.fingertip_body_names:
-                body_idx = self.gym.find_actor_rigid_body_index(
-                    env, hand_handle, name, gymapi.DOMAIN_SIM
+                global_idx = self.gym.find_actor_rigid_body_index(
+                    env0, hand0, name, gymapi.DOMAIN_SIM
                 )
-                fingertip_indices.append(body_idx)
-            self.fingertip_indices.append(fingertip_indices)
+                local_idx = global_idx - self._env0_first_body_global_idx
+                self.fingertip_local_indices.append(local_idx)
+            logger.debug(f"Fingertip local indices: {self.fingertip_local_indices}")
 
-            # Get fingerpad indices
-            fingerpad_indices = []
+            # Get fingerpad local indices
+            self.fingerpad_local_indices = []
             for name in self.fingerpad_body_names:
-                body_idx = self.gym.find_actor_rigid_body_index(
-                    env, hand_handle, name, gymapi.DOMAIN_SIM
+                global_idx = self.gym.find_actor_rigid_body_index(
+                    env0, hand0, name, gymapi.DOMAIN_SIM
                 )
-                fingerpad_indices.append(body_idx)
-            self.fingerpad_indices.append(fingerpad_indices)
+                local_idx = global_idx - self._env0_first_body_global_idx
+                self.fingerpad_local_indices.append(local_idx)
+            logger.debug(f"Fingerpad local indices: {self.fingerpad_local_indices}")
 
-            # Get contact force body indices
-            contact_force_indices = []
+            # Get contact force body local indices
+            self.contact_force_local_body_indices = []
             for name in self.contact_force_body_names:
-                body_idx = self.gym.find_actor_rigid_body_index(
-                    env, hand_handle, name, gymapi.DOMAIN_SIM
+                global_idx = self.gym.find_actor_rigid_body_index(
+                    env0, hand0, name, gymapi.DOMAIN_SIM
                 )
-                contact_force_indices.append(body_idx)
-            self.contact_force_body_indices.append(contact_force_indices)
-
-        # Convert global indices to local index
-        # Since all environments have identical structure, the local index within each environment
-        # is the same. We use the first environment's global index as the local index.
-        if not self.hand_rigid_body_indices:
-            raise RuntimeError(
-                "No hand rigid body indices found. This indicates a critical initialization error."
+                local_idx = global_idx - self._env0_first_body_global_idx
+                self.contact_force_local_body_indices.append(local_idx)
+            logger.debug(
+                f"Contact force body local indices: {self.contact_force_local_body_indices}"
             )
 
-        # The local index is simply the first environment's global index
-        # This works because environment 0 starts at global index 0
-        self.hand_rigid_body_index = self.hand_rigid_body_indices[0]
+        # Ensure all required indices were found
+        if self.hand_local_rigid_body_index is None:
+            raise RuntimeError(
+                "Failed to find hand base rigid body index. This indicates a critical initialization error."
+            )
 
-        logger.debug(
-            f"Using hand rigid body index {self.hand_rigid_body_index} (from env 0 global index)"
-        )
-        logger.debug(f"All environment global indices: {self.hand_rigid_body_indices}")
-
-        logger.debug(f"Initialized rigid body indices for {len(envs)} environments")
-        logger.debug(f"Hand rigid body index: {self.hand_rigid_body_index}")
-        logger.debug(f"Hand actor indices: {self.hand_actor_indices}")
-        logger.debug(
-            f"First env fingertip indices: {self.fingertip_indices[0] if self.fingertip_indices else 'None'}"
+        logger.info(f"Initialized rigid body indices for {len(envs)} environments")
+        logger.info(f"Hand rigid body local index: {self.hand_local_rigid_body_index}")
+        logger.info(f"Number of fingertip bodies: {len(self.fingertip_local_indices)}")
+        logger.info(
+            f"Number of contact force bodies: {len(self.contact_force_local_body_indices)}"
         )
 
-        # Return rigid body indices as constants since all environments must be identical
+        # Return local indices and conversion info
         return {
-            "hand_rigid_body_index": self.hand_rigid_body_index,  # Single index (constant)
-            "hand_actor_indices": self.hand_actor_indices,  # Actor indices for DOF operations
-            "fingertip_indices": self.fingertip_indices,
-            "fingerpad_indices": self.fingerpad_indices,
-            "contact_force_body_indices": self.contact_force_body_indices,  # Indices for force sensing
+            "hand_local_rigid_body_index": self.hand_local_rigid_body_index,
+            "hand_local_actor_index": self.hand_local_actor_index,
+            "fingertip_local_indices": self.fingertip_local_indices,
+            "fingerpad_local_indices": self.fingerpad_local_indices,
+            "contact_force_local_body_indices": self.contact_force_local_body_indices,
+            "local_rigid_body_index_to_name": self.local_rigid_body_index_to_name,
+            "_env0_first_body_global_idx": self._env0_first_body_global_idx,
+            "_num_bodies_per_env": self._num_bodies_per_env,
         }

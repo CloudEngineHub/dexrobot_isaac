@@ -135,11 +135,10 @@ action_processor.finalize_setup()  # Now control_dt available
 - Observation system with dict/tensor separation
 - Rerun visualization integration (16 plots in examples/dexhand_test.py)
 - Euler angle conversion for debugging
+- PPO training integration with rl_games (tested at ~1000 fps)
 
 ### 🔧 Current Issues
 - **Contact Force Verification** (Issue #4): Need objects in scene to verify contact observations work
-- **Multi-Environment Testing**: Test with num_envs > 1 for parallel simulation
-- **Reset Logic**: Verify reset_idx works correctly with different environment indices
 
 ### 📋 TODO
 - **Phase 2 - Architecture & Quality**:
@@ -149,11 +148,11 @@ action_processor.finalize_setup()  # Now control_dt available
   - Update README files with current architecture
 
 - **Phase 3 - RL Integration**:
-  - Test with PPO/SAC algorithms
   - Implement reward system
   - Add reward visualization/debugging tools
-  - Create training scripts with hyperparameter configs
+  - Create training scripts with hyperparameter configs for different tasks
   - Benchmark learning performance
+  - Add SAC algorithm support
 
 - **Phase 3 - Advanced Features**:
   - ROS2 interface for real robot deployment

@@ -103,21 +103,6 @@ class DexHandBase(VecTask):
         logger.info(f"Graphics Device ID: {graphics_device_id}")
         logger.info(f"Headless Mode: {headless}")
         logger.info(f"Force Render: {force_render}")
-
-        # Store GPU pipeline flag for use in step() and other methods
-        self.use_gpu_pipeline = cfg["sim"].get("use_gpu_pipeline", False)
-
-        # Ensure we're using a GPU device if GPU pipeline is enabled
-        if self.use_gpu_pipeline and sim_device == "cpu":
-            logger.warning(
-                "GPU Pipeline is enabled but using CPU device. This may cause errors. Disabling GPU pipeline."
-            )
-            cfg["sim"]["use_gpu_pipeline"] = False
-            self.use_gpu_pipeline = False
-
-        logger.info(
-            f"GPU Pipeline: {'enabled' if self.use_gpu_pipeline else 'disabled'}"
-        )
         logger.info("=============================================\n")
 
         # Core initialization variables
@@ -188,6 +173,12 @@ class DexHandBase(VecTask):
         )
         logger.info("VecTask parent class initialized, creating simulation...")
 
+        # After parent initialization, use_gpu_pipeline is available
+        self.use_gpu_pipeline = self.cfg["sim"]["use_gpu_pipeline"]
+        logger.info(
+            f"GPU Pipeline: {'enabled' if self.use_gpu_pipeline else 'disabled'}"
+        )
+
         # Initialize components
         self._init_components()
 
@@ -209,11 +200,91 @@ class DexHandBase(VecTask):
         # Additional setup (should only happen after components are created)
         self._setup_additional_tensors()
 
+        # Set up default action rule
+        self._setup_default_action_rule()
+
         # Perform control cycle measurement after all setup is complete
         logger.info("Performing control cycle measurement...")
         self._perform_control_cycle_measurement()
 
         logger.info("DexHandBase initialization complete.")
+
+    def _setup_default_action_rule(self):
+        """Set up a default action rule based on control mode."""
+        control_mode = self.cfg["env"].get("controlMode", "position_delta")
+
+        if control_mode == "position":
+
+            def position_action_rule(
+                active_prev_targets, active_rule_targets, actions, config
+            ):
+                """Default position mode action rule."""
+                # Start with rule targets - preserves rule-based control for uncontrolled DOFs
+                targets = active_rule_targets.clone()
+
+                # Only update the DOFs that the policy controls
+                if config["policy_controls_base"]:
+                    # Scale base actions from [-1, 1] to DOF limits
+                    base_lower = self.action_processor.active_lower_limits[:6]
+                    base_upper = self.action_processor.active_upper_limits[:6]
+                    scaled_base = (actions[:, :6] + 1.0) * 0.5 * (
+                        base_upper - base_lower
+                    ) + base_lower
+                    targets[:, :6] = scaled_base
+
+                if config["policy_controls_fingers"]:
+                    # Get finger action indices
+                    finger_start = 6 if config["policy_controls_base"] else 0
+                    finger_end = finger_start + 12
+
+                    # Scale finger actions from [-1, 1] to DOF limits
+                    finger_lower = self.action_processor.active_lower_limits[6:]
+                    finger_upper = self.action_processor.active_upper_limits[6:]
+                    scaled_fingers = (
+                        actions[:, finger_start:finger_end] + 1.0
+                    ) * 0.5 * (finger_upper - finger_lower) + finger_lower
+                    targets[:, 6:] = scaled_fingers
+
+                return targets
+
+            self.action_processor.set_action_rule(position_action_rule)
+
+        else:  # position_delta mode
+
+            def position_delta_action_rule(
+                active_prev_targets, active_rule_targets, actions, config
+            ):
+                """Default position_delta mode action rule."""
+                # Start with rule targets
+                targets = active_rule_targets.clone()
+
+                # Apply deltas scaled by velocity limits
+                ap = self.action_processor
+
+                if config["policy_controls_base"]:
+                    # Base deltas
+                    base_deltas = actions[:, :6] * ap.max_deltas[:6]
+                    targets[:, :6] = active_prev_targets[:, :6] + base_deltas
+
+                if config["policy_controls_fingers"]:
+                    # Get finger action indices
+                    finger_start = 6 if config["policy_controls_base"] else 0
+                    finger_end = finger_start + 12
+
+                    # Finger deltas
+                    finger_deltas = (
+                        actions[:, finger_start:finger_end] * ap.max_deltas[6:]
+                    )
+                    targets[:, 6:] = active_prev_targets[:, 6:] + finger_deltas
+
+                # Clamp to limits
+                targets = torch.clamp(
+                    targets, ap.active_lower_limits, ap.active_upper_limits
+                )
+
+                return targets
+
+            self.action_processor.set_action_rule(position_delta_action_rule)
 
     def _perform_control_cycle_measurement(self):
         """
@@ -308,7 +379,7 @@ class DexHandBase(VecTask):
         self.hand_handles = handles["hand_handles"]
         self.fingerpad_body_handles = handles["fingerpad_body_handles"]
         self.dof_properties_from_asset = handles.get("dof_properties", None)
-        self.hand_actor_indices = handles["hand_actor_indices"]
+        self.hand_local_actor_index = handles["hand_local_actor_index"]
 
         # Now create task-specific objects AFTER hands are created
         # This ensures hands are always actor index 0
@@ -328,28 +399,31 @@ class DexHandBase(VecTask):
             self.envs
         )
 
-        # IMPORTANT: Isaac Gym uses different index types for different operations:
-        # 1. Actor indices: Used for DOF operations (set_dof_state, set_dof_position_target)
-        #    - Stored in hand_actor_indices (list) and hand_actor_indices_tensor (tensor)
-        #    - Points to the articulated actor in the environment
-        # 2. Rigid body indices: Used for pose/state queries (rigid_body_states tensor)
-        #    - When all environments have the same index: stored as single constant
-        #    - When indices differ: stored as tensor for vectorized operations
-        #    - Points to specific rigid bodies within the global rigid body array
-        # These are NOT interchangeable - using the wrong index type will cause errors!
+        # IMPORTANT: We now use LOCAL indices within each environment:
+        # 1. Local actor index: For DOF operations, typically 0 for single-actor environments
+        # 2. Local rigid body indices: For accessing rigid body states within each environment
+        # Isaac Gym APIs that need global indices will compute them from local indices
 
-        # Store rigid body indices - all environments must have identical structure
-        self.hand_rigid_body_index = rigid_body_indices["hand_rigid_body_index"]
-        if self.hand_rigid_body_index is None:
+        # Store LOCAL indices - all environments have identical structure
+        self.hand_local_rigid_body_index = rigid_body_indices[
+            "hand_local_rigid_body_index"
+        ]
+        if self.hand_local_rigid_body_index is None:
             raise RuntimeError(
-                "hand_rigid_body_index is None - HandInitializer should have validated identical indices"
+                "hand_local_rigid_body_index is None - HandInitializer should have set local index"
             )
 
-        self.fingertip_indices = rigid_body_indices["fingertip_indices"]
-        self.fingerpad_indices = rigid_body_indices["fingerpad_indices"]
-        self.contact_force_body_indices = rigid_body_indices[
-            "contact_force_body_indices"
+        self.fingertip_local_indices = rigid_body_indices["fingertip_local_indices"]
+        self.fingerpad_local_indices = rigid_body_indices["fingerpad_local_indices"]
+        self.contact_force_local_body_indices = rigid_body_indices[
+            "contact_force_local_body_indices"
         ]
+
+        # Store conversion info for debugging
+        self._env0_first_body_global_idx = rigid_body_indices[
+            "_env0_first_body_global_idx"
+        ]
+        self._num_bodies_per_env = rigid_body_indices["_num_bodies_per_env"]
 
         # Create tensor manager after environment setup
         self.tensor_manager = TensorManager(parent=self)
@@ -368,7 +442,9 @@ class DexHandBase(VecTask):
         logger.debug("Simulation prepared successfully")
 
         # Set up tensors
-        tensors = self.tensor_manager.setup_tensors(self.contact_force_body_indices)
+        tensors = self.tensor_manager.setup_tensors(
+            self.contact_force_local_body_indices
+        )
         self.dof_state = tensors["dof_state"]
         self.dof_pos = tensors["dof_pos"]
         self.dof_vel = tensors["dof_vel"]
@@ -433,8 +509,8 @@ class DexHandBase(VecTask):
             parent=self,
             dof_state=self.dof_state,
             root_state_tensor=self.actor_root_state_tensor,
-            hand_actor_indices=self.hand_actor_indices_tensor,
-            hand_rigid_body_index=self.hand_rigid_body_index,
+            hand_local_actor_index=self.hand_local_actor_index,
+            hand_local_rigid_body_index=self.hand_local_rigid_body_index,
             task=self.task,
             max_episode_length=self.max_episode_length,
         )
@@ -536,17 +612,8 @@ class DexHandBase(VecTask):
         """
         Set up additional tensors needed after component initialization.
         """
-        # Create observation buffer
-        self.obs_buf = torch.zeros(
-            (self.num_envs, self.observation_encoder.num_observations),
-            device=self.device,
-        )
-
-        # Create states buffer
-        self.states_buf = torch.zeros(
-            (self.num_envs, self.observation_encoder.num_observations),
-            device=self.device,
-        )
+        # Note: obs_buf and states_buf are now initialized in _init_components
+        # after observation_encoder.initialize() sets num_observations
 
         # Create reward buffer
         self.rew_buf = torch.zeros((self.num_envs,), device=self.device)
@@ -575,13 +642,15 @@ class DexHandBase(VecTask):
         # Set up action space
         # action_processor must exist after _init_components()
         # Calculate action space size
+        num_actions = 0
         if self.action_processor.policy_controls_hand_base:
-            self.num_actions = self.action_processor.NUM_BASE_DOFS
-        else:
-            self.num_actions = 0
+            num_actions += self.action_processor.NUM_BASE_DOFS
 
         if self.action_processor.policy_controls_fingers:
-            self.num_actions += self.action_processor.NUM_ACTIVE_FINGER_DOFS
+            num_actions += self.action_processor.NUM_ACTIVE_FINGER_DOFS
+
+        # Now set the property once we have the final value
+        self.num_actions = num_actions
 
         # Create the action space
         self.actions = torch.zeros(
@@ -618,19 +687,20 @@ class DexHandBase(VecTask):
         # Set observation space dimensions needed by VecTask
         self.num_observations = self.observation_encoder.num_observations
 
+        # Now initialize observation and state buffers with correct size
+        self.obs_buf = torch.zeros(
+            (self.num_envs, self.num_observations),
+            device=self.device,
+        )
+        self.states_buf = torch.zeros(
+            (self.num_envs, self.num_observations),
+            device=self.device,
+        )
+
         # ObservationEncoder now accesses control_dt directly from physics_manager via property decorator
 
         # Create extras dictionary for additional info
         self.extras = {}
-
-    @property
-    def hand_actor_indices_tensor(self):
-        """Access hand actor indices as tensor for DOF operations."""
-        import torch
-
-        return torch.tensor(
-            self.hand_actor_indices, dtype=torch.int32, device=self.device
-        )
 
     @property
     def episode_time(self):
@@ -759,7 +829,7 @@ class DexHandBase(VecTask):
         """Process state after physics simulation step."""
         try:
             # Refresh tensors from simulation
-            self.tensor_manager.refresh_tensors(self.contact_force_body_indices)
+            self.tensor_manager.refresh_tensors(self.contact_force_local_body_indices)
 
             # Observations were already computed in pre_physics_step
             # We just need to return them here
@@ -794,7 +864,7 @@ class DexHandBase(VecTask):
                 # rigid_body_states shape: [num_envs, num_bodies, 13]
                 # Extract positions for all hands using the constant index
                 hand_positions = self.rigid_body_states[
-                    :, self.hand_rigid_body_index, :3
+                    :, self.hand_local_rigid_body_index, :3
                 ]
                 self.viewer_controller.update_camera_position(hand_positions)
 
@@ -1230,3 +1300,24 @@ class DexHandBase(VecTask):
     def compute_point_in_hand_frame(self, pos_world, hand_pos, hand_rot):
         """Convert a point from world frame to hand frame."""
         return point_in_hand_frame(pos_world, hand_pos, hand_rot)
+
+    @property
+    def observation_space(self):
+        """Return the observation space for RL libraries."""
+        import gym
+
+        return gym.spaces.Box(
+            low=-float("inf"),
+            high=float("inf"),
+            shape=(self.num_observations,),
+            dtype=np.float32,
+        )
+
+    @property
+    def action_space(self):
+        """Return the action space for RL libraries."""
+        import gym
+
+        return gym.spaces.Box(
+            low=-1.0, high=1.0, shape=(self.num_actions,), dtype=np.float32
+        )

@@ -28,8 +28,8 @@ class ResetManager:
         parent,
         dof_state,
         root_state_tensor,
-        hand_actor_indices,
-        hand_rigid_body_index,
+        hand_local_actor_index,
+        hand_local_rigid_body_index,
         task,
         max_episode_length,
     ):
@@ -40,8 +40,8 @@ class ResetManager:
             parent: Parent DexHandBase instance
             dof_state: DOF state tensor reference
             root_state_tensor: Root state tensor reference
-            hand_actor_indices: Hand actor indices for DOF operations
-            hand_rigid_body_index: Hand rigid body index for pose operations (constant across envs)
+            hand_local_actor_index: Local actor index within each environment (typically 0)
+            hand_local_rigid_body_index: Local rigid body index for hand base
             task: Task instance (may have reset_task method)
             max_episode_length: Maximum episode length from config
         """
@@ -53,8 +53,8 @@ class ResetManager:
         # Store dependencies
         self.dof_state = dof_state
         self.root_state_tensor = root_state_tensor
-        self.hand_actor_indices = hand_actor_indices
-        self.hand_rigid_body_index = hand_rigid_body_index
+        self.hand_local_actor_index = hand_local_actor_index
+        self.hand_local_rigid_body_index = hand_local_rigid_body_index
         self.task = task
 
         # Reset and progress buffers - will be set by set_buffers()
@@ -307,12 +307,6 @@ class ResetManager:
             # Skip this section for fixed-base configuration
             if False:  # Disabled for fixed-base hands
                 # Vectorized root state reset for future use
-                # Validate input parameters
-                if len(self.hand_rigid_body_indices) != self.num_envs:
-                    raise RuntimeError(
-                        f"hand_rigid_body_indices length {len(self.hand_rigid_body_indices)} doesn't match num_envs {self.num_envs}"
-                    )
-
                 # Check if any env_ids are out of bounds
                 max_env_id = env_ids.max().item() if len(env_ids) > 0 else -1
                 if max_env_id >= self.num_envs:
@@ -320,21 +314,12 @@ class ResetManager:
                         f"Environment ID {max_env_id} exceeds number of environments {self.num_envs}"
                     )
 
-                # Get hand indices for environments being reset
-                # All environments have the same rigid body index
-                hand_rigid_body_indices_to_reset = torch.full(
-                    (len(env_ids),),
-                    self.hand_rigid_body_index,
-                    device=self.device,
-                    dtype=torch.long,
-                )
-
-                # Validate all hand indices
-                if torch.any(
-                    hand_rigid_body_indices_to_reset >= self.root_state_tensor.shape[1]
-                ):
+                # All environments have the same local rigid body index
+                # The root_state_tensor is shaped (num_envs, num_bodies_per_env, 13)
+                # so we can use the local index directly
+                if self.hand_local_rigid_body_index >= self.root_state_tensor.shape[1]:
                     raise RuntimeError(
-                        f"One or more hand indices exceed root_state_tensor bodies dimension {self.root_state_tensor.shape[1]}"
+                        f"Hand local rigid body index {self.hand_local_rigid_body_index} exceeds root_state_tensor bodies dimension {self.root_state_tensor.shape[1]}"
                     )
 
                 # Set positions - vectorized
@@ -356,9 +341,9 @@ class ResetManager:
                     random_offsets *= position_range
                     positions += random_offsets
 
-                # Set positions using advanced indexing
+                # Set positions using local index
                 self.root_state_tensor[
-                    env_ids[:, None], hand_rigid_body_indices_to_reset[:, None], 0:3
+                    env_ids, self.hand_local_rigid_body_index, 0:3
                 ] = positions
 
                 # Set rotations - vectorized
@@ -383,14 +368,14 @@ class ResetManager:
                     rotations[:, 2] = torch.sin(half_angles)  # z component
                     rotations[:, 3] = torch.cos(half_angles)  # w component
 
-                # Set rotations using advanced indexing
+                # Set rotations using local index
                 self.root_state_tensor[
-                    env_ids[:, None], hand_rigid_body_indices_to_reset[:, None], 3:7
+                    env_ids, self.hand_local_rigid_body_index, 3:7
                 ] = rotations
 
-                # Zero velocities - vectorized
+                # Zero velocities using local index
                 self.root_state_tensor[
-                    env_ids[:, None], hand_rigid_body_indices_to_reset[:, None], 7:13
+                    env_ids, self.hand_local_rigid_body_index, 7:13
                 ] = 0
             else:
                 # No hand indices provided, skipping hand pose reset
@@ -404,9 +389,13 @@ class ResetManager:
                 pass
 
             # Apply DOF states to simulation
-            # For fixed-base hands, we only need to apply DOF states
+            # Use the local actor index for the hand
             self.physics_manager.apply_dof_states(
-                self.gym, self.sim, env_ids, self.dof_state, self.hand_actor_indices
+                self.gym,
+                self.sim,
+                env_ids,
+                self.dof_state,
+                actor_index=self.hand_local_actor_index,
             )
 
             # Reset action processor targets to avoid jumps after reset

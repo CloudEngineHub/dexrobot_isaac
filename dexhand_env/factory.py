@@ -5,15 +5,16 @@ This module provides factory functions for creating DexHand environments
 with different tasks.
 """
 
-# Import PyTorch
-import torch
-
 # Import loguru
 from loguru import logger
 
+# Import tasks first (they will import Isaac Gym)
 from dexhand_env.tasks.dexhand_base import DexHandBase
 from dexhand_env.tasks.dex_grasp_task import DexGraspTask
 from dexhand_env.tasks.base_task import BaseTask
+
+# Import PyTorch after Isaac Gym modules
+import torch
 
 
 def create_dex_env(
@@ -88,3 +89,74 @@ def create_dex_env(
 
         traceback.print_exc()
         raise
+
+
+def make_env(
+    task_name: str,
+    num_envs: int,
+    sim_device: str,
+    rl_device: str,
+    graphics_device_id: int,
+    headless: bool,
+    cfg: dict = None,
+    virtual_screen_capture: bool = False,
+    force_render: bool = False,
+):
+    """
+    Create a DexHand environment for RL training.
+
+    This is the main entry point for creating environments compatible with
+    RL libraries like rl_games.
+
+    Args:
+        task_name: Name of the task (e.g., "BaseTask", "DexGrasp")
+        num_envs: Number of parallel environments
+        sim_device: Device for physics simulation (e.g., "cuda:0", "cpu")
+        rl_device: Device for RL algorithm (e.g., "cuda:0", "cpu")
+        graphics_device_id: GPU device ID for rendering
+        headless: Whether to run without visualization
+        cfg: Optional configuration dictionary (will load from file if not provided)
+        virtual_screen_capture: Whether to enable virtual screen capture
+        force_render: Whether to force rendering even in headless mode
+
+    Returns:
+        DexHandBase environment instance
+    """
+    # Load configuration if not provided
+    if cfg is None:
+        from dexhand_env.utils.config_utils import load_config
+
+        config_path = f"dexhand_env/cfg/task/{task_name}.yaml"
+        cfg = load_config(config_path)
+
+    # Ensure numEnvs is set in config
+    if "numEnvs" not in cfg["env"]:
+        cfg["env"]["numEnvs"] = num_envs
+    elif cfg["env"]["numEnvs"] != num_envs:
+        logger.info(f"Updating numEnvs from {cfg['env']['numEnvs']} to {num_envs}")
+        cfg["env"]["numEnvs"] = num_envs
+
+    # Map task names for compatibility
+    task_map = {
+        "BaseTask": "Base",
+        "DexGraspTask": "DexGrasp",
+        "Base": "Base",
+        "DexGrasp": "DexGrasp",
+        "DexHand": "Base",  # DexHand maps to Base task
+    }
+
+    mapped_task = task_map.get(task_name, task_name)
+
+    # Create environment using existing factory function
+    env = create_dex_env(
+        task_name=mapped_task,
+        cfg=cfg,
+        rl_device=rl_device,
+        sim_device=sim_device,
+        graphics_device_id=graphics_device_id,
+        headless=headless,
+        virtual_screen_capture=virtual_screen_capture,
+        force_render=force_render,
+    )
+
+    return env

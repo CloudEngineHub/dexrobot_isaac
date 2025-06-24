@@ -1,5 +1,30 @@
 # Base Task Configuration File
 
+# Physics engine configuration
+physics_engine: "physx"
+
+# Simulation parameters
+sim:
+  dt: 0.005                       # High-fidelity physics (200 Hz) for optimal performance
+  substeps: 4                     # Reduced due to higher frequency
+  gravity: [0.0, 0.0, -9.81]
+  num_client_threads: 0
+
+  physx:
+    solver_type: 1                # 0: PCG, 1: TGS
+    num_position_iterations: 16   # Optimized for smaller timestep
+    num_velocity_iterations: 0    # Set to 0 based on NVIDIA recommendations
+    contact_offset: 0.001         # Balanced value for 200 Hz physics
+    rest_offset: 0.003            # Appropriate for smaller timestep
+    bounce_threshold_velocity: 0.15  # Moderate value for 200 Hz
+    max_depenetration_velocity: 0.2  # Optimized for stable contact
+    default_buffer_size_multiplier: 4.0  # Optimized for performance
+    num_subscenes: 0
+    contact_collection: 1         # 1: CC_LAST_SUBSTEP (critical for GPU pipeline)
+    gpu_contact_pairs_per_env: 512  # Contact pairs per environment (will be auto-multiplied by num_envs)
+    always_use_articulations: true  # Always use articulations for stability
+    num_threads: 4                # Standard CPU threads
+
 env:
   # Task parameters
   episodeLength: 300              # Maximum number of steps per episode
@@ -81,23 +106,6 @@ env:
     energy: 0.1                   # Scale for energy efficiency reward
     contact: 0.5                  # Scale for contact reward
     success: 10.0                 # Scale for task success reward
-
-sim:
-  dt: 0.005                       # High-fidelity physics (200 Hz) for optimal performance
-  substeps: 4                     # Reduced due to higher frequency
-  physx:
-    solver_type: 1                # 0: PCG, 1: TGS
-    num_position_iterations: 16    # Optimized for smaller timestep
-    num_velocity_iterations: 0    # Set to 0 based on NVIDIA recommendations (doc: negatively impacts convergence)
-    contact_offset: 0.001         # Balanced value for 200 Hz physics
-    rest_offset: 0.003            # Appropriate for smaller timestep
-    contact_collection: 1         # 1: CC_LAST_SUBSTEP (critical for GPU pipeline)
-    default_buffer_size_multiplier: 4.0  # Optimized for performance
-    gpu_contact_pairs_per_env: 512  # Contact pairs per environment (will be multiplied by num_envs)
-    always_use_articulations: true  # Always use articulations for stability
-    bounce_threshold_velocity: 0.15  # Moderate value for 200 Hz
-    max_depenetration_velocity: 0.2  # Optimized for stable contact
-    num_threads: 4                # Standard CPU threads
 
 # These parameters are passed to training algorithms
 task:

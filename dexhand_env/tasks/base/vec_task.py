@@ -8,9 +8,13 @@ from abc import ABC
 from typing import Dict, Any
 
 import numpy as np
-import torch
 import random
+
+# Import IsaacGym first (before torch)
 from isaacgym import gymapi
+
+# Then import torch
+import torch
 from loguru import logger
 
 
@@ -93,8 +97,8 @@ class Env(ABC):
 
         self.max_episode_length = self.cfg["env"]["episodeLength"]
         self.num_envs = self.cfg["env"]["numEnvs"]
-        self.num_observations = 0
-        self.num_actions = 0
+        self._num_observations = 0  # Use private variable
+        self._num_actions = 0  # Use private variable
         self.num_states = 0
 
         # Observation and action spaces
@@ -107,6 +111,37 @@ class Env(ABC):
 
         # Set random seed
         self.seed(self.cfg.get("seed", 42))
+
+    @property
+    def num_observations(self):
+        """Number of observations. Fail-fast if accessed before initialization."""
+        if self._num_observations == 0:
+            raise RuntimeError(
+                "num_observations accessed before initialization. "
+                "This value is only available after the environment is fully initialized "
+                "and reset() has been called at least once."
+            )
+        return self._num_observations
+
+    @num_observations.setter
+    def num_observations(self, value):
+        """Set the number of observations."""
+        self._num_observations = value
+
+    @property
+    def num_actions(self):
+        """Number of actions. Fail-fast if accessed before initialization."""
+        if self._num_actions == 0:
+            raise RuntimeError(
+                "num_actions accessed before initialization. "
+                "This value is only available after the environment is fully initialized."
+            )
+        return self._num_actions
+
+    @num_actions.setter
+    def num_actions(self, value):
+        """Set the number of actions."""
+        self._num_actions = value
 
     def seed(self, seed=None):
         if seed is None:
@@ -212,23 +247,14 @@ class VecTask(Env):
         """
         sim_params = gymapi.SimParams()
 
-        # check correct up-axis
-        if config_sim["up_axis"] not in ["z", "y"]:
-            msg = f"Invalid up axis: {config_sim['up_axis']}"
-            logger.warning(msg)
-            raise ValueError(msg)
-
         # assign general sim parameters
         sim_params.dt = config_sim["dt"]
         sim_params.num_client_threads = config_sim.get("num_client_threads", 0)
         sim_params.use_gpu_pipeline = config_sim["use_gpu_pipeline"]
         sim_params.substeps = config_sim.get("substeps", 2)
 
-        # assign up-axis
-        if config_sim["up_axis"] == "z":
-            sim_params.up_axis = gymapi.UP_AXIS_Z
-        else:
-            sim_params.up_axis = gymapi.UP_AXIS_Y
+        # Hard-code up-axis to Z (required by all DexHand environments)
+        sim_params.up_axis = gymapi.UP_AXIS_Z
 
         # assign gravity
         sim_params.gravity = gymapi.Vec3(*config_sim["gravity"])

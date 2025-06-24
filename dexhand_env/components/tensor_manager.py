@@ -6,12 +6,14 @@ including tensor acquisition, setup, and synchronization.
 """
 
 # Import standard libraries
-import torch
 import numpy as np
 from loguru import logger
 
-# Import IsaacGym
+# Import IsaacGym first (before torch)
 from isaacgym import gymtorch
+
+# Then import torch
+import torch
 
 
 class TensorManager:
@@ -70,10 +72,10 @@ class TensorManager:
 
     @property
     def rigid_body_index_to_name(self):
-        """Access rigid body name mapping from hand_initializer (single source of truth)."""
+        """Access LOCAL rigid body name mapping from hand_initializer (single source of truth)."""
         if self.parent.hand_initializer is None:
             raise RuntimeError("hand_initializer is None - initialization failed")
-        return self.parent.hand_initializer.rigid_body_index_to_name
+        return self.parent.hand_initializer.local_rigid_body_index_to_name
 
     def acquire_tensor_handles(self):
         """
@@ -134,12 +136,12 @@ class TensorManager:
             "actor_root_state": self.actor_root_state_tensor_handle,
         }
 
-    def setup_tensors(self, contact_force_body_indices=None):
+    def setup_tensors(self, contact_force_local_body_indices=None):
         """
         Set up tensors from handles.
 
         Args:
-            contact_force_body_indices: Indices of bodies to monitor for contact forces
+            contact_force_local_body_indices: Local indices of bodies to monitor for contact forces
 
         Returns:
             Dictionary of tensors
@@ -306,7 +308,6 @@ class TensorManager:
         )
 
         # Wrap contact force tensor
-        # Wrap contact force tensor
         contact_forces_flat = gymtorch.wrap_tensor(self._contact_force_tensor_handle)
 
         if contact_forces_flat is None or contact_forces_flat.numel() == 0:
@@ -314,34 +315,47 @@ class TensorManager:
 
         logger.debug(f"Contact forces flat tensor shape: {contact_forces_flat.shape}")
 
-        # Reshape contact forces for contact force bodies
-        if contact_force_body_indices is None or len(contact_force_body_indices) == 0:
+        # Reshape contact forces to (num_envs, num_bodies_per_env, 3)
+        if contact_forces_flat.shape[0] % self.num_envs != 0:
+            raise RuntimeError(
+                f"Contact force tensor shape {contact_forces_flat.shape[0]} is not divisible by num_envs {self.num_envs}"
+            )
+
+        num_bodies_per_env = contact_forces_flat.shape[0] // self.num_envs
+        self.contact_forces_all = contact_forces_flat.view(
+            self.num_envs, num_bodies_per_env, 3
+        )
+        logger.debug(f"Contact forces reshaped to: {self.contact_forces_all.shape}")
+
+        # Now extract forces for specific bodies we're monitoring
+        if (
+            contact_force_local_body_indices is None
+            or len(contact_force_local_body_indices) == 0
+        ):
             raise RuntimeError(
                 "No contact force body indices provided. Cannot set up contact forces."
             )
 
-        # Number of contact force bodies
-        num_contact_bodies = len(contact_force_body_indices[0])
-        logger.debug(f"Number of contact force bodies: {num_contact_bodies}")
+        # Number of contact force bodies to monitor
+        num_contact_bodies = len(contact_force_local_body_indices)
+        logger.debug(f"Number of contact force bodies to monitor: {num_contact_bodies}")
 
-        # Create tensor for contact forces
+        # Create tensor for monitored contact forces
         self.contact_forces = torch.zeros(
             (self.num_envs, num_contact_bodies, 3), device=self.device
         )
-        logger.debug(f"Contact forces tensor shape: {self.contact_forces.shape}")
+        logger.debug(
+            f"Monitored contact forces tensor shape: {self.contact_forces.shape}"
+        )
 
-        # Copy contact forces for each contact body
+        # Copy contact forces for monitored bodies using local indices
+        # Since all environments have the same structure, we use the same local indices
         for i in range(self.num_envs):
-            for j in range(num_contact_bodies):
-                if i < len(contact_force_body_indices) and j < len(
-                    contact_force_body_indices[i]
-                ):
-                    # Get the rigid body index for this contact body
-                    body_idx = contact_force_body_indices[i][j]
-
-                    if body_idx < contact_forces_flat.shape[0]:
-                        # Copy contact force (x, y, z)
-                        self.contact_forces[i, j, :] = contact_forces_flat[body_idx]
+            for j, local_body_idx in enumerate(contact_force_local_body_indices):
+                # Directly use the local index to access the reshaped tensor
+                self.contact_forces[i, j, :] = self.contact_forces_all[
+                    i, local_body_idx, :
+                ]
 
         # Mark tensors as initialized
         self.tensors_initialized = True
@@ -358,12 +372,12 @@ class TensorManager:
             "contact_forces": self.contact_forces,
         }
 
-    def refresh_tensors(self, contact_force_body_indices=None):
+    def refresh_tensors(self, contact_force_local_body_indices=None):
         """
         Refresh tensor data from simulation.
 
         Args:
-            contact_force_body_indices: Indices of bodies to monitor for contact forces
+            contact_force_local_body_indices: Local indices of bodies to monitor for contact forces
 
         Returns:
             Dictionary of refreshed tensors
@@ -392,8 +406,8 @@ class TensorManager:
 
             # Refresh contact forces
             if (
-                contact_force_body_indices is None
-                or len(contact_force_body_indices) == 0
+                contact_force_local_body_indices is None
+                or len(contact_force_local_body_indices) == 0
             ):
                 raise RuntimeError(
                     "No contact force body indices provided. Cannot refresh contact forces."
@@ -407,51 +421,44 @@ class TensorManager:
                     "Contact force tensor is empty or None during refresh"
                 )
 
-            # Debug contact forces detection
+            # Reshape contact forces to (num_envs, num_bodies_per_env, 3)
+            num_bodies_per_env = contact_forces_flat.shape[0] // self.num_envs
+            self.contact_forces_all = contact_forces_flat.view(
+                self.num_envs, num_bodies_per_env, 3
+            )
+
+            # Debug contact forces detection (using local indices)
             if logger._core.min_level <= 10:  # Only if DEBUG level is enabled
-                nonzero_forces = torch.nonzero(contact_forces_flat.abs() > 0.001)
-                if nonzero_forces.numel() > 0:
-                    # Get unique rigid body indices with contact
-                    unique_contact_indices = torch.unique(nonzero_forces[:, 0])
+                # Check each environment separately
+                for env_idx in range(
+                    min(self.num_envs, 2)
+                ):  # Log only first 2 envs to avoid spam
+                    env_forces = self.contact_forces_all[env_idx]
+                    nonzero_forces = torch.nonzero(env_forces.abs().sum(dim=1) > 0.001)
 
-                    # Log each body with contact force
-                    for idx in unique_contact_indices:
-                        idx_int = idx.item()
-                        body_name = self.rigid_body_index_to_name.get(
-                            idx_int, "Unknown body"
-                        )
-                        force_vec = contact_forces_flat[idx_int]
-                        force_mag = torch.norm(force_vec).item()
-                        logger.debug(
-                            f"Contact on '{body_name}' (idx={idx_int}): magnitude={force_mag:.2f}N"
-                        )
+                    if nonzero_forces.numel() > 0:
+                        for local_idx in nonzero_forces[:, 0]:
+                            local_idx_int = local_idx.item()
+                            body_name = self.rigid_body_index_to_name.get(
+                                local_idx_int, f"Body_{local_idx_int}"
+                            )
+                            force_vec = env_forces[local_idx_int]
+                            force_mag = torch.norm(force_vec).item()
+                            logger.debug(
+                                f"Env {env_idx} - Contact on '{body_name}' (local idx={local_idx_int}): magnitude={force_mag:.2f}N"
+                            )
 
-            # Number of contact force bodies
-            num_contact_bodies = len(contact_force_body_indices[0])
+            # Number of contact force bodies to monitor
+            # num_contact_bodies = len(contact_force_local_body_indices)  # Not used, kept for clarity
 
-            # Copy contact forces for each contact body
+            # Copy contact forces for monitored bodies using local indices
+            # All environments have the same local indices
             for i in range(self.num_envs):
-                if i >= len(contact_force_body_indices):
-                    raise RuntimeError(
-                        f"Contact force body indices missing for environment {i}"
-                    )
-
-                for j in range(num_contact_bodies):
-                    if j >= len(contact_force_body_indices[i]):
-                        raise RuntimeError(
-                            f"Contact force body index {j} missing for environment {i}"
-                        )
-
-                    # Get the rigid body index for this contact body
-                    body_idx = contact_force_body_indices[i][j]
-
-                    if body_idx >= contact_forces_flat.shape[0]:
-                        raise RuntimeError(
-                            f"Contact body index {body_idx} exceeds contact forces size {contact_forces_flat.shape[0]}"
-                        )
-
-                    # Copy contact force (x, y, z)
-                    self.contact_forces[i, j, :] = contact_forces_flat[body_idx]
+                for j, local_body_idx in enumerate(contact_force_local_body_indices):
+                    # Directly use the local index
+                    self.contact_forces[i, j, :] = self.contact_forces_all[
+                        i, local_body_idx, :
+                    ]
 
             return {
                 "dof_pos": self.dof_pos,
