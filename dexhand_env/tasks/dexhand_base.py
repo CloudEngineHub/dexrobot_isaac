@@ -324,8 +324,9 @@ class DexHandBase(VecTask):
         # Finish measurement and set control_dt
         self.physics_manager.finish_control_cycle_measurement()
 
-        # Now that control_dt is available, finalize action processor
+        # Now that control_dt is available, finalize action processor and task
         self.action_processor.finalize_setup()
+        self.task.finalize_setup()
 
         logger.info(
             f"Control cycle measurement complete: control_dt = {self.physics_manager.control_dt}"
@@ -386,8 +387,7 @@ class DexHandBase(VecTask):
         # Now create task-specific objects AFTER hands are created
         # This ensures hands are always actor index 0
         for i in range(self.num_envs):
-            if hasattr(self.task, "create_task_objects"):
-                self.task.create_task_objects(self.gym, self.sim, self.envs[i], i)
+            self.task.create_task_objects(self.gym, self.sim, self.envs[i], i)
 
         # Set up viewer
         # CRITICAL: Create viewer even in headless mode for proper DOF control
@@ -457,8 +457,7 @@ class DexHandBase(VecTask):
         self.contact_forces = tensors["contact_forces"]
 
         # Provide tensor references to the task
-        if hasattr(self.task, "set_tensor_references"):
-            self.task.set_tensor_references(self.actor_root_state_tensor)
+        self.task.set_tensor_references(self.actor_root_state_tensor)
 
         # Create physics manager
         self.physics_manager = PhysicsManager(
@@ -859,10 +858,8 @@ class DexHandBase(VecTask):
             task_failure = {}
 
             # Get task-specific success/failure criteria
-            if hasattr(self.task, "check_task_success_criteria"):
-                task_success = self.task.check_task_success_criteria()
-            if hasattr(self.task, "check_task_failure_criteria"):
-                task_failure = self.task.check_task_failure_criteria()
+            task_success = self.task.check_task_success_criteria()
+            task_failure = self.task.check_task_failure_criteria()
 
             # Evaluate termination conditions
             (
@@ -880,22 +877,18 @@ class DexHandBase(VecTask):
             self.reset_buf = should_reset
 
             # Get task rewards
-            if hasattr(self.task, "compute_task_rewards"):
-                self.rew_buf[:], reward_components = self.task.compute_task_rewards(
-                    self.obs_dict
+            self.rew_buf[:], reward_components = self.task.compute_task_rewards(
+                self.obs_dict
+            )
+
+            # Store reward components for logging
+            self.last_reward_components = reward_components
+
+            # Track successes for curriculum learning
+            if "success" in termination_info:
+                self.termination_manager.update_consecutive_successes(
+                    termination_info["success"]
                 )
-
-                # Store reward components for logging
-                self.last_reward_components = reward_components
-
-                # Track successes for curriculum learning
-                if "success" in termination_info:
-                    self.termination_manager.update_consecutive_successes(
-                        termination_info["success"]
-                    )
-            else:
-                self.rew_buf[:] = 0
-                self.last_reward_components = {}
 
             # Add termination rewards to total rewards
             for reward_type, reward_tensor in episode_rewards.items():

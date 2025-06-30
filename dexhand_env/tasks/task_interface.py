@@ -203,5 +203,18 @@ class DexTask(ABC):
             root_state_tensor: Root state tensor for all actors
         """
         # Default implementation stores the reference if task needs it
-        if hasattr(self, "root_state_tensor"):
-            self.root_state_tensor = root_state_tensor
+        self.root_state_tensor = root_state_tensor
+
+    def finalize_setup(self):
+        """
+        Complete setup after physics manager and observation encoder are available.
+
+        This method is called after all components are initialized, allowing
+        tasks to:
+        - Access control_dt from physics manager
+        - Register task states with observation encoder
+        - Perform any other setup that requires access to environment components
+
+        Default implementation does nothing - tasks can override if needed.
+        """
+        pass

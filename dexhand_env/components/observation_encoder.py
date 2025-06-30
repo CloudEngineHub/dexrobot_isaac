@@ -76,6 +76,9 @@ class ObservationEncoder:
         # Task state tracking - allows tasks to register temporal state
         self.task_states = {}
 
+        # Initialize component slice indices - will be populated during observation computation
+        self.component_slice_indices = None
+
     @property
     def num_envs(self):
         """Access num_envs from parent (single source of truth)."""
@@ -99,7 +102,7 @@ class ObservationEncoder:
     @property
     def physics_manager(self):
         """Access physics_manager from parent (single source of truth)."""
-        return self.parent.physics_manager
+        return getattr(self.parent, "physics_manager", None)
 
     @property
     def control_dt(self):
@@ -183,6 +186,24 @@ class ObservationEncoder:
             (self.num_envs, num_actions), device=self.device
         )
 
+        # Build contact force body name to index mapping (needed for contact duration tracking)
+        self.contact_force_body_name_to_index = {}
+        num_contact_bodies = 0
+        if self.hand_initializer.contact_force_body_names is not None:
+            for i, body_name in enumerate(
+                self.hand_initializer.contact_force_body_names
+            ):
+                self.contact_force_body_name_to_index[body_name] = i
+            num_contact_bodies = len(self.hand_initializer.contact_force_body_names)
+
+        # Initialize contact duration tracking state (observer internal state)
+        self.contact_duration_steps = torch.zeros(
+            (self.num_envs, num_contact_bodies), device=self.device
+        )
+        self.prev_contact_binary = torch.zeros(
+            (self.num_envs, num_contact_bodies), device=self.device
+        )
+
         # Compute observation dimension dynamically by creating a test observation
         test_obs_dict = self._compute_default_observations()
         test_task_obs_dict = self._compute_task_observations(test_obs_dict)
@@ -216,24 +237,6 @@ class ObservationEncoder:
         )
         self.states_buf = torch.zeros(
             (self.num_envs, self.num_observations), device=self.device
-        )
-
-        # Build contact force body name to index mapping
-        self.contact_force_body_name_to_index = {}
-        num_contact_bodies = 0
-        if hasattr(self.hand_initializer, "contact_force_body_names"):
-            for i, body_name in enumerate(
-                self.hand_initializer.contact_force_body_names
-            ):
-                self.contact_force_body_name_to_index[body_name] = i
-            num_contact_bodies = len(self.hand_initializer.contact_force_body_names)
-
-        # Initialize contact duration tracking state (observer internal state)
-        self.contact_duration_steps = torch.zeros(
-            (self.num_envs, num_contact_bodies), device=self.device
-        )
-        self.prev_contact_binary = torch.zeros(
-            (self.num_envs, num_contact_bodies), device=self.device
         )
 
     @property
@@ -303,7 +306,7 @@ class ObservationEncoder:
             contact_binary: Boolean tensor of current contact state (num_envs, num_contact_bodies)
         """
         # Skip if not initialized yet (during initial observation computation)
-        if not hasattr(self, "prev_contact_binary"):
+        if self.prev_contact_binary is None:
             return
 
         # Convert to float for easier computation
@@ -644,7 +647,7 @@ class ObservationEncoder:
 
         # Active previous targets (18D: 6 base + 12 finger)
         if (
-            hasattr(self.action_processor, "active_prev_targets")
+            self.action_processor is not None
             and self.action_processor.active_prev_targets is not None
         ):
             obs_dict["active_prev_targets"] = self.action_processor.active_prev_targets
@@ -697,7 +700,11 @@ class ObservationEncoder:
         self._update_contact_duration_tracking(contact_binary)
 
         # Contact duration observation (duration in seconds for each contact body)
-        if hasattr(self, "contact_duration_steps"):
+        if (
+            self.contact_duration_steps is not None
+            and self.physics_manager is not None
+            and self.physics_manager.control_dt is not None
+        ):
             contact_duration_seconds = self.contact_duration_steps * self.control_dt
             obs_dict["contact_duration"] = contact_duration_seconds
         else:
@@ -740,14 +747,12 @@ class ObservationEncoder:
             Dictionary of task-specific observations
         """
         # Check if task provides observations
-        if hasattr(self.parent, "task") and hasattr(
-            self.parent.task, "get_task_observations"
-        ):
-            task_obs = self.parent.task.get_task_observations(default_obs_dict)
-            return task_obs if task_obs is not None else {}
+        if self.parent.task is None:
+            return {}
 
-        # No task or no task observations
-        return {}
+        # Call task method - let it fail if not implemented
+        task_obs = self.parent.task.get_task_observations(default_obs_dict)
+        return task_obs if task_obs is not None else {}
 
     def _concat_selected_observations(
         self, obs_dict: Dict[str, torch.Tensor]
@@ -765,7 +770,7 @@ class ObservationEncoder:
         obs_tensors = []
 
         # Initialize slice indices dictionary if not exists
-        if not hasattr(self, "component_slice_indices"):
+        if self.component_slice_indices is None:
             self.component_slice_indices = {}
 
         current_idx = 0

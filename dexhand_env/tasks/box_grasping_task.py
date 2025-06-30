@@ -71,6 +71,21 @@ class BoxGraspingTask(DexTask):
         self.object_height_weight = cfg["env"]["rewards"]["object_height"]["weight"]
         self.grasp_approach_weight = cfg["env"]["rewards"]["grasp_approach"]["weight"]
 
+        # Task-specific parameters from config
+        task_params = cfg["env"]["task_params"]
+        self.height_threshold = task_params["success_height_threshold"]
+        self.contact_duration_threshold_seconds = task_params[
+            "contact_duration_threshold"
+        ]
+        self.min_fingers_for_grasp = task_params["min_fingers_for_grasp"]
+        self.max_box_distance = task_params["max_box_distance"]
+        self.density_conversion_factor = task_params["density_conversion_factor"]
+        self.grasp_not_started_value = task_params["grasp_not_started_value"]
+        self.box_actor_index = task_params["box_actor_index"]
+
+        # Contact duration will be converted to steps after physics manager is initialized
+        self.contact_duration_threshold_steps = None
+
         # Asset and actor tracking
         self.box_asset = None
         self.box_actor_handles = []  # Store handles during creation
@@ -82,10 +97,33 @@ class BoxGraspingTask(DexTask):
         self.box_velocities = None
         self.initial_box_positions = None
 
-        # Success criteria parameters
-        self.height_threshold = 0.2  # 20cm
-        self.contact_duration_threshold = 400  # 2 seconds at 200Hz
-        self.min_fingers_for_grasp = 2
+    def finalize_setup(self):
+        """
+        Complete setup after physics manager is available.
+
+        This is called after the physics manager has been created,
+        allowing us to access control_dt.
+        """
+        # Convert contact duration from seconds to steps
+        if self.parent_env is None:
+            raise RuntimeError("parent_env is None - initialization failed")
+
+        control_dt = self.parent_env.physics_manager.control_dt
+        self.contact_duration_threshold_steps = int(
+            self.contact_duration_threshold_seconds / control_dt
+        )
+        logger.info(
+            f"Contact duration threshold: {self.contact_duration_threshold_seconds}s = "
+            f"{self.contact_duration_threshold_steps} steps at {1/control_dt}Hz"
+        )
+
+        # Register grasp timing state with observation encoder (now available)
+        if self.parent_env.observation_encoder is None:
+            raise RuntimeError("observation_encoder is None - initialization failed")
+
+        self.parent_env.observation_encoder.register_task_state(
+            "grasp_start_steps", (self.num_envs,), dtype=torch.long
+        )
 
     def load_task_assets(self):
         """Load box asset for the grasping task."""
@@ -94,7 +132,7 @@ class BoxGraspingTask(DexTask):
         # Create box asset
         asset_options = gymapi.AssetOptions()
         asset_options.density = (
-            1000.0 * self.box_mass / (self.box_size**3)
+            self.density_conversion_factor * self.box_mass / (self.box_size**3)
         )  # Compute density from mass
         asset_options.fix_base_link = False
 
@@ -178,18 +216,14 @@ class BoxGraspingTask(DexTask):
         # Extract box states
         # For GPU pipeline, we need to index differently
         # root_state_tensor shape: (num_envs, num_actors_per_env, 13)
-        local_box_idx = 1  # Box is the second actor in each environment
         self.box_states = self.root_state_tensor[
-            :, local_box_idx, :
+            :, self.box_actor_index, :
         ]  # Shape: (num_envs, 13)
         self.box_positions = self.box_states[:, :3]
         self.box_velocities = self.box_states[:, 7:10]
 
-        # Register grasp timing state with observation encoder
-        if hasattr(self.parent_env, "observation_encoder"):
-            self.parent_env.observation_encoder.register_task_state(
-                "grasp_start_steps", (self.num_envs,), dtype=torch.long
-            )
+        # Registration of task state will happen later in finalize_setup
+        # when observation encoder is available
 
     def reset_task_state(self, env_ids: torch.Tensor):
         """
@@ -202,47 +236,41 @@ class BoxGraspingTask(DexTask):
             return
 
         # Skip if tensors not set up yet (called during initialization)
-        if not hasattr(self, "root_state_tensor") or self.root_state_tensor is None:
+        if self.root_state_tensor is None:
             return
-        if self.box_actor_indices is None or not isinstance(
-            self.box_actor_indices, torch.Tensor
-        ):
+        if self.box_actor_indices is None:
             return
 
-        # Reset box positions with randomization
-        for i, env_id in enumerate(env_ids):
-            # Random X,Y position
-            x_offset = (torch.rand(1, device=self.device) * 2 - 1) * self.box_xy_range
-            y_offset = (torch.rand(1, device=self.device) * 2 - 1) * self.box_xy_range
+        # Reset box positions with randomization - vectorized
+        num_resets = len(env_ids)
 
-            self.initial_box_positions[env_id, 0] = x_offset.item()
-            self.initial_box_positions[env_id, 1] = y_offset.item()
-            self.initial_box_positions[env_id, 2] = self.box_z
+        # Generate random positions for all environments at once
+        x_offsets = (
+            torch.rand(num_resets, device=self.device) * 2 - 1
+        ) * self.box_xy_range
+        y_offsets = (
+            torch.rand(num_resets, device=self.device) * 2 - 1
+        ) * self.box_xy_range
 
-            # Set in root state tensor
-            # For GPU pipeline, root_state_tensor might be organized as (num_envs, num_actors_per_env, 13)
-            # Get the local actor index within the environment
-            local_box_idx = (
-                1  # Box is the second actor (after hand) in each environment
-            )
+        # Update initial positions
+        self.initial_box_positions[env_ids, 0] = x_offsets
+        self.initial_box_positions[env_ids, 1] = y_offsets
+        self.initial_box_positions[env_ids, 2] = self.box_z
 
-            # Set position
-            self.root_state_tensor[env_id, local_box_idx, 0] = x_offset
-            self.root_state_tensor[env_id, local_box_idx, 1] = y_offset
-            self.root_state_tensor[env_id, local_box_idx, 2] = self.box_z
+        # Set in root state tensor - vectorized
+        self.root_state_tensor[env_ids, self.box_actor_index, 0] = x_offsets
+        self.root_state_tensor[env_ids, self.box_actor_index, 1] = y_offsets
+        self.root_state_tensor[env_ids, self.box_actor_index, 2] = self.box_z
 
-            # Zero velocities
-            self.root_state_tensor[env_id, local_box_idx, 7:13] = 0
+        # Zero velocities
+        self.root_state_tensor[env_ids, self.box_actor_index, 7:13] = 0
 
-        # Clear grasp timing via observer state
-        if (
-            hasattr(self.parent_env, "observation_encoder")
-            and "grasp_start_steps" in self.parent_env.observation_encoder.task_states
-        ):
+        # Clear grasp timing via observer state (only if already registered)
+        if "grasp_start_steps" in self.parent_env.observation_encoder.task_states:
             grasp_start = self.parent_env.observation_encoder.get_task_state(
                 "grasp_start_steps"
             )
-            grasp_start[env_ids] = -1  # -1 indicates no grasp started
+            grasp_start[env_ids] = self.grasp_not_started_value
 
     def get_task_observations(
         self, obs_dict: Dict[str, torch.Tensor]
@@ -305,20 +333,18 @@ class BoxGraspingTask(DexTask):
 
         # Check contact duration criteria
         # Access contact duration directly from observation encoder
-        if hasattr(self.parent_env.observation_encoder, "contact_duration_steps"):
-            # Get contact durations in steps
-            contact_durations = (
-                self.parent_env.observation_encoder.contact_duration_steps
+        if self.contact_duration_threshold_steps is None:
+            raise RuntimeError(
+                "contact_duration_threshold_steps not set - finalize_setup not called"
             )
-            # Count fingers with sufficient contact (2 seconds = 400 steps at 200Hz)
-            sufficient_contact = (
-                contact_durations >= self.contact_duration_threshold
-            ).sum(dim=1) >= self.min_fingers_for_grasp
-        else:
-            # If not available yet, no success
-            sufficient_contact = torch.zeros(
-                self.num_envs, dtype=torch.bool, device=self.device
-            )
+
+        # Get contact durations in steps
+        contact_durations = self.parent_env.observation_encoder.contact_duration_steps
+
+        # Count fingers with sufficient contact
+        sufficient_contact = (
+            contact_durations >= self.contact_duration_threshold_steps
+        ).sum(dim=1) >= self.min_fingers_for_grasp
 
         # Both criteria must be met
         success = height_success & sufficient_contact
@@ -384,8 +410,8 @@ class BoxGraspingTask(DexTask):
         # Reset if box falls below table
         box_fell = self.box_positions[:, 2] < 0.0
 
-        # Reset if box gets too far from origin (e.g., > 0.5m)
+        # Reset if box gets too far from origin
         box_distance = torch.norm(self.box_positions[:, :2], dim=1)
-        box_too_far = box_distance > 0.5
+        box_too_far = box_distance > self.max_box_distance
 
         return box_fell | box_too_far
