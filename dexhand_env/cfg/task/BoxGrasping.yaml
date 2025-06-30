@@ -51,8 +51,8 @@ env:
   logLevel: "INFO"
   enableComponentDebugLogs: false
 
-  # Blind policy - only tactile feedback
-  observationKeys:
+  # Policy observation keys - what the policy actually sees (blind policy design)
+  policyObservationKeys:
     - base_dof_pos
     - active_finger_dof_pos
     - base_dof_vel
@@ -62,6 +62,7 @@ env:
     - hand_pose          # Correct key name (not hand_base_pose)
     - prev_actions
     # NO box observations - policy is blind!
+    # All other observations (box pose, distances) are computed for rewards/analysis only
 
   # Binary contact threshold (1N)
   contactBinaryThreshold: 1.0
@@ -99,27 +100,36 @@ env:
       fingertip_threshold: 0.0
       fingerpad_threshold: 0.0
 
-  # Reward weights (for common rewards)
+  # Reward weights (for common rewards) - scaled down to prevent auxiliary rewards from dominating
   rewardWeights:
-    # Common rewards from base
-    alive: 1.0
-    height_safety: 10.0
-    finger_velocity: 0.1
-    hand_velocity: 0.1
-    hand_angular_velocity: 0.1
-    joint_limit: 0.5
-    finger_acceleration: 0.05
-    hand_acceleration: 0.05
-    hand_angular_acceleration: 0.05
-    contact_stability: 0.2
+    # Common rewards from base - much smaller to focus on task performance
+    alive: 0.01              # Small alive bonus: 0.01 * 2000 steps = 20 points max
+    height_safety: 0.1       # Height safety: ~0.1 per step = ~200 points max
+    finger_velocity: 0.01    # Small velocity penalties
+    hand_velocity: 0.01
+    hand_angular_velocity: 0.01
+    joint_limit: 0.05        # Small joint limit penalty
+    finger_acceleration: 0.005
+    hand_acceleration: 0.005
+    hand_angular_acceleration: 0.005
+    contact_stability: 0.02
 
   # Task-specific rewards (handled by BoxGraspingTask)
   rewards:
-    # Task-specific rewards
+    # Task-specific rewards - these should be the main learning signal
     object_height:
+      weight: 50.0           # Main reward for lifting object
+    grasp_approach:         # Reward any contact with object
+      weight: 5.0
+    finger_to_object:       # Reward for getting fingers close to object
       weight: 10.0
-    grasp_approach:     # Reward any contact
-      weight: 1.0
+    hand_to_object:         # Reward for getting hand close to object
+      weight: 5.0
+
+  # Termination rewards (applied once at episode end)
+  successReward: 100.0      # Large bonus for successful grasp and lift
+  failurePenalty: 50.0      # Penalty for failure (touching ground, etc.)
+  timeoutReward: -10.0      # Small penalty for not completing task in time
 
   # Task-specific parameters
   task_params:

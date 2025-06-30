@@ -70,6 +70,10 @@ class BoxGraspingTask(DexTask):
         # Reward configuration
         self.object_height_weight = cfg["env"]["rewards"]["object_height"]["weight"]
         self.grasp_approach_weight = cfg["env"]["rewards"]["grasp_approach"]["weight"]
+        self.finger_to_object_weight = cfg["env"]["rewards"]["finger_to_object"][
+            "weight"
+        ]
+        self.hand_to_object_weight = cfg["env"]["rewards"]["hand_to_object"]["weight"]
 
         # Task-specific parameters from config
         task_params = cfg["env"]["task_params"]
@@ -278,16 +282,53 @@ class BoxGraspingTask(DexTask):
         """
         Get task-specific observations.
 
-        For blind policy, returns empty dict - no object observations!
+        These observations are computed for reward calculation and analysis,
+        but are NOT exposed to the policy (blind policy design).
 
         Args:
             obs_dict: Dictionary of current observations
 
         Returns:
-            Empty dictionary (blind policy)
+            Dictionary of task observations (for rewards/analysis only)
         """
-        # Blind policy - no object observations
-        return {}
+        task_obs = {}
+
+        # Object pose (position + orientation)
+        if self.box_positions is not None:
+            task_obs["object_pos"] = self.box_positions
+            task_obs["object_vel"] = self.box_velocities
+
+        # Compute finger-to-object distances for reward calculation
+        if "fingertip_poses_world" in obs_dict and self.box_positions is not None:
+            fingertip_poses = obs_dict["fingertip_poses_world"]  # (num_envs, 35)
+            fingertip_poses_reshaped = fingertip_poses.view(self.num_envs, 5, 7)
+            fingertip_positions = fingertip_poses_reshaped[:, :, :3]  # (num_envs, 5, 3)
+
+            # Compute distances from each fingertip to object center
+            object_pos_expanded = self.box_positions.unsqueeze(1).expand(
+                -1, 5, -1
+            )  # (num_envs, 5, 3)
+            finger_to_object_distances = torch.norm(
+                fingertip_positions - object_pos_expanded, dim=2
+            )  # (num_envs, 5)
+
+            # Minimum distance from any fingertip to object
+            min_finger_to_object_distance = torch.min(
+                finger_to_object_distances, dim=1
+            )[0]
+            task_obs["finger_to_object_distances"] = finger_to_object_distances
+            task_obs["min_finger_to_object_distance"] = min_finger_to_object_distance
+
+        # Compute hand-to-object distance
+        if "hand_pose" in obs_dict and self.box_positions is not None:
+            hand_poses = obs_dict["hand_pose"]  # (num_envs, 7)
+            hand_positions = hand_poses[:, :3]  # (num_envs, 3)
+            hand_to_object_distance = torch.norm(
+                hand_positions - self.box_positions, dim=1
+            )  # (num_envs,)
+            task_obs["hand_to_object_distance"] = hand_to_object_distance
+
+        return task_obs
 
     def compute_task_reward_terms(
         self, obs_dict: Dict[str, torch.Tensor]
@@ -304,16 +345,39 @@ class BoxGraspingTask(DexTask):
         rewards = {}
 
         # Object height reward - encourage lifting
-        height_above_table = self.box_positions[:, 2] - self.box_z
-        height_reward = torch.clamp(
-            height_above_table / (self.height_threshold - self.box_z), 0, 1
-        )
-        rewards["object_height"] = height_reward * self.object_height_weight
+        if self.box_positions is not None:
+            height_above_table = self.box_positions[:, 2] - self.box_z
+            height_reward = torch.clamp(
+                height_above_table / (self.height_threshold - self.box_z), 0, 1
+            )
+            rewards["object_height"] = height_reward * self.object_height_weight
 
         # Grasp approach reward - encourage any contact
         if "contact_binary" in obs_dict:
             any_contact = obs_dict["contact_binary"].any(dim=1).float()
             rewards["grasp_approach"] = any_contact * self.grasp_approach_weight
+
+        # Finger-to-object distance reward - encourage getting fingers close to object
+        if "min_finger_to_object_distance" in obs_dict:
+            # Exponential reward: max reward when distance is 0, decays as distance increases
+            min_distance = obs_dict["min_finger_to_object_distance"]
+            finger_distance_reward = torch.exp(
+                -2.0 * min_distance
+            )  # Decays quickly with distance
+            rewards["finger_to_object"] = (
+                finger_distance_reward * self.finger_to_object_weight
+            )
+
+        # Hand-to-object distance reward - encourage getting hand close to object
+        if "hand_to_object_distance" in obs_dict:
+            # Similar exponential reward for hand approach
+            hand_distance = obs_dict["hand_to_object_distance"]
+            hand_distance_reward = torch.exp(
+                -1.0 * hand_distance
+            )  # Slower decay than finger reward
+            rewards["hand_to_object"] = (
+                hand_distance_reward * self.hand_to_object_weight
+            )
 
         return rewards
 

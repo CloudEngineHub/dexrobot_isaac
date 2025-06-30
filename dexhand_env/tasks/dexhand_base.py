@@ -659,16 +659,20 @@ class DexHandBase(VecTask):
         )
 
         # Initialize observation encoder now that we know the action space size
+        # First try new key name, fall back to old key for backward compatibility
         observation_keys = self.cfg["env"].get(
-            "observationKeys",
-            [
-                "base_dof_pos",
-                "base_dof_vel",
-                "finger_dof_pos",
-                "finger_dof_vel",
-                "hand_pose",
-                "contact_forces",
-            ],
+            "policyObservationKeys",
+            self.cfg["env"].get(
+                "observationKeys",
+                [
+                    "base_dof_pos",
+                    "base_dof_vel",
+                    "finger_dof_pos",
+                    "finger_dof_vel",
+                    "hand_pose",
+                    "contact_forces",
+                ],
+            ),
         )
 
         self.observation_encoder.initialize(
