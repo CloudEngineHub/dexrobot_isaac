@@ -353,31 +353,26 @@ class BoxGraspingTask(DexTask):
             rewards["object_height"] = height_reward * self.object_height_weight
 
         # Grasp approach reward - encourage any contact
-        if "contact_binary" in obs_dict:
-            any_contact = obs_dict["contact_binary"].any(dim=1).float()
-            rewards["grasp_approach"] = any_contact * self.grasp_approach_weight
+        any_contact = obs_dict["contact_binary"].any(dim=1).float()
+        rewards["grasp_approach"] = any_contact * self.grasp_approach_weight
 
         # Finger-to-object distance reward - encourage getting fingers close to object
-        if "min_finger_to_object_distance" in obs_dict:
-            # Exponential reward: max reward when distance is 0, decays as distance increases
-            min_distance = obs_dict["min_finger_to_object_distance"]
-            finger_distance_reward = torch.exp(
-                -2.0 * min_distance
-            )  # Decays quickly with distance
-            rewards["finger_to_object"] = (
-                finger_distance_reward * self.finger_to_object_weight
-            )
+        # Exponential reward: max reward when distance is 0, decays as distance increases
+        min_distance = obs_dict["min_finger_to_object_distance"]
+        finger_distance_reward = torch.exp(
+            -2.0 * min_distance
+        )  # Decays quickly with distance
+        rewards["finger_to_object"] = (
+            finger_distance_reward * self.finger_to_object_weight
+        )
 
         # Hand-to-object distance reward - encourage getting hand close to object
-        if "hand_to_object_distance" in obs_dict:
-            # Similar exponential reward for hand approach
-            hand_distance = obs_dict["hand_to_object_distance"]
-            hand_distance_reward = torch.exp(
-                -1.0 * hand_distance
-            )  # Slower decay than finger reward
-            rewards["hand_to_object"] = (
-                hand_distance_reward * self.hand_to_object_weight
-            )
+        # Similar exponential reward for hand approach
+        hand_distance = obs_dict["hand_to_object_distance"]
+        hand_distance_reward = torch.exp(
+            -1.0 * hand_distance
+        )  # Slower decay than finger reward
+        rewards["hand_to_object"] = hand_distance_reward * self.hand_to_object_weight
 
         return rewards
 

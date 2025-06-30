@@ -42,11 +42,11 @@ class TerminationManager:
             self.num_envs, device=self.device, dtype=torch.bool
         )
 
-        # Active criteria lists (which criteria to use)
-        self.active_success_criteria = cfg["env"].get("activeSuccessCriteria", [])
-        self.active_failure_criteria = cfg["env"].get(
-            "activeFailureCriteria", ["hitting_ground"]
-        )
+        # Active criteria lists - read from config, no hardcoded defaults
+        # If not specified in config, use empty list (means use all available)
+        termination_cfg = cfg["env"].get("termination", {})
+        self.active_success_criteria = termination_cfg.get("activeSuccessCriteria", [])
+        self.active_failure_criteria = termination_cfg.get("activeFailureCriteria", [])
 
         # Track which specific success/failure criteria triggered for each environment
         self.success_reasons = {}
@@ -74,6 +74,28 @@ class TerminationManager:
         """Get device from parent."""
         return self.parent.device
 
+    def validate_criteria(self, builtin_dict, task_dict, active_list, criteria_type):
+        """
+        Fail-fast if any active criterion is missing.
+
+        Args:
+            builtin_dict: Dictionary of builtin criteria
+            task_dict: Dictionary of task-specific criteria
+            active_list: List of active criteria names
+            criteria_type: String describing the type (for error messages)
+        """
+        if not active_list:  # Empty list means use all available
+            return
+
+        all_available = set(builtin_dict.keys()) | set(task_dict.keys())
+        for criterion in active_list:
+            if criterion not in all_available:
+                raise RuntimeError(
+                    f"{criteria_type} criterion '{criterion}' is configured as active but not implemented! "
+                    f"Available criteria: {sorted(all_available)}. "
+                    f"Either implement '{criterion}' or remove it from active{criteria_type}Criteria."
+                )
+
     def evaluate(
         self,
         episode_step_count,
@@ -96,8 +118,16 @@ class TerminationManager:
             Tuple containing:
                 should_reset: Boolean tensor indicating which environments should reset
                 termination_info: Dictionary with termination type information
-                episode_rewards: Dictionary with reward components
+                termination_rewards: Dictionary with one-time termination bonuses/penalties
         """
+        # Validate that all active criteria are implemented
+        self.validate_criteria(
+            builtin_success, task_success, self.active_success_criteria, "Success"
+        )
+        self.validate_criteria(
+            builtin_failure, task_failure, self.active_failure_criteria, "Failure"
+        )
+
         # Initialize termination info
         termination_info = {}
 
@@ -209,12 +239,12 @@ class TerminationManager:
         termination_info["failure_rate"] = failure_count / self.num_envs
         termination_info["timeout_rate"] = timeout_count / self.num_envs
 
-        # Generate episode rewards
-        episode_rewards = self._get_termination_rewards(
+        # Generate termination rewards (one-time bonuses/penalties)
+        termination_rewards = self._get_termination_rewards(
             success_termination, failure_termination, timeout_termination
         )
 
-        return should_reset, termination_info, episode_rewards
+        return should_reset, termination_info, termination_rewards
 
     def _get_termination_rewards(
         self, success_termination, failure_termination, timeout_termination

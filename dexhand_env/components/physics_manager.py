@@ -127,9 +127,9 @@ class PhysicsManager:
             # Ensure indices are int32 for Isaac Gym
             global_actor_indices = global_actor_indices.to(torch.int32)
 
-            # Extract DOF states for specified environments and flatten
-            # Shape: [len(env_ids), num_dofs, 2] -> [len(env_ids) * num_dofs, 2]
-            dof_states_to_apply = dof_state[env_ids].reshape(-1, 2)
+            # Pass the full DOF state tensor - Isaac Gym uses indices to update only specified actors
+            # Based on Isaac Gym examples (e.g., ant.py), indexed operations expect the full tensor
+            dof_states_to_apply = dof_state.reshape(-1, 2)
 
             # Apply DOF states using Isaac Gym API
             self.gym.set_dof_state_tensor_indexed(

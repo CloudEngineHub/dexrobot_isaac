@@ -861,6 +861,32 @@ class DexHandBase(VecTask):
             builtin_failure = {}
             task_failure = {}
 
+            # Implement ground collision detection
+            if "height_safety" in self.cfg["env"]["termination"]:
+                height_thresholds = self.cfg["env"]["termination"]["height_safety"]
+
+                # Check hand base height
+                hand_base_z = self.rigid_body_states[
+                    :, self.hand_local_rigid_body_index, 2
+                ]
+                handbase_hitting_ground = (
+                    hand_base_z < height_thresholds["handbase_threshold"]
+                )
+
+                # Check fingertip heights (already in obs_dict)
+                fingertip_heights = self.obs_dict["fingertip_poses_world"].view(
+                    self.num_envs, 5, 7
+                )[:, :, 2]
+                min_fingertip_height = torch.min(fingertip_heights, dim=1)[0]
+                fingertips_hitting_ground = (
+                    min_fingertip_height < height_thresholds["fingertip_threshold"]
+                )
+
+                # Combine both conditions
+                builtin_failure["hitting_ground"] = (
+                    handbase_hitting_ground | fingertips_hitting_ground
+                )
+
             # Get task-specific success/failure criteria
             task_success = self.task.check_task_success_criteria()
             task_failure = self.task.check_task_failure_criteria()
@@ -869,7 +895,7 @@ class DexHandBase(VecTask):
             (
                 should_reset,
                 termination_info,
-                episode_rewards,
+                termination_rewards,  # One-time bonuses/penalties at episode end
             ) = self.termination_manager.evaluate(
                 self.episode_step_count,
                 builtin_success,
@@ -894,9 +920,14 @@ class DexHandBase(VecTask):
                     termination_info["success"]
                 )
 
-            # Add termination rewards to total rewards
-            for reward_type, reward_tensor in episode_rewards.items():
+            # Add termination rewards to total rewards AND tracked components
+            for reward_type, reward_tensor in termination_rewards.items():
                 self.rew_buf += reward_tensor
+                # Track in components with "termination_" prefix for TensorBoard visibility
+                reward_components[f"termination_{reward_type}"] = reward_tensor
+
+            # Update last_reward_components to include termination rewards
+            self.last_reward_components = reward_components
 
             # Update fingertip visualization
             # Update camera position if following robot

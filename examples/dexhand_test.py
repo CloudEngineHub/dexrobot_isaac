@@ -120,6 +120,7 @@ def load_config(config_path=None):
         "sim": cfg_yaml.get("sim", {}),
         "task": cfg_yaml.get("task", {}),
         "physics_engine": "physx",
+        "name": cfg_yaml.get("name", "Base"),  # Add task name
     }
 
     # Add required sim parameters that are not in YAML
@@ -1202,7 +1203,7 @@ def main():
     # Create environment
     try:
         env = create_dex_env(
-            task_name="Base",
+            task_name=cfg.get("name", "Base"),
             cfg=cfg,
             rl_device=rl_device,
             sim_device=sim_device,

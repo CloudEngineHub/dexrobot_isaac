@@ -95,6 +95,11 @@ env:
 
   # Termination criteria
   termination:
+    # Specify which criteria are active (fail-fast if any are missing)
+    activeSuccessCriteria: ["grasp_lift_success"]
+    activeFailureCriteria: ["hitting_ground"]
+
+    # Height thresholds for ground collision detection
     height_safety:
       handbase_threshold: 0.0
       fingertip_threshold: 0.0
