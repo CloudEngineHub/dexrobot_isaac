@@ -704,6 +704,9 @@ class DexHandBase(VecTask):
         # Create extras dictionary for additional info
         self.extras = {}
 
+        # Initialize reward components to ensure it always exists
+        self.last_reward_components = {}
+
     @property
     def episode_time(self):
         """Get current episode time in seconds for all environments.
@@ -875,12 +878,12 @@ class DexHandBase(VecTask):
 
             # Get task rewards
             if hasattr(self.task, "compute_task_rewards"):
-                self.rew_buf[:], task_rewards = self.task.compute_task_rewards(
+                self.rew_buf[:], reward_components = self.task.compute_task_rewards(
                     self.obs_dict
                 )
 
                 # Store reward components for logging
-                self.last_reward_components = task_rewards
+                self.last_reward_components = reward_components
 
                 # Track successes for curriculum learning
                 if "success" in termination_info:
@@ -923,17 +926,15 @@ class DexHandBase(VecTask):
             self.extras = {
                 "consecutive_successes": self.termination_manager.consecutive_successes
                 if hasattr(self, "termination_manager")
-                else 0
+                else 0,
+                "episode_length": self.episode_step_count.clone(),  # Add episode length for logging
             }
 
             # Add termination info to extras for logging
             self.extras.update(termination_info)
 
             # Add reward components to extras for logging
-            if "reward_components" in task_rewards:
-                self.extras["reward_components"] = task_rewards["reward_components"]
-            elif hasattr(self, "last_reward_components"):
-                self.extras["reward_components"] = self.last_reward_components
+            self.extras["reward_components"] = self.last_reward_components
 
             return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
 

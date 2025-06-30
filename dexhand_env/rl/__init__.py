@@ -78,4 +78,7 @@ def register_rlgames_env():
     logger.info("DexHand environment registered with rl_games")
 
 
-__all__ = ["register_rlgames_env"]
+# Import after function definitions to avoid import order issues
+from .reward_observer import RewardComponentObserver  # noqa: E402
+
+__all__ = ["register_rlgames_env", "RewardComponentObserver"]

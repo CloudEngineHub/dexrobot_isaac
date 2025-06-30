@@ -25,7 +25,7 @@ import numpy as np  # noqa: E402
 from loguru import logger  # noqa: E402
 
 # Import RL registration after torch (it needs torch)
-from dexhand_env.rl import register_rlgames_env  # noqa: E402
+from dexhand_env.rl import register_rlgames_env, RewardComponentObserver  # noqa: E402
 
 # Import rl_games components
 from rl_games.common import env_configurations  # noqa: E402
@@ -84,7 +84,11 @@ def create_env_fn(
 
 def build_runner(algo_config: dict, env_creator) -> Runner:
     """Build rl_games runner with configuration."""
-    runner = Runner()
+    # Create custom observer for reward component logging
+    observer = RewardComponentObserver()
+
+    # Pass observer to runner constructor
+    runner = Runner(algo_observer=observer)
     runner.load(algo_config)
     return runner
 
