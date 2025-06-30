@@ -214,6 +214,9 @@ def main():
     train_cfg["params"]["config"]["env_name"] = "rlgpu_dexhand"
     train_cfg["params"]["config"]["device"] = args.rl_device
     train_cfg["params"]["config"]["full_experiment_name"] = args.experiment_name
+    train_cfg["params"]["config"][
+        "name"
+    ] = args.task  # Use actual task name for checkpoints
 
     # Configure TensorBoard logging
     if train_cfg["params"]["config"].get("use_tensorboard", False):
