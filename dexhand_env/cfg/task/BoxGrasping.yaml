@@ -105,36 +105,30 @@ env:
       fingertip_threshold: 0.0
       fingerpad_threshold: 0.0
 
-  # Reward weights (for common rewards) - scaled down to prevent auxiliary rewards from dominating
-  rewardWeights:
-    # Common rewards from base - much smaller to focus on task performance
-    alive: 0.01              # Small alive bonus: 0.01 * 2000 steps = 20 points max
-    height_safety: 0.1       # Height safety: ~0.1 per step = ~200 points max
-    finger_velocity: 0.01    # Small velocity penalties
+  # Unified reward configuration
+  rewards:
+    # Common rewards (small weights to prevent dominating task rewards)
+    alive: 0.01                      # Small alive bonus
+    height_safety: 0.1               # Height safety penalty
+    finger_velocity: 0.01            # Velocity penalties
     hand_velocity: 0.01
     hand_angular_velocity: 0.01
-    joint_limit: 0.05        # Small joint limit penalty
+    joint_limit: 0.05                # Joint limit penalty
     finger_acceleration: 0.005
     hand_acceleration: 0.005
     hand_angular_acceleration: 0.005
     contact_stability: 0.02
 
-  # Task-specific rewards (handled by BoxGraspingTask)
-  rewards:
-    # Task-specific rewards - these should be the main learning signal
-    object_height:
-      weight: 50.0           # Main reward for lifting object
-    grasp_approach:         # Reward any contact with object
-      weight: 5.0
-    finger_to_object:       # Reward for getting fingers close to object
-      weight: 10.0
-    hand_to_object:         # Reward for getting hand close to object
-      weight: 5.0
+    # Task-specific rewards (main learning signal)
+    object_height: 50.0              # Main reward for lifting object
+    grasp_approach: 5.0              # Reward any contact with object
+    finger_to_object: 10.0           # Reward for getting fingers close
+    hand_to_object: 5.0              # Reward for getting hand close
 
-  # Termination rewards (applied once at episode end)
-  successReward: 100.0      # Large bonus for successful grasp and lift
-  failurePenalty: 50.0      # Penalty for failure (touching ground, etc.)
-  timeoutReward: -10.0      # Small penalty for not completing task in time
+    # Termination rewards (one-time at episode end)
+    termination_success: 100.0       # Large bonus for successful grasp and lift
+    termination_failure: -50.0       # Penalty for failure (touching ground, etc.)
+    termination_timeout: -10.0       # Small penalty for not completing task
 
   # Task-specific parameters
   task_params:
@@ -142,9 +136,6 @@ env:
     contact_duration_threshold: 2.0   # Minimum contact duration for success (seconds)
     min_fingers_for_grasp: 2          # Minimum number of fingers required for valid grasp
     max_box_distance: 0.5             # Reset if box moves beyond this distance (meters)
-    density_conversion_factor: 1000.0 # Convert mass to density (kg/m^3)
-    grasp_not_started_value: -1       # Value indicating grasp timing not started
-    box_actor_index: 1                # Local actor index for box within each environment
 
 # Task configuration
 task:

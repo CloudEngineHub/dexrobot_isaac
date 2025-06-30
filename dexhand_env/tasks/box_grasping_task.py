@@ -67,13 +67,12 @@ class BoxGraspingTask(DexTask):
         self.box_xy_range = cfg["env"]["box"]["initial_position"]["xy_range"]
         self.box_z = cfg["env"]["box"]["initial_position"]["z"]
 
-        # Reward configuration
-        self.object_height_weight = cfg["env"]["rewards"]["object_height"]["weight"]
-        self.grasp_approach_weight = cfg["env"]["rewards"]["grasp_approach"]["weight"]
-        self.finger_to_object_weight = cfg["env"]["rewards"]["finger_to_object"][
-            "weight"
-        ]
-        self.hand_to_object_weight = cfg["env"]["rewards"]["hand_to_object"]["weight"]
+        # Reward configuration - read from unified rewards
+        rewards_cfg = cfg["env"]["rewards"]
+        self.object_height_weight = rewards_cfg.get("object_height", 50.0)
+        self.grasp_approach_weight = rewards_cfg.get("grasp_approach", 5.0)
+        self.finger_to_object_weight = rewards_cfg.get("finger_to_object", 10.0)
+        self.hand_to_object_weight = rewards_cfg.get("hand_to_object", 5.0)
 
         # Task-specific parameters from config
         task_params = cfg["env"]["task_params"]
@@ -83,9 +82,6 @@ class BoxGraspingTask(DexTask):
         ]
         self.min_fingers_for_grasp = task_params["min_fingers_for_grasp"]
         self.max_box_distance = task_params["max_box_distance"]
-        self.density_conversion_factor = task_params["density_conversion_factor"]
-        self.grasp_not_started_value = task_params["grasp_not_started_value"]
-        self.box_actor_index = task_params["box_actor_index"]
 
         # Contact duration will be converted to steps after physics manager is initialized
         self.contact_duration_threshold_steps = None
@@ -94,6 +90,7 @@ class BoxGraspingTask(DexTask):
         self.box_asset = None
         self.box_actor_handles = []  # Store handles during creation
         self.box_actor_indices = None  # Will be set in set_tensor_references
+        self.box_local_actor_index = None  # Local actor index within each environment
 
         # Internal state for rewards/termination (NOT exposed to policy)
         self.box_states = None
@@ -135,9 +132,9 @@ class BoxGraspingTask(DexTask):
 
         # Create box asset
         asset_options = gymapi.AssetOptions()
-        asset_options.density = (
-            self.density_conversion_factor * self.box_mass / (self.box_size**3)
-        )  # Compute density from mass
+        # Compute density directly from mass and volume
+        box_volume = self.box_size**3  # Volume of cube
+        asset_options.density = self.box_mass / box_volume
         asset_options.fix_base_link = False
 
         # Create box geometry
@@ -217,11 +214,28 @@ class BoxGraspingTask(DexTask):
 
         self.box_actor_indices = torch.tensor(global_indices, device=self.device)
 
+        # Get the local actor index within each environment
+        # Query the local index of the box actor in the first environment
+        env0_ptr = self.gym.get_env(self.sim, 0)
+        num_actors_env0 = self.gym.get_actor_count(env0_ptr)
+
+        # Find which local index corresponds to our box
+        for local_idx in range(num_actors_env0):
+            actor_handle = self.gym.get_actor_handle(env0_ptr, local_idx)
+            if actor_handle == self.box_actor_handles[0]:
+                self.box_local_actor_index = local_idx
+                break
+
+        if self.box_local_actor_index is None:
+            raise RuntimeError("Failed to find box actor's local index")
+
+        logger.info(f"Box actor local index: {self.box_local_actor_index}")
+
         # Extract box states
         # For GPU pipeline, we need to index differently
         # root_state_tensor shape: (num_envs, num_actors_per_env, 13)
         self.box_states = self.root_state_tensor[
-            :, self.box_actor_index, :
+            :, self.box_local_actor_index, :
         ]  # Shape: (num_envs, 13)
         self.box_positions = self.box_states[:, :3]
         self.box_velocities = self.box_states[:, 7:10]
@@ -262,19 +276,19 @@ class BoxGraspingTask(DexTask):
         self.initial_box_positions[env_ids, 2] = self.box_z
 
         # Set in root state tensor - vectorized
-        self.root_state_tensor[env_ids, self.box_actor_index, 0] = x_offsets
-        self.root_state_tensor[env_ids, self.box_actor_index, 1] = y_offsets
-        self.root_state_tensor[env_ids, self.box_actor_index, 2] = self.box_z
+        self.root_state_tensor[env_ids, self.box_local_actor_index, 0] = x_offsets
+        self.root_state_tensor[env_ids, self.box_local_actor_index, 1] = y_offsets
+        self.root_state_tensor[env_ids, self.box_local_actor_index, 2] = self.box_z
 
         # Zero velocities
-        self.root_state_tensor[env_ids, self.box_actor_index, 7:13] = 0
+        self.root_state_tensor[env_ids, self.box_local_actor_index, 7:13] = 0
 
         # Clear grasp timing via observer state (only if already registered)
         if "grasp_start_steps" in self.parent_env.observation_encoder.task_states:
             grasp_start = self.parent_env.observation_encoder.get_task_state(
                 "grasp_start_steps"
             )
-            grasp_start[env_ids] = self.grasp_not_started_value
+            grasp_start[env_ids] = 0  # Use 0 to indicate grasp not started
 
     def get_task_observations(
         self, obs_dict: Dict[str, torch.Tensor]

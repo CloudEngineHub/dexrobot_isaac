@@ -55,10 +55,13 @@ class TerminationManager:
         # Maximum episode length for timeout termination
         self.max_episode_length = cfg["env"]["episodeLength"]
 
-        # Termination rewards
-        self.success_reward = cfg["env"].get("successReward", 10.0)
-        self.failure_penalty = cfg["env"].get("failurePenalty", 5.0)
-        self.timeout_reward = cfg["env"].get("timeoutReward", 0.0)
+        # Termination rewards - read from unified rewards config
+        rewards_cfg = cfg["env"].get("rewards", {})
+        self.success_reward = rewards_cfg.get("termination_success", 10.0)
+        self.failure_penalty = abs(
+            rewards_cfg.get("termination_failure", -5.0)
+        )  # Store as positive
+        self.timeout_reward = rewards_cfg.get("termination_timeout", 0.0)
 
         # Track consecutive successes for curriculum learning
         self.consecutive_successes = 0
