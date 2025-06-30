@@ -40,14 +40,16 @@
     - Failure: any fingertip/pad or hand base z ≤ 0
     - Timeout: 10 seconds
   - **Implementation Plan**:
-    - **Phase 1: Base Framework Enhancements**
-      - Add binary contact observation to ObservationSystem
+    - **Phase 1: Base Framework Enhancements** ✅ COMPLETED
+      - ✅ Add binary contact observation to ObservationEncoder
         - New observation type: "contact_binary" with configurable threshold
         - Reduces sim2real gap by abstracting force magnitudes
-      - Add ContactDurationTracker component
-        - Track per-body contact durations across episodes
-        - Provide queries for "N bodies in contact for T seconds"
-        - Reset tracking on environment resets
+        - BaseTask now uses binary contacts instead of exact forces
+      - ✅ Add contact duration tracking as observer state
+        - Track per-body contact durations indexed by contactForceBodies
+        - Vectorized duration updates with transition detection
+        - Query interface: get_contact_duration_by_body(body_name)
+        - Integrated reset handling for proper state management
     - **Phase 2: BoxGraspingTask Implementation**
       - Create BoxGraspingTask class implementing DexTask interface
       - Box asset loading and per-environment actor creation
