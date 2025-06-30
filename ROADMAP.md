@@ -78,6 +78,9 @@
     - Add distribution types (uniform, gaussian, loguniform)
     - Implement scheduling (constant, linear)
     - Enable per-category and per-parameter control
+- [ ] Create hierarchical configuration system
+  - Support nested YAML files for modular task definitions
+  - Allow per-task overrides of base configurations
 - [ ] ROS2 interface for real robot deployment
 - [ ] Record/playback functionality for demonstration learning
 - [ ] Add manipulation task environments (pick-and-place, in-hand rotation, tool use)

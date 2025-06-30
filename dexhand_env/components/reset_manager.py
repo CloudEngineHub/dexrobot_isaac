@@ -42,7 +42,7 @@ class ResetManager:
             root_state_tensor: Root state tensor reference
             hand_local_actor_index: Local actor index within each environment (typically 0)
             hand_local_rigid_body_index: Local rigid body index for hand base
-            task: Task instance (may have reset_task method)
+            task: Task instance (may have reset_task_state method)
             max_episode_length: Maximum episode length from config
         """
         self.parent = parent
@@ -323,9 +323,9 @@ class ResetManager:
 
             # Call task-specific reset function - use duck typing instead of hasattr
             try:
-                self.task.reset_task(env_ids)
+                self.task.reset_task_state(env_ids)
             except AttributeError:
-                # Task doesn't implement reset_task - this is acceptable
+                # Task doesn't implement reset_task_state - this is acceptable
                 pass
 
             # Apply DOF states to simulation

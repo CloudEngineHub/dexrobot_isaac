@@ -73,6 +73,9 @@ class ObservationEncoder:
         self.prev_dof_pos = None
         # control_dt is accessed via property decorator from physics_manager
 
+        # Task state tracking - allows tasks to register temporal state
+        self.task_states = {}
+
     @property
     def num_envs(self):
         """Access num_envs from parent (single source of truth)."""
@@ -299,6 +302,10 @@ class ObservationEncoder:
         Args:
             contact_binary: Boolean tensor of current contact state (num_envs, num_contact_bodies)
         """
+        # Skip if not initialized yet (during initial observation computation)
+        if not hasattr(self, "prev_contact_binary"):
+            return
+
         # Convert to float for easier computation
         contact_binary_float = contact_binary.float()
 
@@ -346,6 +353,67 @@ class ObservationEncoder:
         # Reset previous actions
         if self.prev_actions is not None:
             self.prev_actions[env_ids] = 0
+
+        # Reset task states
+        for state_name, state_tensor in self.task_states.items():
+            state_tensor[env_ids] = 0
+
+    def register_task_state(
+        self, name: str, shape: Tuple[int, ...], dtype: torch.dtype = torch.float32
+    ):
+        """
+        Register a task-specific state tensor for temporal tracking.
+
+        This allows tasks to maintain state across timesteps that gets properly reset.
+        Examples: grasp timing, phase tracking, success counters.
+
+        Args:
+            name: Name identifier for the state
+            shape: Shape of the state tensor (should start with num_envs)
+            dtype: Data type of the state tensor
+        """
+        if name in self.task_states:
+            raise ValueError(f"Task state '{name}' already registered")
+
+        if shape[0] != self.num_envs:
+            raise ValueError(
+                f"First dimension of task state must be num_envs ({self.num_envs}), got {shape[0]}"
+            )
+
+        self.task_states[name] = torch.zeros(shape, dtype=dtype, device=self.device)
+        logger.debug(f"Registered task state '{name}' with shape {shape}")
+
+    def get_task_state(self, name: str) -> torch.Tensor:
+        """
+        Get a registered task state tensor.
+
+        Args:
+            name: Name of the state to retrieve
+
+        Returns:
+            The state tensor
+        """
+        if name not in self.task_states:
+            raise KeyError(f"Task state '{name}' not registered")
+        return self.task_states[name]
+
+    def set_task_state(self, name: str, value: torch.Tensor):
+        """
+        Set a registered task state tensor.
+
+        Args:
+            name: Name of the state to set
+            value: New value for the state
+        """
+        if name not in self.task_states:
+            raise KeyError(f"Task state '{name}' not registered")
+
+        if value.shape != self.task_states[name].shape:
+            raise ValueError(
+                f"Shape mismatch for task state '{name}': expected {self.task_states[name].shape}, got {value.shape}"
+            )
+
+        self.task_states[name][:] = value
 
     def compute_observations(
         self, exclude_components: List[str] = None
@@ -629,8 +697,14 @@ class ObservationEncoder:
         self._update_contact_duration_tracking(contact_binary)
 
         # Contact duration observation (duration in seconds for each contact body)
-        contact_duration_seconds = self.contact_duration_steps * self.control_dt
-        obs_dict["contact_duration"] = contact_duration_seconds
+        if hasattr(self, "contact_duration_steps"):
+            contact_duration_seconds = self.contact_duration_steps * self.control_dt
+            obs_dict["contact_duration"] = contact_duration_seconds
+        else:
+            # During initialization, return zeros
+            obs_dict["contact_duration"] = torch.zeros_like(
+                contact_binary, dtype=torch.float32
+            )
 
         # Fingertip poses in world frame (5 fingers × 7 pose dimensions = 35)
         fingertip_poses_world = self._extract_fingertip_poses_world()
@@ -656,8 +730,8 @@ class ObservationEncoder:
         """
         Compute task-specific observations.
 
-        This method can be overridden by specific tasks to add custom observations.
-        The base implementation returns an empty dictionary.
+        This method calls the task's get_task_observations method if available.
+        If the task doesn't provide task-specific observations, returns an empty dictionary.
 
         Args:
             default_obs_dict: Dictionary of default observations
@@ -665,8 +739,14 @@ class ObservationEncoder:
         Returns:
             Dictionary of task-specific observations
         """
-        # Base implementation returns empty dict
-        # Specific tasks can override this method to add custom observations
+        # Check if task provides observations
+        if hasattr(self.parent, "task") and hasattr(
+            self.parent.task, "get_task_observations"
+        ):
+            task_obs = self.parent.task.get_task_observations(default_obs_dict)
+            return task_obs if task_obs is not None else {}
+
+        # No task or no task observations
         return {}
 
     def _concat_selected_observations(

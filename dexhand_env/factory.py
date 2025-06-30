@@ -12,6 +12,7 @@ from loguru import logger
 from dexhand_env.tasks.dexhand_base import DexHandBase
 from dexhand_env.tasks.dex_grasp_task import DexGraspTask
 from dexhand_env.tasks.base_task import BaseTask
+from dexhand_env.tasks.box_grasping_task import BoxGraspingTask
 
 # Import PyTorch after Isaac Gym modules
 import torch
@@ -60,6 +61,12 @@ def create_dex_env(
             logger.debug("Creating BaseTask...")
             # Ensure device is properly set - rl_device is the one used for tensors
             task = BaseTask(
+                None, None, torch.device(rl_device), cfg["env"]["numEnvs"], cfg
+            )
+        elif task_name == "BoxGrasping":
+            # Box grasping task
+            logger.debug("Creating BoxGraspingTask...")
+            task = BoxGraspingTask(
                 None, None, torch.device(rl_device), cfg["env"]["numEnvs"], cfg
             )
         else:
