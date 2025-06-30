@@ -55,8 +55,8 @@ class TerminationManager:
         # Maximum episode length for timeout termination
         self.max_episode_length = cfg["env"]["episodeLength"]
 
-        # Termination rewards - read from unified rewards config
-        rewards_cfg = cfg["env"].get("rewards", {})
+        # Termination rewards - read from reward weights config
+        rewards_cfg = cfg["env"].get("rewardWeights", {})
         self.success_reward = rewards_cfg.get("termination_success", 10.0)
         self.failure_penalty = abs(
             rewards_cfg.get("termination_failure", -5.0)

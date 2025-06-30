@@ -106,6 +106,42 @@ Key principle: If something is required for correct operation, it should NEVER b
 - Prefer vectorized operations over loops
 - Use type hints where possible
 
+## Implementation Guidelines
+
+### Study Before Modifying
+Before changing any component:
+1. **Understand existing abstractions**: Use grep/search to find similar patterns
+2. **Follow established patterns**: Don't reinvent what already exists
+3. **Check naming conventions**: Maintain consistency with existing code
+
+### Respect Component Responsibilities
+Each component has a specific purpose. Don't violate separation of concerns:
+- **Tasks**: Compute raw task-specific values (unscaled rewards, success criteria)
+- **RewardCalculator**: Handles ALL reward weighting and aggregation
+- **ObservationEncoder**: Manages observation space construction
+- **ActionProcessor**: Handles action scaling and control mode logic
+
+Example of CORRECT separation:
+```python
+# In task's compute_task_reward_terms():
+rewards["object_height"] = height_above_table  # Raw value, NO multiplication by weight
+
+# In RewardCalculator's compute_total_reward():
+weight = self.reward_weights.get("object_height", 0.0)
+weighted_reward = reward * weight  # Weighting happens HERE only
+```
+
+### Write Minimal Code
+- Don't create unnecessary instance variables
+- Use existing abstractions rather than reimplementing
+- If you're writing more than 5 lines for something simple, you're probably doing it wrong
+
+### Validate Understanding First
+Before implementing:
+1. Articulate what each component's responsibility is
+2. Ensure changes align with the component's purpose
+3. If unsure, study how existing features use the abstraction
+
 ## Component Architecture
 
 ### Two-Phase Initialization

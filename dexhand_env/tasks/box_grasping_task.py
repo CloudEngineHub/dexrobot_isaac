@@ -67,12 +67,7 @@ class BoxGraspingTask(DexTask):
         self.box_xy_range = cfg["env"]["box"]["initial_position"]["xy_range"]
         self.box_z = cfg["env"]["box"]["initial_position"]["z"]
 
-        # Reward configuration - read from unified rewards
-        rewards_cfg = cfg["env"]["rewards"]
-        self.object_height_weight = rewards_cfg.get("object_height", 50.0)
-        self.grasp_approach_weight = rewards_cfg.get("grasp_approach", 5.0)
-        self.finger_to_object_weight = rewards_cfg.get("finger_to_object", 10.0)
-        self.hand_to_object_weight = rewards_cfg.get("hand_to_object", 5.0)
+        # Task configuration parameters (not weights)
 
         # Task-specific parameters from config
         task_params = cfg["env"]["task_params"]
@@ -364,11 +359,11 @@ class BoxGraspingTask(DexTask):
             height_reward = torch.clamp(
                 height_above_table / (self.height_threshold - self.box_z), 0, 1
             )
-            rewards["object_height"] = height_reward * self.object_height_weight
+            rewards["object_height"] = height_reward
 
         # Grasp approach reward - encourage any contact
         any_contact = obs_dict["contact_binary"].any(dim=1).float()
-        rewards["grasp_approach"] = any_contact * self.grasp_approach_weight
+        rewards["grasp_approach"] = any_contact
 
         # Finger-to-object distance reward - encourage getting fingers close to object
         # Exponential reward: max reward when distance is 0, decays as distance increases
@@ -376,9 +371,7 @@ class BoxGraspingTask(DexTask):
         finger_distance_reward = torch.exp(
             -2.0 * min_distance
         )  # Decays quickly with distance
-        rewards["finger_to_object"] = (
-            finger_distance_reward * self.finger_to_object_weight
-        )
+        rewards["finger_to_object"] = finger_distance_reward
 
         # Hand-to-object distance reward - encourage getting hand close to object
         # Similar exponential reward for hand approach
@@ -386,7 +379,7 @@ class BoxGraspingTask(DexTask):
         hand_distance_reward = torch.exp(
             -1.0 * hand_distance
         )  # Slower decay than finger reward
-        rewards["hand_to_object"] = hand_distance_reward * self.hand_to_object_weight
+        rewards["hand_to_object"] = hand_distance_reward
 
         return rewards
 

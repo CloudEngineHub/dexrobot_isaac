@@ -105,8 +105,8 @@ env:
       fingertip_threshold: 0.0
       fingerpad_threshold: 0.0
 
-  # Unified reward configuration
-  rewards:
+  # Reward weights configuration
+  rewardWeights:
     # Common rewards (small weights to prevent dominating task rewards)
     alive: 0.01                      # Small alive bonus
     height_safety: 0.1               # Height safety penalty

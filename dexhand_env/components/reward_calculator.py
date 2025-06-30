@@ -32,8 +32,8 @@ class RewardCalculator:
         """
         self.parent = parent
 
-        # Initialize reward weights from unified rewards config
-        self.reward_weights = cfg["env"].get("rewards", {})
+        # Initialize reward weights from config
+        self.reward_weights = cfg["env"].get("rewardWeights", {})
 
         # State tracking for acceleration and contact stability rewards
         self.prev_finger_dof_vel = None
