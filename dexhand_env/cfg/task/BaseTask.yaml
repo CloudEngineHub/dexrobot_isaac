@@ -102,6 +102,7 @@ env:
     # - "all_finger_dof_target"  # All finger DOF targets (20 finger DOFs) - semantic access only
     # - "contact_forces"         # Contact forces (3D force for each finger) - for tasks needing exact forces
     # - "contact_force_magnitude" # Contact force magnitude (scalar for each finger) - for tasks needing exact forces
+    # - "contact_duration"       # Contact duration (seconds for each contact body) - for temporal contact criteria
 
   # Reward parameters (weights for different reward components)
   rewardWeights:

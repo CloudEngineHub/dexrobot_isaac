@@ -217,11 +217,21 @@ class ObservationEncoder:
 
         # Build contact force body name to index mapping
         self.contact_force_body_name_to_index = {}
+        num_contact_bodies = 0
         if hasattr(self.hand_initializer, "contact_force_body_names"):
             for i, body_name in enumerate(
                 self.hand_initializer.contact_force_body_names
             ):
                 self.contact_force_body_name_to_index[body_name] = i
+            num_contact_bodies = len(self.hand_initializer.contact_force_body_names)
+
+        # Initialize contact duration tracking state (observer internal state)
+        self.contact_duration_steps = torch.zeros(
+            (self.num_envs, num_contact_bodies), device=self.device
+        )
+        self.prev_contact_binary = torch.zeros(
+            (self.num_envs, num_contact_bodies), device=self.device
+        )
 
     @property
     def hand_index(self):
@@ -281,6 +291,61 @@ class ObservationEncoder:
         self.prev_dof_pos = current_dof_pos.clone()
 
         return velocity
+
+    def _update_contact_duration_tracking(self, contact_binary: torch.Tensor):
+        """
+        Update contact duration tracking state.
+
+        Args:
+            contact_binary: Boolean tensor of current contact state (num_envs, num_contact_bodies)
+        """
+        # Convert to float for easier computation
+        contact_binary_float = contact_binary.float()
+
+        # Detect contact transitions
+        # If currently in contact: increment duration
+        # If contact started this step (0->1): reset duration to 1
+        # If contact ended this step (1->0): reset duration to 0
+
+        contact_started = (contact_binary_float == 1.0) & (
+            self.prev_contact_binary == 0.0
+        )
+        contact_active = contact_binary_float == 1.0
+
+        # Update duration: increment if active, reset to 1 if just started, reset to 0 if not active
+        self.contact_duration_steps = torch.where(
+            contact_started,
+            torch.ones_like(self.contact_duration_steps),  # Reset to 1 on contact start
+            torch.where(
+                contact_active,
+                self.contact_duration_steps + 1,  # Increment if still in contact
+                torch.zeros_like(
+                    self.contact_duration_steps
+                ),  # Reset to 0 if no contact
+            ),
+        )
+
+        # Update previous state for next iteration
+        self.prev_contact_binary = contact_binary_float.clone()
+
+    def reset_observer_state(self, env_ids: torch.Tensor):
+        """
+        Reset observer internal state for specified environments.
+
+        Args:
+            env_ids: Tensor of environment indices to reset
+        """
+        # Reset contact duration tracking
+        self.contact_duration_steps[env_ids] = 0
+        self.prev_contact_binary[env_ids] = 0
+
+        # Reset previous DOF positions (for velocity computation)
+        if self.prev_dof_pos is not None:
+            self.prev_dof_pos[env_ids] = 0
+
+        # Reset previous actions
+        if self.prev_actions is not None:
+            self.prev_actions[env_ids] = 0
 
     def compute_observations(
         self, exclude_components: List[str] = None
@@ -559,6 +624,13 @@ class ObservationEncoder:
         obs_dict[
             "contact_binary"
         ] = contact_binary.float()  # Convert bool to float for tensor compatibility
+
+        # Contact duration tracking (observer internal state)
+        self._update_contact_duration_tracking(contact_binary)
+
+        # Contact duration observation (duration in seconds for each contact body)
+        contact_duration_seconds = self.contact_duration_steps * self.control_dt
+        obs_dict["contact_duration"] = contact_duration_seconds
 
         # Fingertip poses in world frame (5 fingers × 7 pose dimensions = 35)
         fingertip_poses_world = self._extract_fingertip_poses_world()
@@ -1399,3 +1471,84 @@ class ObservationParser:
         return self.encoder.get_raw_finger_dof(
             dof_name, obs_type, self.obs_dict, env_idx=0
         )
+
+    def get_contact_duration_by_body(self, body_name: str):
+        """
+        Get contact duration by body name.
+
+        Args:
+            body_name: Name of the contact force body (e.g., "r_f_link1_4")
+
+        Returns:
+            Contact duration in seconds for the specified body
+        """
+        if self.obs_dict is None:
+            raise ValueError("obs_dict must be provided to access contact duration")
+
+        if body_name not in self.encoder.contact_force_body_name_to_index:
+            available_bodies = list(
+                self.encoder.contact_force_body_name_to_index.keys()
+            )
+            raise ValueError(
+                f"Unknown contact body: {body_name}. Available: {available_bodies}"
+            )
+
+        body_idx = self.encoder.contact_force_body_name_to_index[body_name]
+        contact_duration_data = self.obs_dict["contact_duration"]
+        return contact_duration_data[0, body_idx].item()  # Single environment parsing
+
+    def get_contact_binary_by_body(self, body_name: str):
+        """
+        Get binary contact indicator by body name.
+
+        Args:
+            body_name: Name of the contact force body (e.g., "r_f_link1_4")
+
+        Returns:
+            Binary contact indicator (0 or 1) for the specified body
+        """
+        if self.obs_dict is None:
+            raise ValueError("obs_dict must be provided to access contact binary")
+
+        if body_name not in self.encoder.contact_force_body_name_to_index:
+            available_bodies = list(
+                self.encoder.contact_force_body_name_to_index.keys()
+            )
+            raise ValueError(
+                f"Unknown contact body: {body_name}. Available: {available_bodies}"
+            )
+
+        body_idx = self.encoder.contact_force_body_name_to_index[body_name]
+        contact_binary_data = self.obs_dict["contact_binary"]
+        return contact_binary_data[0, body_idx].item()  # Single environment parsing
+
+    def get_contact_force_by_body(self, body_name: str):
+        """
+        Get contact force by body name.
+
+        Args:
+            body_name: Name of the contact force body (e.g., "r_f_link1_4")
+
+        Returns:
+            3D contact force vector for the specified body
+        """
+        if self.obs_dict is None:
+            raise ValueError("obs_dict must be provided to access contact forces")
+
+        if body_name not in self.encoder.contact_force_body_name_to_index:
+            available_bodies = list(
+                self.encoder.contact_force_body_name_to_index.keys()
+            )
+            raise ValueError(
+                f"Unknown contact body: {body_name}. Available: {available_bodies}"
+            )
+
+        body_idx = self.encoder.contact_force_body_name_to_index[body_name]
+
+        # Contact forces are flattened as (num_envs, num_bodies * 3)
+        contact_forces_data = self.obs_dict["contact_forces"]
+        force_start = body_idx * 3
+        force_end = force_start + 3
+        return (
+            contact_forces_data[0, force_start:force_end].cpu().numpy()
+        )  # Single environment parsing

@@ -749,6 +749,9 @@ class DexHandBase(VecTask):
             # Delegate all reset logic to reset_manager
             self.reset_manager.reset_idx(env_ids)
 
+            # Reset observer internal state for the reset environments
+            self.observation_encoder.reset_observer_state(env_ids)
+
         except Exception as e:
             logger.critical(f"CRITICAL ERROR in reset_idx: {e}")
             import traceback
