@@ -25,10 +25,57 @@
   - ✅ TensorBoard integration with comprehensive reward component logging
   - ✅ RewardComponentObserver tracks episode totals and per-step averages
   - ✅ Hierarchical organization by termination type and weight type
+- [ ] **Box Grasping Task** (Priority: High)
+  - Environment setup:
+    - Single 5cm box at origin with slight position randomization
+    - 10-second episode timeout (failure)
+  - Observations:
+    - All base observations except exact contact forces
+    - Binary contact indicators (touch/no-touch) per finger instead of force magnitudes
+  - Rewards:
+    - Standard base rewards (alive, height_safety, finger_velocity)
+    - Additional: object height reward component
+  - Termination criteria:
+    - Success: object height > 20cm AND ≥2 fingers in contact for ≥2 seconds
+    - Failure: any fingertip/pad or hand base z ≤ 0
+    - Timeout: 10 seconds
+  - **Implementation Plan**:
+    - **Phase 1: Base Framework Enhancements**
+      - Add binary contact observation to ObservationSystem
+        - New observation type: "contact_binary" with configurable threshold
+        - Reduces sim2real gap by abstracting force magnitudes
+      - Add ContactDurationTracker component
+        - Track per-body contact durations across episodes
+        - Provide queries for "N bodies in contact for T seconds"
+        - Reset tracking on environment resets
+    - **Phase 2: BoxGraspingTask Implementation**
+      - Create BoxGraspingTask class implementing DexTask interface
+      - Box asset loading and per-environment actor creation
+      - Box state tracking and observations (pose, velocities)
+      - Object height reward computation
+      - Success/failure criteria using ContactDurationTracker
+      - Box reset with position randomization
+    - **Phase 3: Configuration and Testing**
+      - Create BoxGrasping.yaml configuration
+      - Set episodeLength: 2000 (10 seconds at 200Hz)
+      - Configure box physics (mass: 0.1kg, friction: 1.0)
+      - Tune reward weights for stable grasping behavior
+      - Test success/failure detection and contact tracking
 - [ ] Create training scripts with DexHand-specific hyperparameters
 - [ ] Benchmark learning performance
 
 ### Phase 3 - Advanced Features
+- [ ] **Domain Randomization Framework** (Phased Approach)
+  - Phase 1: Enhance ResetManager with configurable randomization ranges
+    - Keep simple `randomize: true/false` flag for ease of use
+    - Add optional `randomization_params` for custom ranges
+    - Support hand position, orientation, and DOF randomization
+  - Phase 2: Full domain randomization system
+    - Create RandomizationManager component
+    - Support categories: observations, actions, physics, actor_properties
+    - Add distribution types (uniform, gaussian, loguniform)
+    - Implement scheduling (constant, linear)
+    - Enable per-category and per-parameter control
 - [ ] ROS2 interface for real robot deployment
 - [ ] Record/playback functionality for demonstration learning
 - [ ] Add manipulation task environments (pick-and-place, in-hand rotation, tool use)

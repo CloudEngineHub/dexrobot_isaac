@@ -548,6 +548,18 @@ class ObservationEncoder:
         )  # Shape: (num_envs, num_fingers)
         obs_dict["contact_force_magnitude"] = contact_magnitudes
 
+        # Binary contact indicators (touch/no-touch for each finger)
+        # Reduces sim2real gap by abstracting exact force magnitudes
+        contact_binary_threshold = self.parent.cfg["env"].get(
+            "contactBinaryThreshold", 1.0
+        )
+        contact_binary = (
+            contact_magnitudes > contact_binary_threshold
+        )  # Shape: (num_envs, num_fingers)
+        obs_dict[
+            "contact_binary"
+        ] = contact_binary.float()  # Convert bool to float for tensor compatibility
+
         # Fingertip poses in world frame (5 fingers × 7 pose dimensions = 35)
         fingertip_poses_world = self._extract_fingertip_poses_world()
         obs_dict["fingertip_poses_world"] = fingertip_poses_world

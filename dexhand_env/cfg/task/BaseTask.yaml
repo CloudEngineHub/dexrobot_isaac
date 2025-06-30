@@ -58,6 +58,9 @@ env:
     - "r_f_link4_4"  # ring distal phalanx
     - "r_f_link5_4"  # pinky distal phalanx
 
+  # Contact detection thresholds
+  contactBinaryThreshold: 1.0       # Force threshold (N) for binary contact detection (reduces sim2real gap)
+
   # Contact force visualization settings
   contactVisualization:
     enabled: true                  # Enable/disable contact force visualization
@@ -79,11 +82,10 @@ env:
     - "active_finger_dof_pos"   # Active finger DOF positions (12 active finger controls) - for RL
     - "active_finger_dof_vel"   # Active finger DOF velocities (12 active finger controls) - for RL
     - "hand_pose"               # Hand root pose (position + orientation)
-    - "contact_forces"          # Contact forces (3D force for each finger)
+    - "contact_binary"          # Binary contact indicators (0/1 for each finger) - reduces sim2real gap
     - "prev_actions"            # Previous actions
     - "base_dof_target"         # Base DOF targets (6 DOFs: x, y, z, rx, ry, rz)
     - "active_finger_dof_target" # Active finger DOF targets (12 active finger controls) - for RL
-    - "contact_force_magnitude" # Contact force magnitude (scalar for each finger)
     - "fingertip_poses_world"   # Fingertip poses in world frame (5 fingers × 7 pose dimensions = 35)
     - "fingertip_poses_hand"    # Fingertip poses in hand frame (5 fingers × 7 pose dimensions = 35)
     - "fingerpad_poses_world"   # Fingerpad poses in world frame (5 fingers × 7 pose dimensions = 35)
@@ -98,6 +100,8 @@ env:
     # - "all_finger_dof_pos"     # All finger DOF positions (20 finger DOFs) - semantic access only
     # - "all_finger_dof_vel"     # All finger DOF velocities (20 finger DOFs) - semantic access only
     # - "all_finger_dof_target"  # All finger DOF targets (20 finger DOFs) - semantic access only
+    # - "contact_forces"         # Contact forces (3D force for each finger) - for tasks needing exact forces
+    # - "contact_force_magnitude" # Contact force magnitude (scalar for each finger) - for tasks needing exact forces
 
   # Reward parameters (weights for different reward components)
   rewardWeights:
