@@ -126,41 +126,7 @@ action_processor.finalize_setup()  # Now control_dt available
 
 ## Project Status
 
-### ✅ Completed
-- Component-based architecture refactor
-- GPU pipeline support
-- DOF control and action mapping
-- Position and position_delta modes
-- Rule-based control for partial policy control
-- Observation system with dict/tensor separation
-- Rerun visualization integration (16 plots in examples/dexhand_test.py)
-- Euler angle conversion for debugging
-- PPO training integration with rl_games (tested at ~1000 fps)
-- **TerminationManager refactor**: Clean separation of termination decisions vs reset execution
-- **TensorBoard logging**: Episodes terminate correctly and rewards are logged properly
-
-### 🔧 Current Issues
-- **Contact Force Verification** (Issue #4): Need objects in scene to verify contact observations work
-
-### 📋 TODO
-- **Phase 2 - Architecture & Quality**:
-  - Clean up excessive debug logging
-  - Implement proper logging levels (debug, info, warning, error)
-  - Standardize naming (dex_hand vs dexhand)
-  - Update README files with current architecture
-
-- **Phase 3 - RL Integration**:
-  - Implement reward system
-  - Add reward visualization/debugging tools
-  - Create training scripts with hyperparameter configs for different tasks
-  - Benchmark learning performance
-  - Add SAC algorithm support
-
-- **Phase 3 - Advanced Features**:
-  - ROS2 interface for real robot deployment
-  - Record/playback functionality for demonstrations
-  - Performance profiling and optimization
-  - Add more task environments beyond BaseTask
+See [`ROADMAP.md`](ROADMAP.md) for detailed project status, completed features, and future development plans.
 
 ## Essential Documentation
 - **Critical Caveats**: [`docs/design_decisions.md`](docs/design_decisions.md) - READ FIRST!

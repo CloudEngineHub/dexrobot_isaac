@@ -18,9 +18,15 @@
   - ✅ Fixed num_actions fail-fast property access
   - ✅ Verified environment creation, reset, and step work correctly
   - ✅ Basic PPO training loop tested successfully
-- [ ] Implement modular reward system (reaching, grasping, manipulation components)
-- [ ] Add reward visualization in rerun for debugging
+- [x] Implement modular reward system (reaching, grasping, manipulation components)
+  - ✅ BaseTaskRewards with weighted components (alive, height_safety, finger_velocity)
+  - ✅ Clean separation between reward computation and termination logic
+- [x] Add reward visualization/debugging tools
+  - ✅ TensorBoard integration with comprehensive reward component logging
+  - ✅ RewardComponentObserver tracks episode totals and per-step averages
+  - ✅ Hierarchical organization by termination type and weight type
 - [ ] Create training scripts with DexHand-specific hyperparameters
+- [ ] Benchmark learning performance
 
 ### Phase 3 - Advanced Features
 - [ ] ROS2 interface for real robot deployment
@@ -78,6 +84,9 @@
 - ✅ Single source of truth via property decorators and constants
 - ✅ Proper logging and configuration management
 - ✅ **Functional Rule+Policy Control Framework**: Implemented comprehensive pipeline with pre-action rules, action rules, post-action filters, and coupling rules
+- ✅ **TerminationManager**: Clean separation of termination decisions vs reset execution
+  - Replaced SuccessFailureTracker with cleaner three-state termination model
+  - ResetManager now purely handles physical reset execution
   - Pure functional approach with clear data flow
   - Registry pattern for post-action filters
   - Two-stage observation initialization to resolve circular dependencies
