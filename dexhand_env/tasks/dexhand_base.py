@@ -590,9 +590,14 @@ class DexHandBase(VecTask):
 
             # Store DOF properties from first environment
             if i == 0:
-                self.dof_properties_from_asset = hand_data.get("dof_properties", None)
+                self.dof_properties_from_asset = hand_data["dof_properties"]
                 self.hand_local_actor_index = (
                     0  # Hand is always actor 0 in single-actor envs
+                )
+
+                # Log DOF debug info for first environment
+                self._log_dof_debug_info(
+                    hand_data["dof_names"], hand_data["dof_properties"]
                 )
 
             # Step 3: Create task-specific objects for this environment
@@ -603,6 +608,30 @@ class DexHandBase(VecTask):
         self.hand_initializer.fingerpad_body_handles = self.fingerpad_body_handles
 
         logger.info(f"Created {self.num_envs} environments with all actors.")
+
+    def _log_dof_debug_info(self, dof_names, dof_properties):
+        """Log DOF debug information for the first environment."""
+        # Debug: Print DOF limits for first 6 joints
+        logger.debug("===== BASE DOF LIMITS FROM ACTOR =====")
+        for j in range(min(6, len(dof_names))):
+            logger.debug(
+                f"DOF {j} ({dof_names[j]}): lower={dof_properties['lower'][j]:.6f}, upper={dof_properties['upper'][j]:.6f}"
+            )
+        logger.debug("=====================================")
+
+        # Log DOF names for verification
+        logger.debug("===== DOF NAMES VERIFICATION =====")
+        logger.debug(f"Total DOFs found: {len(dof_names)}")
+        logger.debug("DOF Index -> Joint Name:")
+        for j, name in enumerate(dof_names):
+            # Determine joint type
+            joint_type = "UNKNOWN"
+            if any(base_name in name for base_name in BASE_JOINT_NAMES):
+                joint_type = "BASE"
+            elif any(finger_name in name for finger_name in FINGER_JOINT_NAMES):
+                joint_type = "FINGER"
+            logger.debug(f"  {j:2d}: {name:<20} ({joint_type})")
+        logger.debug("=====================================")
 
     def _setup_additional_tensors(self):
         """

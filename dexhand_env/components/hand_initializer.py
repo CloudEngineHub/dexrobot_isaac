@@ -391,34 +391,6 @@ class HandInitializer:
         hand_dof_props = self.gym.get_actor_dof_properties(env, hand_handle)
         dof_names = self.gym.get_actor_dof_names(env, hand_handle)
 
-        # Save original DOF properties from first actor
-        original_props = None
-        if env_id == 0:
-            original_props = hand_dof_props.copy()
-            # Debug: Print DOF limits for first 6 joints
-            logger.debug("===== BASE DOF LIMITS FROM ACTOR =====")
-            for j in range(min(6, len(dof_names))):
-                logger.debug(
-                    f"DOF {j} ({dof_names[j]}): lower={hand_dof_props['lower'][j]:.6f}, upper={hand_dof_props['upper'][j]:.6f}"
-                )
-            logger.debug("=====================================")
-
-            # Log DOF names for verification
-            logger.debug("===== DOF NAMES VERIFICATION =====")
-            logger.debug(f"Total DOFs found: {len(dof_names)}")
-            logger.debug("DOF Index -> Joint Name:")
-            for j, name in enumerate(dof_names):
-                # Determine joint type
-                joint_type = "UNKNOWN"
-                if any(base_name in name for base_name in self.base_joint_names):
-                    joint_type = "BASE"
-                elif any(
-                    finger_name in name for finger_name in self.finger_joint_names
-                ):
-                    joint_type = "FINGER"
-                logger.debug(f"  {j:2d}: {name:<20} ({joint_type})")
-            logger.debug("=====================================")
-
         # Configure DOF properties for PD control
         for j, name in enumerate(dof_names):
             hand_dof_props["driveMode"][j] = gymapi.DOF_MODE_POS
@@ -445,7 +417,8 @@ class HandInitializer:
             "hand_handle": hand_handle,
             "fingertip_body_handles": fingertip_body_handles,
             "fingerpad_body_handles": fingerpad_body_handles,
-            "dof_properties": original_props,  # Only set for first environment
+            "dof_properties": hand_dof_props.copy(),  # Always return a copy
+            "dof_names": dof_names,  # Always return names
         }
 
     def get_dof_mapping(self):
