@@ -362,6 +362,92 @@ class HandInitializer:
             "hand_local_actor_index": self.hand_local_actor_index,  # Local actor index (0 for single-actor envs)
         }
 
+    def create_hand_for_env(self, env, hand_asset, env_id):
+        """
+        Create a single hand instance for one environment.
+
+        This method follows Isaac Gym's requirement that all actors must be added
+        to an environment before creating the next environment.
+
+        Args:
+            env: Environment instance
+            hand_asset: The hand asset to instantiate
+            env_id: Environment index
+
+        Returns:
+            Dictionary containing hand handle and component handles
+        """
+        # Initial pose
+        hand_pose = gymapi.Transform()
+        hand_pose.p = gymapi.Vec3(*self.initial_hand_pos)
+        hand_pose.r = gymapi.Quat(*self.initial_hand_rot)
+
+        # Create hand actor
+        hand_handle = self.gym.create_actor(
+            env, hand_asset, hand_pose, f"hand_{env_id}", env_id, 0
+        )
+
+        # Get DOF properties from actor (not asset) for GPU pipeline compatibility
+        hand_dof_props = self.gym.get_actor_dof_properties(env, hand_handle)
+        dof_names = self.gym.get_actor_dof_names(env, hand_handle)
+
+        # Save original DOF properties from first actor
+        original_props = None
+        if env_id == 0:
+            original_props = hand_dof_props.copy()
+            # Debug: Print DOF limits for first 6 joints
+            logger.debug("===== BASE DOF LIMITS FROM ACTOR =====")
+            for j in range(min(6, len(dof_names))):
+                logger.debug(
+                    f"DOF {j} ({dof_names[j]}): lower={hand_dof_props['lower'][j]:.6f}, upper={hand_dof_props['upper'][j]:.6f}"
+                )
+            logger.debug("=====================================")
+
+            # Log DOF names for verification
+            logger.debug("===== DOF NAMES VERIFICATION =====")
+            logger.debug(f"Total DOFs found: {len(dof_names)}")
+            logger.debug("DOF Index -> Joint Name:")
+            for j, name in enumerate(dof_names):
+                # Determine joint type
+                joint_type = "UNKNOWN"
+                if any(base_name in name for base_name in self.base_joint_names):
+                    joint_type = "BASE"
+                elif any(
+                    finger_name in name for finger_name in self.finger_joint_names
+                ):
+                    joint_type = "FINGER"
+                logger.debug(f"  {j:2d}: {name:<20} ({joint_type})")
+            logger.debug("=====================================")
+
+        # Configure DOF properties for PD control
+        for j, name in enumerate(dof_names):
+            hand_dof_props["driveMode"][j] = gymapi.DOF_MODE_POS
+            # Note: stiffness and damping come from MJCF model
+
+        # Set DOF properties
+        self.gym.set_actor_dof_properties(env, hand_handle, hand_dof_props)
+
+        # Get fingertip body handles
+        fingertip_body_handles = []
+        for name in self.fingertip_body_names:
+            fingertip_body_handles.append(
+                self.gym.find_actor_rigid_body_handle(env, hand_handle, name)
+            )
+
+        # Get fingerpad body handles
+        fingerpad_body_handles = []
+        for name in self.fingerpad_body_names:
+            fingerpad_body_handles.append(
+                self.gym.find_actor_rigid_body_handle(env, hand_handle, name)
+            )
+
+        return {
+            "hand_handle": hand_handle,
+            "fingertip_body_handles": fingertip_body_handles,
+            "fingerpad_body_handles": fingerpad_body_handles,
+            "dof_properties": original_props,  # Only set for first environment
+        }
+
     def get_dof_mapping(self):
         """
         Get mapping of joint names to active DOFs.

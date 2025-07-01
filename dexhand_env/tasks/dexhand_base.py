@@ -374,20 +374,9 @@ class DexHandBase(VecTask):
         # Load hand asset
         self.hand_asset = self.hand_initializer.load_hand_asset(self.hand_asset_file)
 
-        # Create the environments
-        self._create_envs()
-
-        # Create hands in the environments FIRST (before task objects)
-        handles = self.hand_initializer.create_hands(self.envs, self.hand_asset)
-        self.hand_handles = handles["hand_handles"]
-        self.fingerpad_body_handles = handles["fingerpad_body_handles"]
-        self.dof_properties_from_asset = handles.get("dof_properties", None)
-        self.hand_local_actor_index = handles["hand_local_actor_index"]
-
-        # Now create task-specific objects AFTER hands are created
-        # This ensures hands are always actor index 0
-        for i in range(self.num_envs):
-            self.task.create_task_objects(self.gym, self.sim, self.envs[i], i)
+        # Create environments and actors following Isaac Gym's required pattern:
+        # ALL actors must be added to an env before creating the next env
+        self._create_envs_and_actors()
 
         # Set up viewer
         # CRITICAL: Create viewer even in headless mode for proper DOF control
@@ -559,11 +548,12 @@ class DexHandBase(VecTask):
         self.policy_controls_hand_base = self.action_processor.policy_controls_hand_base
         self.policy_controls_fingers = self.action_processor.policy_controls_fingers
 
-    def _create_envs(self):
+    def _create_envs_and_actors(self):
         """
-        Create environments in the simulation.
+        Create environments and all actors following Isaac Gym's required pattern.
+        All actors must be added to an environment before creating the next environment.
         """
-        logger.info("Creating environments...")
+        logger.info("Creating environments and actors...")
 
         # Define environment spacing
         env_lower = gymapi.Vec3(-1.0, -1.0, 0.0)
@@ -573,25 +563,46 @@ class DexHandBase(VecTask):
         num_per_row = int(math.sqrt(self.num_envs))
 
         self.envs = []
+        self.hand_handles = []
+        self.fingerpad_body_handles = []
 
-        # Create ground plane
+        # Create ground plane first
         plane_params = gymapi.PlaneParams()
         plane_params.normal = gymapi.Vec3(0, 0, 1)  # z-up
         plane_params.distance = 0
         plane_params.static_friction = 0.5
         plane_params.dynamic_friction = 0.5
         plane_params.restitution = 0.0
-
         self.gym.add_ground(self.sim, plane_params)
 
-        # Create environments
+        # Create environments and actors in the correct order
         for i in range(self.num_envs):
-            # Create environment
+            # Step 1: Create environment
             env = self.gym.create_env(self.sim, env_lower, env_upper, num_per_row)
-
             self.envs.append(env)
 
-        logger.info(f"Created {self.num_envs} environments.")
+            # Step 2: Create hand actor for this environment
+            hand_data = self.hand_initializer.create_hand_for_env(
+                env, self.hand_asset, i
+            )
+            self.hand_handles.append(hand_data["hand_handle"])
+            self.fingerpad_body_handles.append(hand_data["fingerpad_body_handles"])
+
+            # Store DOF properties from first environment
+            if i == 0:
+                self.dof_properties_from_asset = hand_data.get("dof_properties", None)
+                self.hand_local_actor_index = (
+                    0  # Hand is always actor 0 in single-actor envs
+                )
+
+            # Step 3: Create task-specific objects for this environment
+            self.task.create_task_objects(self.gym, self.sim, env, i)
+
+        # Update hand_initializer's internal lists so initialize_rigid_body_indices can work
+        self.hand_initializer.hand_handles = self.hand_handles
+        self.hand_initializer.fingerpad_body_handles = self.fingerpad_body_handles
+
+        logger.info(f"Created {self.num_envs} environments with all actors.")
 
     def _setup_additional_tensors(self):
         """
