@@ -896,7 +896,8 @@ class DexHandBase(VecTask):
             (
                 should_reset,
                 termination_info,
-                termination_rewards,  # One-time bonuses/penalties at episode end
+                termination_rewards,  # One-time bonuses/penalties at episode end (weighted)
+                raw_termination_rewards,  # Raw unscaled values
             ) = self.termination_manager.evaluate(
                 self.episode_step_count,
                 builtin_success,
@@ -924,8 +925,13 @@ class DexHandBase(VecTask):
             # Add termination rewards to total rewards AND tracked components
             for reward_type, reward_tensor in termination_rewards.items():
                 self.rew_buf += reward_tensor
-                # Track in components with "termination_" prefix for TensorBoard visibility
-                reward_components[f"termination_{reward_type}"] = reward_tensor
+                # Track both raw and weighted termination rewards
+                # Raw values
+                raw_key = f"termination_{reward_type}"
+                reward_components[raw_key] = raw_termination_rewards[reward_type]
+                # Weighted values
+                weighted_key = f"termination_{reward_type}_weighted"
+                reward_components[weighted_key] = reward_tensor
 
             # Update last_reward_components to include termination rewards
             self.last_reward_components = reward_components

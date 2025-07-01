@@ -58,10 +58,13 @@ class TerminationManager:
         # Termination rewards - read from reward weights config
         rewards_cfg = cfg["env"].get("rewardWeights", {})
         self.success_reward = rewards_cfg.get("termination_success", 10.0)
-        self.failure_penalty = abs(
-            rewards_cfg.get("termination_failure", -5.0)
-        )  # Store as positive
-        self.timeout_reward = rewards_cfg.get("termination_timeout", 0.0)
+        self.failure_penalty = rewards_cfg.get("termination_failure_penalty", 5.0)
+        self.timeout_penalty = rewards_cfg.get("termination_timeout_penalty", 0.0)
+
+        # Raw values for unweighted tracking (before scaling)
+        self.RAW_SUCCESS = 1.0
+        self.RAW_FAILURE = 1.0
+        self.RAW_TIMEOUT = 1.0
 
         # Track consecutive successes for curriculum learning
         self.consecutive_successes = 0
@@ -298,11 +301,16 @@ class TerminationManager:
         termination_info["timeout_rate"] = timeout_count.float() / self.num_envs
 
         # Generate termination rewards (one-time bonuses/penalties)
-        termination_rewards = self._get_termination_rewards(
+        termination_rewards, raw_termination_rewards = self._get_termination_rewards(
             success_termination, failure_termination, timeout_termination
         )
 
-        return should_reset, termination_info, termination_rewards
+        return (
+            should_reset,
+            termination_info,
+            termination_rewards,
+            raw_termination_rewards,
+        )
 
     def _get_termination_rewards(
         self, success_termination, failure_termination, timeout_termination
@@ -316,29 +324,39 @@ class TerminationManager:
             timeout_termination: Boolean tensor for timeout terminations
 
         Returns:
-            Dictionary with reward components
+            Dictionary with both raw and weighted reward components
         """
         rewards = {}
+        raw_rewards = {}
 
         # Success rewards
         success_reward = torch.zeros(self.num_envs, device=self.device)
+        success_raw = torch.zeros(self.num_envs, device=self.device)
         if torch.any(success_termination):
             success_reward[success_termination] = self.success_reward
+            success_raw[success_termination] = self.RAW_SUCCESS
         rewards["success"] = success_reward
+        raw_rewards["success"] = success_raw
 
-        # Failure penalties
+        # Failure penalties (note: stored as positive in config, applied as negative)
         failure_penalty = torch.zeros(self.num_envs, device=self.device)
+        failure_raw = torch.zeros(self.num_envs, device=self.device)
         if torch.any(failure_termination):
             failure_penalty[failure_termination] = -self.failure_penalty
-        rewards["failure"] = failure_penalty
+            failure_raw[failure_termination] = self.RAW_FAILURE
+        rewards["failure_penalty"] = failure_penalty
+        raw_rewards["failure_penalty"] = failure_raw
 
-        # Timeout rewards (usually neutral)
-        timeout_reward = torch.zeros(self.num_envs, device=self.device)
+        # Timeout penalties (note: stored as positive in config, applied as negative)
+        timeout_penalty = torch.zeros(self.num_envs, device=self.device)
+        timeout_raw = torch.zeros(self.num_envs, device=self.device)
         if torch.any(timeout_termination):
-            timeout_reward[timeout_termination] = self.timeout_reward
-        rewards["timeout"] = timeout_reward
+            timeout_penalty[timeout_termination] = -self.timeout_penalty
+            timeout_raw[timeout_termination] = self.RAW_TIMEOUT
+        rewards["timeout_penalty"] = timeout_penalty
+        raw_rewards["timeout_penalty"] = timeout_raw
 
-        return rewards
+        return rewards, raw_rewards
 
     def update_consecutive_successes(self, success_tensor):
         """
