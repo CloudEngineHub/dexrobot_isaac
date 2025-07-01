@@ -163,33 +163,49 @@ class PhysicsManager:
             Boolean indicating success
         """
         try:
-            # Extract actor indices for the environments we're updating
-            indices_to_use = torch.zeros(
-                len(env_ids), dtype=torch.int32, device=self.device
-            )
-            for i, env_id in enumerate(env_ids):
-                if env_id < len(actor_indices):
-                    indices_to_use[i] = actor_indices[env_id]
-                else:
-                    raise RuntimeError(
-                        f"Environment ID {env_id} out of range for actor_indices"
-                    )
+            # Vectorized extraction of actor indices
+            # Check bounds once
+            max_env_id = env_ids.max() if len(env_ids) > 0 else -1
+            if max_env_id >= len(actor_indices):
+                raise RuntimeError(
+                    f"Environment ID {max_env_id} out of range for actor_indices (size: {len(actor_indices)})"
+                )
 
-            # Extract root states for the actors
-            actor_states = torch.zeros((len(env_ids), 13), device=self.device)
-            for i, env_id in enumerate(env_ids):
-                if env_id < root_state_tensor.shape[0]:
-                    actor_idx = indices_to_use[i]
-                    if actor_idx < root_state_tensor.shape[1]:
-                        actor_states[i] = root_state_tensor[env_id, actor_idx]
-                    else:
-                        raise RuntimeError(
-                            f"Actor index {actor_idx} out of range for root_state_tensor"
-                        )
-                else:
-                    raise RuntimeError(
-                        f"Environment ID {env_id} out of range for root_state_tensor"
-                    )
+            # Use advanced indexing to extract indices
+            indices_to_use = actor_indices[env_ids].to(torch.int32)
+
+            # Vectorized extraction of root states
+            # Check bounds once
+            if max_env_id >= root_state_tensor.shape[0]:
+                raise RuntimeError(
+                    f"Environment ID {max_env_id} out of range for root_state_tensor (shape: {root_state_tensor.shape})"
+                )
+
+            max_actor_idx = indices_to_use.max() if len(indices_to_use) > 0 else -1
+            if max_actor_idx >= root_state_tensor.shape[1]:
+                raise RuntimeError(
+                    f"Actor index {max_actor_idx} out of range for root_state_tensor (shape: {root_state_tensor.shape})"
+                )
+
+            # Use advanced indexing to extract all states at once
+            # First, get the states for the requested environments
+            env_states = root_state_tensor[
+                env_ids
+            ]  # Shape: (len(env_ids), num_actors_per_env, 13)
+
+            # Create indices for gather operation
+            # We need to expand indices_to_use to match the last dimension (13)
+            gather_indices = (
+                indices_to_use.unsqueeze(-1)
+                .unsqueeze(-1)
+                .expand(-1, -1, 13)
+                .to(torch.long)
+            )
+
+            # Use gather to select the specific actor for each environment
+            actor_states = env_states.gather(1, gather_indices).squeeze(
+                1
+            )  # Shape: (len(env_ids), 13)
 
             # Apply root states
             self.gym.set_actor_root_state_tensor_indexed(

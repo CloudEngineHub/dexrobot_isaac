@@ -61,6 +61,7 @@ env:
     - contact_duration    # Temporal sensing
     - hand_pose          # Correct key name (not hand_base_pose)
     - prev_actions
+    - fingertip_poses_world
     # NO box observations - policy is blind!
     # All other observations (box pose, distances) are computed for rewards/analysis only
 
@@ -120,15 +121,15 @@ env:
     contact_stability: 0.02
 
     # Task-specific rewards (main learning signal)
-    object_height: 50.0              # Main reward for lifting object
-    grasp_approach: 5.0              # Reward any contact with object
-    finger_to_object: 10.0           # Reward for getting fingers close
-    hand_to_object: 5.0              # Reward for getting hand close
+    object_height: 2.0              # Main reward for lifting object
+    grasp_approach: 1.0              # Reward any contact with object
+    finger_to_object: 1.0           # Reward for getting fingers close
+    hand_to_object: 1.0              # Reward for getting hand close
 
     # Termination rewards (one-time at episode end)
-    termination_success: 100.0       # Large bonus for successful grasp and lift
-    termination_failure: -50.0       # Penalty for failure (touching ground, etc.)
-    termination_timeout: -10.0       # Small penalty for not completing task
+    termination_success: 2000.0       # Large bonus for successful grasp and lift
+    termination_failure: -1000.0       # Penalty for failure (touching ground, etc.)
+    termination_timeout: -100.0       # Small penalty for not completing task
 
   # Task-specific parameters
   task_params:

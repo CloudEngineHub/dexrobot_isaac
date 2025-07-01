@@ -1000,11 +1000,6 @@ class DexHandBase(VecTask):
             # Step physics and ensure tensors are refreshed
             # Pass refresh_tensors=True to ensure tensor data is updated
             self.physics_manager.step_physics(refresh_tensors=True)
-
-            # When using GPU pipeline, we need an additional explicit refresh
-            # to ensure all tensors are up-to-date
-            if self.use_gpu_pipeline:
-                self.physics_manager.refresh_tensors()
         except Exception as e:
             logger.error(f"ERROR in physics step: {e}")
             import traceback

@@ -248,7 +248,11 @@ class ResetManager:
             if False:  # Disabled for fixed-base hands
                 # Vectorized root state reset for future use
                 # Check if any env_ids are out of bounds
-                max_env_id = env_ids.max().item() if len(env_ids) > 0 else -1
+                max_env_id = (
+                    env_ids.max()
+                    if len(env_ids) > 0
+                    else torch.tensor(-1, device=self.device)
+                )
                 if max_env_id >= self.num_envs:
                     raise RuntimeError(
                         f"Environment ID {max_env_id} exceeds number of environments {self.num_envs}"
