@@ -4,6 +4,7 @@ Reward component observer for logging individual reward terms to TensorBoard.
 
 import torch
 from rl_games.common.algo_observer import AlgoObserver
+from rl_games.algos_torch.torch_ext import AverageMeter
 
 
 class RewardComponentObserver(AlgoObserver):
@@ -42,6 +43,26 @@ class RewardComponentObserver(AlgoObserver):
         self.device = None
         self.initialized = False
 
+        # Meters for tracking episode means by termination type
+        # Structure: episode_meters[termination_type][component_name] = AverageMeter
+        self.episode_meters = {
+            "all": {},
+            "success": {},
+            "failure": {},
+            "timeout": {},
+        }
+
+        # Cumulative sums for computing step averages
+        # Structure: cumulative_sums[termination_type][component_name] = {"rewards": float, "steps": int}
+        self.cumulative_sums = {
+            "all": {},
+            "success": {},
+            "failure": {},
+            "timeout": {},
+        }
+
+        self.games_to_track = 100  # Same default as RL Games
+
         # Track total episodes for global statistics
         self.total_episodes = 0
         self.episodes_by_type = {"success": 0, "failure": 0, "timeout": 0}
@@ -50,14 +71,19 @@ class RewardComponentObserver(AlgoObserver):
         self.algo = None
         self.writer = None
 
+        # Track which components we've discovered
+        self.discovered_components = set()
+
     def after_init(self, algo):
         """Store reference to the algorithm for accessing data."""
         self.algo = algo
         self.writer = algo.writer if hasattr(algo, "writer") else None
 
         # Get environment info for initialization
-        if hasattr(algo, "env") and hasattr(algo.env, "num_envs"):
-            self._initialize(algo.env.num_envs, algo.device)
+        if hasattr(algo, "vec_env") and hasattr(algo.vec_env, "env"):
+            env = algo.vec_env.env
+            if hasattr(env, "num_envs"):
+                self._initialize(env.num_envs, algo.device)
 
     def _initialize(self, num_envs, device):
         """Initialize tensors based on environment info."""
@@ -66,62 +92,32 @@ class RewardComponentObserver(AlgoObserver):
         self.episode_lengths = torch.zeros(num_envs, device=device, dtype=torch.long)
         self.initialized = True
 
-        # Pre-allocate tensors for all expected reward components
-        # This prevents dynamic dictionary growth during runtime which causes memory leaks
-        self._preallocate_reward_accumulators()
-
-    def _preallocate_reward_accumulators(self):
+    def _ensure_component_exists(self, component_name):
         """
-        Pre-allocate tensors for all expected reward components.
+        Ensure meters and accumulators exist for a component.
 
-        This prevents dynamic tensor allocation during runtime which can cause:
-        - Memory fragmentation
-        - Performance degradation over time
-        - GPU memory leaks
+        This is called dynamically as new components are discovered,
+        avoiding the need to hardcode component names.
         """
-        # Common reward components from reward calculator
-        common_components = [
-            "alive",
-            "height_safety",
-            "finger_velocity",
-            "hand_velocity",
-            "hand_angular_velocity",
-            "joint_limit",
-            "finger_acceleration",
-            "hand_acceleration",
-            "hand_angular_acceleration",
-            "contact_stability",
-            "total",  # Total reward
-        ]
+        if component_name in self.discovered_components:
+            return
 
-        # Task-specific reward components
-        task_components = [
-            # Box grasping task
-            "object_height",
-            "grasp_approach",
-            "finger_to_object",
-            "hand_to_object",
-            # General task rewards
-            "task_progress",
-            "task_completion",
-            # Termination rewards
-            "success",
-            "failure",
-            "timeout",
-        ]
+        # Create accumulator
+        self.episode_reward_sums[component_name] = torch.zeros(
+            self.num_envs, device=self.device
+        )
 
-        # Also pre-allocate for weighted versions
-        all_components = common_components + task_components
-        components_with_weighted = []
-        for comp in all_components:
-            components_with_weighted.append(comp)
-            components_with_weighted.append(f"{comp}_weighted")
+        # Create episode meters and cumulative sums for each termination type
+        for term_type in self.episode_meters:
+            self.episode_meters[term_type][component_name] = AverageMeter(
+                1, self.games_to_track
+            ).to(self.device)
+            self.cumulative_sums[term_type][component_name] = {
+                "rewards": 0.0,
+                "steps": 0,
+            }
 
-        # Pre-allocate all tensors
-        for component_name in components_with_weighted:
-            self.episode_reward_sums[component_name] = torch.zeros(
-                self.num_envs, device=self.device
-            )
+        self.discovered_components.add(component_name)
 
     def process_infos(self, infos, done_indices):
         """
@@ -139,12 +135,12 @@ class RewardComponentObserver(AlgoObserver):
         # Initialize if needed
         if not self.initialized and hasattr(self, "algo"):
             if hasattr(self.algo, "vec_env"):
-                num_envs = self.algo.vec_env.env.num_envs
-                device = self.algo.device
-                self._initialize(num_envs, device)
+                env = self.algo.vec_env.env
+                if hasattr(env, "num_envs"):
+                    self._initialize(env.num_envs, self.algo.device)
 
         # Process done environments and log their rewards
-        self._process_done_episodes(infos, done_indices)
+        self._process_done_episodes_vectorized(infos, done_indices)
 
     def after_steps(self):
         """
@@ -165,89 +161,49 @@ class RewardComponentObserver(AlgoObserver):
     def _accumulate_reward_components(self, reward_components):
         """Accumulate reward components across steps."""
         for component_name, values in reward_components.items():
-            # Only accumulate if we have pre-allocated tensor
-            if component_name in self.episode_reward_sums:
-                # Accumulate values
-                if isinstance(values, torch.Tensor):
-                    self.episode_reward_sums[component_name] += values
-                else:
-                    self.episode_reward_sums[component_name] += values
+            # Ensure component exists (dynamic discovery)
+            self._ensure_component_exists(component_name)
+
+            # Accumulate values
+            if isinstance(values, torch.Tensor):
+                self.episode_reward_sums[component_name] += values
             else:
-                # Log warning once about unknown component (prevents spam)
-                if not hasattr(self, "_unknown_components_warned"):
-                    self._unknown_components_warned = set()
-                if component_name not in self._unknown_components_warned:
-                    self._unknown_components_warned.add(component_name)
-                    print(
-                        f"Warning: Unknown reward component '{component_name}' - not tracking"
-                    )
+                self.episode_reward_sums[component_name] += torch.tensor(
+                    values, device=self.device
+                )
 
-    def _process_done_episodes(self, infos, done_indices):
-        """Process and log rewards for completed episodes."""
-        # Get termination types
-        termination_types = self._get_termination_types(infos, done_indices)
-
-        # Process each done environment
-        for idx in done_indices:
-            env_id = idx.item()
-            # Use our tracked episode length, not the one from infos (which might be reset)
-            episode_length = self.episode_lengths[env_id].item()
-            termination_type = termination_types.get(env_id, "unknown")
-
-            if episode_length > 0 and self.episode_reward_sums:
-                self._log_accumulated_rewards(env_id, episode_length, termination_type)
-
-            # Reset accumulators for this environment
-            self.episode_lengths[env_id] = 0
-            for component_name in self.episode_reward_sums:
-                if isinstance(self.episode_reward_sums[component_name], torch.Tensor):
-                    self.episode_reward_sums[component_name][env_id] = 0
-
-            # Update episode counters
-            self.total_episodes += 1
-            if termination_type in self.episodes_by_type:
-                self.episodes_by_type[termination_type] += 1
-
-    def _get_termination_types(self, infos, done_indices):
-        """Extract termination type for each done environment."""
-        termination_types = {}
-
-        # Check for termination type indicators in infos
-        for key in ["success", "failure", "timeout"]:
-            if key in infos:
-                values = infos[key]
-                if isinstance(values, torch.Tensor):
-                    for idx in done_indices:
-                        env_id = idx.item()
-                        if env_id < len(values) and values[env_id]:
-                            termination_types[env_id] = key
-
-        return termination_types
-
-    def _log_accumulated_rewards(self, env_id, episode_length, termination_type):
-        """Log accumulated reward components for a completed episode."""
-        if self.writer is None:
+    def _process_done_episodes_vectorized(self, infos, done_indices):
+        """Process and log rewards for completed episodes using vectorized operations."""
+        if self.writer is None or not self.episode_reward_sums:
             return
 
+        # Get current frame for logging
         frame = self.algo.frame if hasattr(self.algo, "frame") else self.total_episodes
 
-        # Log each accumulated component
+        # Get termination type masks - vectorized approach
+        success_mask = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        failure_mask = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+        timeout_mask = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
+        # Extract termination types from infos
+        if "success" in infos and isinstance(infos["success"], torch.Tensor):
+            success_mask = infos["success"].bool()
+        if "failure" in infos and isinstance(infos["failure"], torch.Tensor):
+            failure_mask = infos["failure"].bool()
+        if "timeout" in infos and isinstance(infos["timeout"], torch.Tensor):
+            timeout_mask = infos["timeout"].bool()
+
+        # Get episode lengths for done environments
+        done_lengths = self.episode_lengths[done_indices].float()
+
+        # Process each component
         for component_name, accumulated_values in self.episode_reward_sums.items():
             # Skip 'total' component as it's already logged by rl_games
             if component_name == "total":
                 continue
 
-            # Get accumulated value for this environment
-            if isinstance(accumulated_values, torch.Tensor):
-                if accumulated_values.dim() > 0 and env_id < len(accumulated_values):
-                    episode_total = accumulated_values[env_id].item()
-                else:
-                    episode_total = accumulated_values.item()
-            else:
-                episode_total = accumulated_values
-
-            # Calculate per-step average from episode total
-            step_average = episode_total / episode_length if episode_length > 0 else 0.0
+            # Get values for done environments
+            done_values = accumulated_values[done_indices]
 
             # Determine if this is a weighted component
             is_weighted = component_name.endswith("_weighted")
@@ -256,22 +212,90 @@ class RewardComponentObserver(AlgoObserver):
                 if is_weighted
                 else component_name
             )
-
-            # Determine weight type
             weight_type = "weighted" if is_weighted else "raw"
+
+            # Update meters and cumulative sums for "all" episodes
+            self.episode_meters["all"][component_name].update(done_values)
+
+            # Update cumulative sums for step average calculation
+            total_reward = done_values.sum().item()
+            total_steps = done_lengths.sum().item()
+            self.cumulative_sums["all"][component_name]["rewards"] += total_reward
+            self.cumulative_sums["all"][component_name]["steps"] += total_steps
+
+            # Get episode mean from meter
+            episode_mean = self.episode_meters["all"][component_name].get_mean()
+
+            # Calculate step average from cumulative sums
+            cum_rewards = self.cumulative_sums["all"][component_name]["rewards"]
+            cum_steps = self.cumulative_sums["all"][component_name]["steps"]
+            step_mean = cum_rewards / max(cum_steps, 1)
 
             # Log for "all" episodes
             episode_key = f"reward_breakdown/all/{weight_type}/episode/{base_name}"
             step_key = f"reward_breakdown/all/{weight_type}/step/{base_name}"
-            self.writer.add_scalar(episode_key, episode_total, frame)
-            self.writer.add_scalar(step_key, step_average, frame)
+            self.writer.add_scalar(episode_key, episode_mean, frame)
+            self.writer.add_scalar(step_key, step_mean, frame)
 
-            # Also log by specific termination type
-            if termination_type in ["success", "failure", "timeout"]:
-                episode_key = f"reward_breakdown/{termination_type}/{weight_type}/episode/{base_name}"
-                step_key = f"reward_breakdown/{termination_type}/{weight_type}/step/{base_name}"
-                self.writer.add_scalar(episode_key, episode_total, frame)
-                self.writer.add_scalar(step_key, step_average, frame)
+            # Process by termination type using masks
+            for term_type, mask in [
+                ("success", success_mask),
+                ("failure", failure_mask),
+                ("timeout", timeout_mask),
+            ]:
+                # Get indices of done environments with this termination type
+                term_done_mask = mask[done_indices]
+                if term_done_mask.any():
+                    # Get values for this termination type
+                    term_values = done_values[term_done_mask]
+                    term_lengths = done_lengths[term_done_mask]
+
+                    # Update episode meter for this termination type
+                    self.episode_meters[term_type][component_name].update(term_values)
+
+                    # Update cumulative sums
+                    term_total_reward = term_values.sum().item()
+                    term_total_steps = term_lengths.sum().item()
+                    self.cumulative_sums[term_type][component_name][
+                        "rewards"
+                    ] += term_total_reward
+                    self.cumulative_sums[term_type][component_name][
+                        "steps"
+                    ] += term_total_steps
+
+                    # Get episode mean
+                    term_episode_mean = self.episode_meters[term_type][
+                        component_name
+                    ].get_mean()
+
+                    # Calculate step average from cumulative sums
+                    term_cum_rewards = self.cumulative_sums[term_type][component_name][
+                        "rewards"
+                    ]
+                    term_cum_steps = self.cumulative_sums[term_type][component_name][
+                        "steps"
+                    ]
+                    term_step_mean = term_cum_rewards / max(term_cum_steps, 1)
+
+                    # Log for specific termination type
+                    episode_key = f"reward_breakdown/{term_type}/{weight_type}/episode/{base_name}"
+                    step_key = (
+                        f"reward_breakdown/{term_type}/{weight_type}/step/{base_name}"
+                    )
+                    self.writer.add_scalar(episode_key, term_episode_mean, frame)
+                    self.writer.add_scalar(step_key, term_step_mean, frame)
+
+        # Reset accumulators for done environments
+        self.episode_lengths[done_indices] = 0
+        for component_name in self.episode_reward_sums:
+            self.episode_reward_sums[component_name][done_indices] = 0
+
+        # Update episode counters
+        num_done = len(done_indices)
+        self.total_episodes += num_done
+        self.episodes_by_type["success"] += success_mask[done_indices].sum().item()
+        self.episodes_by_type["failure"] += failure_mask[done_indices].sum().item()
+        self.episodes_by_type["timeout"] += timeout_mask[done_indices].sum().item()
 
         # Log termination type rates periodically
         if self.total_episodes > 0 and self.total_episodes % 100 == 0:
@@ -280,3 +304,21 @@ class RewardComponentObserver(AlgoObserver):
                 self.writer.add_scalar(
                     f"rewards/termination_rates/{term_type}", rate, frame
                 )
+
+    def after_clear_stats(self):
+        """
+        Called when stats are cleared.
+
+        Following RL Games pattern: clear all meters and cumulative sums.
+        """
+        for term_type_meters in self.episode_meters.values():
+            for meter in term_type_meters.values():
+                meter.clear()
+
+        # Reset cumulative sums
+        for term_type in self.cumulative_sums:
+            for component_name in self.cumulative_sums[term_type]:
+                self.cumulative_sums[term_type][component_name] = {
+                    "rewards": 0.0,
+                    "steps": 0,
+                }

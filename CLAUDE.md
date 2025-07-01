@@ -160,6 +160,58 @@ action_processor.finalize_setup()  # Now control_dt available
 - Components access via property decorators
 - No manual synchronization needed
 
+## Critical Lessons - Optimization and Refactoring
+
+### ALWAYS Understand Before Optimizing
+When asked to optimize or refactor code, FIRST understand what it does:
+- Read the complete implementation and understand its output format
+- Identify all API contracts and external interfaces
+- Map out the data flow and dependencies
+- Only then plan optimizations that preserve exact behavior
+
+❌ WRONG:
+```python
+# Original logs to: reward_breakdown/all/raw/episode/component
+# Changed to: reward_components/component/step
+# This breaks downstream tools expecting the original format!
+```
+
+✅ CORRECT:
+```python
+# Preserve exact same output keys and structure
+# Only change the internal implementation
+```
+
+### NEVER Hardcode Dynamic Data
+If the system can discover information dynamically, use that mechanism:
+- Query configuration systems for available components
+- Use existing registries and managers
+- Avoid duplicating knowledge that exists elsewhere
+
+❌ WRONG - Hardcoded component list:
+```python
+common_components = ["alive", "height_safety", "finger_velocity", ...]
+task_components = ["object_height", "grasp_approach", ...]
+```
+
+✅ CORRECT - Query from source of truth:
+```python
+# Get components from reward calculator's configuration
+enabled_components = [name for name, weight in reward_weights.items() if weight != 0]
+```
+
+### Respect Exact Requirements
+When asked to "optimize without changing logic":
+- Preserve ALL aspects of the output (keys, structure, meaning)
+- Only change the implementation approach
+- Maintain backward compatibility
+- Test that outputs remain identical
+
+### Query Existing Systems for Truth
+- Don't maintain separate lists of components/features
+- Use the system's own discovery mechanisms
+- Single source of truth principle applies everywhere
+
 ## Project Status
 
 See [`ROADMAP.md`](ROADMAP.md) for detailed project status, completed features, and future development plans.
