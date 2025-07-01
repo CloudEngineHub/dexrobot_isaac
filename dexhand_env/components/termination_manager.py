@@ -142,25 +142,29 @@ class TerminationManager:
         for name, criterion in builtin_success.items():
             if name in self.active_success_criteria or not self.active_success_criteria:
                 active_success[name] = criterion
-                termination_info[f"success_{name}"] = criterion.float().mean().item()
+                # Keep as tensor for logging - logger will handle conversion
+                termination_info[f"success_{name}"] = criterion.float().mean()
 
         # Process task-specific success criteria
         for name, criterion in task_success.items():
             if name in self.active_success_criteria or not self.active_success_criteria:
                 active_success[name] = criterion
-                termination_info[f"success_{name}"] = criterion.float().mean().item()
+                # Keep as tensor for logging - logger will handle conversion
+                termination_info[f"success_{name}"] = criterion.float().mean()
 
         # Process built-in failure criteria
         for name, criterion in builtin_failure.items():
             if name in self.active_failure_criteria or not self.active_failure_criteria:
                 active_failure[name] = criterion
-                termination_info[f"failure_{name}"] = criterion.float().mean().item()
+                # Keep as tensor for logging - logger will handle conversion
+                termination_info[f"failure_{name}"] = criterion.float().mean()
 
         # Process task-specific failure criteria
         for name, criterion in task_failure.items():
             if name in self.active_failure_criteria or not self.active_failure_criteria:
                 active_failure[name] = criterion
-                termination_info[f"failure_{name}"] = criterion.float().mean().item()
+                # Keep as tensor for logging - logger will handle conversion
+                termination_info[f"failure_{name}"] = criterion.float().mean()
 
         # Initialize termination type tensors
         episode_success = torch.zeros(
@@ -233,14 +237,15 @@ class TerminationManager:
         for name, reason_mask in self.failure_reasons.items():
             termination_info[f"failure_reason_{name}"] = reason_mask
 
-        # Calculate termination statistics
-        success_count = success_termination.sum().item()
-        failure_count = failure_termination.sum().item()
-        timeout_count = timeout_termination.sum().item()
+        # Calculate termination statistics - keep as tensors
+        success_count = success_termination.sum()
+        failure_count = failure_termination.sum()
+        timeout_count = timeout_termination.sum()
 
-        termination_info["success_rate"] = success_count / self.num_envs
-        termination_info["failure_rate"] = failure_count / self.num_envs
-        termination_info["timeout_rate"] = timeout_count / self.num_envs
+        # Keep rates as tensors for logging - avoid .item() calls
+        termination_info["success_rate"] = success_count.float() / self.num_envs
+        termination_info["failure_rate"] = failure_count.float() / self.num_envs
+        termination_info["timeout_rate"] = timeout_count.float() / self.num_envs
 
         # Generate termination rewards (one-time bonuses/penalties)
         termination_rewards = self._get_termination_rewards(

@@ -348,14 +348,17 @@ class TensorManager:
             f"Monitored contact forces tensor shape: {self.contact_forces.shape}"
         )
 
-        # Copy contact forces for monitored bodies using local indices
-        # Since all environments have the same structure, we use the same local indices
-        for i in range(self.num_envs):
-            for j, local_body_idx in enumerate(contact_force_local_body_indices):
-                # Directly use the local index to access the reshaped tensor
-                self.contact_forces[i, j, :] = self.contact_forces_all[
-                    i, local_body_idx, :
-                ]
+        # Vectorized copy of contact forces for monitored bodies
+        # Create index tensor for advanced indexing
+        body_indices = torch.tensor(
+            contact_force_local_body_indices, device=self.device, dtype=torch.long
+        )
+
+        # Use advanced indexing to copy all forces at once
+        # contact_forces_all shape: (num_envs, num_bodies_per_env, 3)
+        # We want to extract specific bodies indexed by body_indices
+        # Result shape: (num_envs, num_contact_bodies, 3)
+        self.contact_forces = self.contact_forces_all[:, body_indices, :]
 
         # Mark tensors as initialized
         self.tensors_initialized = True
@@ -427,38 +430,20 @@ class TensorManager:
                 self.num_envs, num_bodies_per_env, 3
             )
 
-            # Debug contact forces detection (using local indices)
-            if logger._core.min_level <= 10:  # Only if DEBUG level is enabled
-                # Check each environment separately
-                for env_idx in range(
-                    min(self.num_envs, 2)
-                ):  # Log only first 2 envs to avoid spam
-                    env_forces = self.contact_forces_all[env_idx]
-                    nonzero_forces = torch.nonzero(env_forces.abs().sum(dim=1) > 0.001)
-
-                    if nonzero_forces.numel() > 0:
-                        for local_idx in nonzero_forces[:, 0]:
-                            local_idx_int = local_idx.item()
-                            body_name = self.rigid_body_index_to_name.get(
-                                local_idx_int, f"Body_{local_idx_int}"
-                            )
-                            force_vec = env_forces[local_idx_int]
-                            force_mag = torch.norm(force_vec).item()
-                            logger.debug(
-                                f"Env {env_idx} - Contact on '{body_name}' (local idx={local_idx_int}): magnitude={force_mag:.2f}N"
-                            )
+            # Debug contact forces detection disabled for performance
+            # Re-enable only when actively debugging contact issues
 
             # Number of contact force bodies to monitor
             # num_contact_bodies = len(contact_force_local_body_indices)  # Not used, kept for clarity
 
-            # Copy contact forces for monitored bodies using local indices
-            # All environments have the same local indices
-            for i in range(self.num_envs):
-                for j, local_body_idx in enumerate(contact_force_local_body_indices):
-                    # Directly use the local index
-                    self.contact_forces[i, j, :] = self.contact_forces_all[
-                        i, local_body_idx, :
-                    ]
+            # Vectorized copy of contact forces for monitored bodies
+            # Create index tensor for advanced indexing
+            body_indices = torch.tensor(
+                contact_force_local_body_indices, device=self.device, dtype=torch.long
+            )
+
+            # Use advanced indexing to copy all forces at once
+            self.contact_forces = self.contact_forces_all[:, body_indices, :]
 
             return {
                 "dof_pos": self.dof_pos,

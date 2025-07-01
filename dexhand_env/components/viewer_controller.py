@@ -336,14 +336,46 @@ class ViewerController:
             self.camera_view_mode, gymapi.Vec3(-1.0, 0.0, 0.6)
         )
 
+        # Cache target position to avoid redundant CPU transfers
+        if not hasattr(self, "_camera_target_cache"):
+            self._camera_target_cache = torch.zeros(3, device="cpu")
+            self._last_camera_mode = None
+            self._last_follow_index = None
+
+        # Check if we need to update camera target
+        mode_changed = self._last_camera_mode != (
+            self.camera_follow_mode,
+            self.camera_view_mode,
+        )
+        follow_changed = (
+            self.camera_follow_mode == "single"
+            and self._last_follow_index != self.follow_robot_index
+        )
+
         # Determine camera target based on follow mode
         if self.camera_follow_mode == "single":
             # Follow a specific robot
             safe_index = min(self.follow_robot_index, hand_positions.shape[0] - 1)
-            target_pos = hand_positions[safe_index].cpu().numpy()
+
+            # Only transfer to CPU if mode/target changed or every N frames
+            if (
+                mode_changed
+                or follow_changed
+                or (hasattr(self, "_frame_count") and self._frame_count % 10 == 0)
+            ):
+                self._camera_target_cache = hand_positions[safe_index].cpu()
+
+            target_pos = self._camera_target_cache.numpy()
         else:
             # Global view - focus on center of all robots
-            target_pos = hand_positions.mean(dim=0).cpu().numpy()
+            # Only update mean every N frames since it changes slowly
+            if mode_changed or (
+                hasattr(self, "_frame_count") and self._frame_count % 30 == 0
+            ):
+                self._camera_target_cache = hand_positions.mean(dim=0).cpu()
+
+            target_pos = self._camera_target_cache.numpy()
+
             # For global view, increase camera distance
             camera_offset = gymapi.Vec3(
                 camera_offset.x * 2.0,
@@ -352,6 +384,13 @@ class ViewerController:
                 if self.camera_view_mode != "bottom"
                 else camera_offset.z - 1.0,
             )
+
+        # Update tracking variables
+        self._last_camera_mode = (self.camera_follow_mode, self.camera_view_mode)
+        self._last_follow_index = self.follow_robot_index
+        if not hasattr(self, "_frame_count"):
+            self._frame_count = 0
+        self._frame_count += 1
 
         try:
             # Set camera position and target
@@ -421,52 +460,111 @@ class ViewerController:
         force_magnitudes = torch.norm(contact_forces, dim=2)  # [num_envs, num_bodies]
         has_contact = force_magnitudes > self.contact_force_threshold
 
-        # Update colors for each environment
+        # Early exit if no contacts
+        if not has_contact.any():
+            # Reset all colors to default if we had previous contacts
+            if hasattr(self, "_had_contacts") and self._had_contacts:
+                self._reset_all_colors_to_default(
+                    contact_body_local_indices, num_bodies_per_env
+                )
+                self._had_contacts = False
+            return False
+
+        self._had_contacts = True
+
+        # Vectorized normalization of forces
+        normalized_forces = (force_magnitudes - self.contact_force_threshold) / (
+            self.contact_force_max_intensity - self.contact_force_threshold
+        )
+        normalized_forces = torch.clamp(normalized_forces, 0.0, 1.0)  # Clamp to [0, 1]
+
+        # Pre-compute color differences for vectorized interpolation
+        color_diff_r = self.contact_base_color.x - self.default_body_color.x
+        color_diff_g = self.contact_base_color.y - self.default_body_color.y
+        color_diff_b = self.contact_base_color.z - self.default_body_color.z
+
+        # Compute all colors vectorized on GPU
+        # Shape: [num_envs, num_bodies, 3]
+        all_colors = torch.zeros(
+            (self.num_envs, len(contact_body_local_indices), 3),
+            device=contact_forces.device,
+        )
+
+        # Set default colors
+        all_colors[:, :, 0] = self.default_body_color.x
+        all_colors[:, :, 1] = self.default_body_color.y
+        all_colors[:, :, 2] = self.default_body_color.z
+
+        # Update colors where there's contact
+        all_colors[has_contact, 0] += color_diff_r * normalized_forces[has_contact]
+        all_colors[has_contact, 1] += color_diff_g * normalized_forces[has_contact]
+        all_colors[has_contact, 2] += color_diff_b * normalized_forces[has_contact]
+
+        # Track which bodies need color updates to minimize API calls
+        if not hasattr(self, "_prev_colors"):
+            self._prev_colors = torch.full_like(
+                all_colors, -1.0
+            )  # Initialize with invalid color
+
+        # Find which colors have changed
+        color_changed = ~torch.allclose(all_colors, self._prev_colors, atol=0.01)
+        if not color_changed.any():
+            return True  # No color changes needed
+
+        # Store current colors for next comparison
+        self._prev_colors = all_colors.clone()
+
+        # Batch extract color components to minimize .item() calls
+        # Flatten the color data and move to CPU in one operation
+        colors_flat = all_colors.reshape(-1, 3).cpu()
+
+        # Pre-extract all color values at once
+        color_values = colors_flat.numpy()  # Single CPU transfer
+
+        # Update colors only for bodies that changed
+        bodies_to_update = torch.nonzero(color_changed.any(dim=2)).cpu().numpy()
+
+        for update_idx in range(len(bodies_to_update)):
+            env_idx = bodies_to_update[update_idx, 0]
+            body_idx = bodies_to_update[update_idx, 1]
+            local_body_idx = contact_body_local_indices[body_idx]
+
+            # Compute global body index for Isaac Gym API
+            global_body_idx = env_idx * num_bodies_per_env + local_body_idx
+
+            # Get color values from pre-extracted array
+            flat_idx = env_idx * len(contact_body_local_indices) + body_idx
+            color = gymapi.Vec3(
+                float(color_values[flat_idx, 0]),
+                float(color_values[flat_idx, 1]),
+                float(color_values[flat_idx, 2]),
+            )
+
+            # Set the rigid body color
+            self.gym.set_rigid_body_color(
+                self.envs[env_idx],
+                self.parent.hand_handles[env_idx],
+                global_body_idx,
+                gymapi.MESH_VISUAL,
+                color,
+            )
+
+        return True
+
+    def _reset_all_colors_to_default(
+        self, contact_body_local_indices, num_bodies_per_env
+    ):
+        """Reset all contact body colors to default when no contacts detected."""
         for env_idx in range(self.num_envs):
-            # For each contact body (using local indices)
             for body_idx, local_body_idx in enumerate(contact_body_local_indices):
-                # Compute global body index for Isaac Gym API
                 global_body_idx = env_idx * num_bodies_per_env + local_body_idx
-
-                if has_contact[env_idx, body_idx]:
-                    # Calculate color based on force magnitude
-                    force_mag = force_magnitudes[env_idx, body_idx].item()
-
-                    # Normalize force between threshold and max
-                    normalized_force = (force_mag - self.contact_force_threshold) / (
-                        self.contact_force_max_intensity - self.contact_force_threshold
-                    )
-                    normalized_force = max(
-                        0.0, min(1.0, normalized_force)
-                    )  # Clamp to [0, 1]
-
-                    # Interpolate between default color and base color
-                    color = gymapi.Vec3(
-                        self.default_body_color.x
-                        + (self.contact_base_color.x - self.default_body_color.x)
-                        * normalized_force,
-                        self.default_body_color.y
-                        + (self.contact_base_color.y - self.default_body_color.y)
-                        * normalized_force,
-                        self.default_body_color.z
-                        + (self.contact_base_color.z - self.default_body_color.z)
-                        * normalized_force,
-                    )
-                else:
-                    # No contact - use default color
-                    color = self.default_body_color
-
-                # Set the rigid body color
-                # Note: Using hand_handles from parent for actor handle
                 self.gym.set_rigid_body_color(
                     self.envs[env_idx],
                     self.parent.hand_handles[env_idx],
                     global_body_idx,
                     gymapi.MESH_VISUAL,
-                    color,
+                    self.default_body_color,
                 )
-
-        return True
 
     def render(self, mode="rgb_array", reset_callback=None):
         """
