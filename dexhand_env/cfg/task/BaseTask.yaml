@@ -50,6 +50,10 @@ env:
   logLevel: "INFO"                # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
   enableComponentDebugLogs: false # Enable detailed debug logs for component internals
 
+  # Memory monitoring (for debugging performance issues)
+  enable_memory_monitoring: false  # Disabled by default
+  memory_monitor_interval: 1000   # Log memory stats every 1000 steps
+
   # Bodies to monitor for contact force observations
   contactForceBodies:
     - "r_f_link1_4"  # thumb distal phalanx

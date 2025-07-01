@@ -185,10 +185,26 @@ class RewardCalculator:
         rewards["contact_stability"] = contact_stability
 
         # Update previous states for next iteration
-        self.prev_finger_dof_vel = finger_dof_vel.clone()
-        self.prev_hand_vel = hand_vel.clone()
-        self.prev_hand_ang_vel = hand_ang_vel.clone()
-        self.prev_contacts = contacts.clone()
+        # Use copy_() for in-place copy to avoid creating new tensors
+        if self.prev_finger_dof_vel.shape == finger_dof_vel.shape:
+            self.prev_finger_dof_vel.copy_(finger_dof_vel)
+        else:
+            self.prev_finger_dof_vel = finger_dof_vel.clone()
+
+        if self.prev_hand_vel.shape == hand_vel.shape:
+            self.prev_hand_vel.copy_(hand_vel)
+        else:
+            self.prev_hand_vel = hand_vel.clone()
+
+        if self.prev_hand_ang_vel.shape == hand_ang_vel.shape:
+            self.prev_hand_ang_vel.copy_(hand_ang_vel)
+        else:
+            self.prev_hand_ang_vel = hand_ang_vel.clone()
+
+        if self.prev_contacts.shape == contacts.shape:
+            self.prev_contacts.copy_(contacts)
+        else:
+            self.prev_contacts = contacts.clone()
 
         return rewards
 

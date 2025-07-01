@@ -48,9 +48,9 @@ class TerminationManager:
         self.active_success_criteria = termination_cfg.get("activeSuccessCriteria", [])
         self.active_failure_criteria = termination_cfg.get("activeFailureCriteria", [])
 
-        # Track which specific success/failure criteria triggered for each environment
-        self.success_reasons = {}
-        self.failure_reasons = {}
+        # Pre-allocate tensors for all possible success/failure reasons
+        # This prevents dynamic dictionary growth during runtime which causes memory leaks
+        self._initialize_reason_tracking()
 
         # Maximum episode length for timeout termination
         self.max_episode_length = cfg["env"]["episodeLength"]
@@ -76,6 +76,46 @@ class TerminationManager:
     def device(self):
         """Get device from parent."""
         return self.parent.device
+
+    def _initialize_reason_tracking(self):
+        """
+        Pre-allocate tensors for all possible success/failure reasons.
+
+        This prevents dynamic dictionary growth during runtime which can cause memory leaks.
+        We pre-allocate for all commonly used criteria names.
+        """
+        # Common success criteria names
+        possible_success_criteria = [
+            "grasp_lift_success",  # Box grasping task
+            "object_reoriented",  # Reorientation tasks
+            "target_reached",  # Reaching tasks
+            "stable_grasp",  # General grasping
+            "task_completed",  # Generic success
+        ]
+
+        # Common failure criteria names
+        possible_failure_criteria = [
+            "hitting_ground",  # Built-in ground collision
+            "object_dropped",  # Object fell
+            "out_of_bounds",  # Exceeded workspace
+            "joint_limit_violation",  # Joint limits exceeded
+            "timeout",  # Episode timeout (though handled separately)
+            "task_failed",  # Generic failure
+        ]
+
+        # Initialize success reason tracking tensors
+        self.success_reasons = {}
+        for name in possible_success_criteria:
+            self.success_reasons[name] = torch.zeros(
+                self.num_envs, device=self.device, dtype=torch.bool
+            )
+
+        # Initialize failure reason tracking tensors
+        self.failure_reasons = {}
+        for name in possible_failure_criteria:
+            self.failure_reasons[name] = torch.zeros(
+                self.num_envs, device=self.device, dtype=torch.bool
+            )
 
     def validate_criteria(self, builtin_dict, task_dict, active_list, criteria_type):
         """
@@ -176,34 +216,44 @@ class TerminationManager:
 
         # Check for success conditions
         for name, criterion in active_success.items():
-            # Initialize tracking tensor for this reason if it doesn't exist
-            if name not in self.success_reasons:
-                self.success_reasons[name] = torch.zeros(
-                    self.num_envs, device=self.device, dtype=torch.bool
-                )
+            # Only track if we have pre-allocated tensor for this reason
+            if name in self.success_reasons:
+                # Identify new successes (environments that weren't successful before but now satisfy this criterion)
+                new_successes = ~episode_success & criterion
 
-            # Identify new successes (environments that weren't successful before but now satisfy this criterion)
-            new_successes = ~episode_success & criterion
-
-            # Update tracking for this specific reason
-            self.success_reasons[name] = new_successes | self.success_reasons[name]
+                # Update tracking for this specific reason
+                self.success_reasons[name] = new_successes | self.success_reasons[name]
+            else:
+                # Log warning once about unknown criterion (prevents spam)
+                if not hasattr(self, "_unknown_success_warned"):
+                    self._unknown_success_warned = set()
+                if name not in self._unknown_success_warned:
+                    self._unknown_success_warned.add(name)
+                    print(
+                        f"Warning: Unknown success criterion '{name}' - not tracking reason"
+                    )
 
             # Update overall success status
             episode_success = episode_success | criterion
 
         # Check for failure conditions
         for name, criterion in active_failure.items():
-            # Initialize tracking tensor for this reason if it doesn't exist
-            if name not in self.failure_reasons:
-                self.failure_reasons[name] = torch.zeros(
-                    self.num_envs, device=self.device, dtype=torch.bool
-                )
+            # Only track if we have pre-allocated tensor for this reason
+            if name in self.failure_reasons:
+                # Identify new failures
+                new_failures = ~episode_failure & criterion
 
-            # Identify new failures
-            new_failures = ~episode_failure & criterion
-
-            # Update tracking for this specific reason
-            self.failure_reasons[name] = new_failures | self.failure_reasons[name]
+                # Update tracking for this specific reason
+                self.failure_reasons[name] = new_failures | self.failure_reasons[name]
+            else:
+                # Log warning once about unknown criterion (prevents spam)
+                if not hasattr(self, "_unknown_failure_warned"):
+                    self._unknown_failure_warned = set()
+                if name not in self._unknown_failure_warned:
+                    self._unknown_failure_warned.add(name)
+                    print(
+                        f"Warning: Unknown failure criterion '{name}' - not tracking reason"
+                    )
 
             # Update overall failure status
             episode_failure = episode_failure | criterion

@@ -66,6 +66,63 @@ class RewardComponentObserver(AlgoObserver):
         self.episode_lengths = torch.zeros(num_envs, device=device, dtype=torch.long)
         self.initialized = True
 
+        # Pre-allocate tensors for all expected reward components
+        # This prevents dynamic dictionary growth during runtime which causes memory leaks
+        self._preallocate_reward_accumulators()
+
+    def _preallocate_reward_accumulators(self):
+        """
+        Pre-allocate tensors for all expected reward components.
+
+        This prevents dynamic tensor allocation during runtime which can cause:
+        - Memory fragmentation
+        - Performance degradation over time
+        - GPU memory leaks
+        """
+        # Common reward components from reward calculator
+        common_components = [
+            "alive",
+            "height_safety",
+            "finger_velocity",
+            "hand_velocity",
+            "hand_angular_velocity",
+            "joint_limit",
+            "finger_acceleration",
+            "hand_acceleration",
+            "hand_angular_acceleration",
+            "contact_stability",
+            "total",  # Total reward
+        ]
+
+        # Task-specific reward components
+        task_components = [
+            # Box grasping task
+            "object_height",
+            "grasp_approach",
+            "finger_to_object",
+            "hand_to_object",
+            # General task rewards
+            "task_progress",
+            "task_completion",
+            # Termination rewards
+            "success",
+            "failure",
+            "timeout",
+        ]
+
+        # Also pre-allocate for weighted versions
+        all_components = common_components + task_components
+        components_with_weighted = []
+        for comp in all_components:
+            components_with_weighted.append(comp)
+            components_with_weighted.append(f"{comp}_weighted")
+
+        # Pre-allocate all tensors
+        for component_name in components_with_weighted:
+            self.episode_reward_sums[component_name] = torch.zeros(
+                self.num_envs, device=self.device
+            )
+
     def process_infos(self, infos, done_indices):
         """
         Process info dictionaries from completed episodes.
@@ -108,19 +165,22 @@ class RewardComponentObserver(AlgoObserver):
     def _accumulate_reward_components(self, reward_components):
         """Accumulate reward components across steps."""
         for component_name, values in reward_components.items():
-            if component_name not in self.episode_reward_sums:
+            # Only accumulate if we have pre-allocated tensor
+            if component_name in self.episode_reward_sums:
+                # Accumulate values
                 if isinstance(values, torch.Tensor):
-                    self.episode_reward_sums[component_name] = torch.zeros_like(values)
+                    self.episode_reward_sums[component_name] += values
                 else:
-                    self.episode_reward_sums[component_name] = torch.zeros(
-                        self.num_envs, device=self.device
-                    )
-
-            # Accumulate values
-            if isinstance(values, torch.Tensor):
-                self.episode_reward_sums[component_name] += values
+                    self.episode_reward_sums[component_name] += values
             else:
-                self.episode_reward_sums[component_name] += values
+                # Log warning once about unknown component (prevents spam)
+                if not hasattr(self, "_unknown_components_warned"):
+                    self._unknown_components_warned = set()
+                if component_name not in self._unknown_components_warned:
+                    self._unknown_components_warned.add(component_name)
+                    print(
+                        f"Warning: Unknown reward component '{component_name}' - not tracking"
+                    )
 
     def _process_done_episodes(self, infos, done_indices):
         """Process and log rewards for completed episodes."""

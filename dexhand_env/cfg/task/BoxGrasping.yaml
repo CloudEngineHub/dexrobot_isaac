@@ -51,6 +51,10 @@ env:
   logLevel: "INFO"
   enableComponentDebugLogs: false
 
+  # Memory monitoring (for debugging performance issues)
+  enable_memory_monitoring: true
+  memory_monitor_interval: 1000  # Log memory stats every 1000 steps
+
   # Policy observation keys - what the policy actually sees (blind policy design)
   policyObservationKeys:
     - base_dof_pos
