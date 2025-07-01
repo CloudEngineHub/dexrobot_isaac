@@ -82,10 +82,12 @@ def create_env_fn(
     return _create_env
 
 
-def build_runner(algo_config: dict, env_creator) -> Runner:
+def build_runner(
+    algo_config: dict, env_creator, reward_log_interval: int = 10
+) -> Runner:
     """Build rl_games runner with configuration."""
     # Create custom observer for reward component logging
-    observer = RewardComponentObserver()
+    observer = RewardComponentObserver(log_interval=reward_log_interval)
 
     # Pass observer to runner constructor
     runner = Runner(algo_observer=observer)
@@ -151,6 +153,12 @@ def main():
     )
     parser.add_argument(
         "--log-interval", type=int, default=10, help="Logging interval (episodes)"
+    )
+    parser.add_argument(
+        "--reward-log-interval",
+        type=int,
+        default=10,
+        help="How often to log reward breakdown to TensorBoard (episodes)",
     )
     parser.add_argument(
         "--log-level",
@@ -245,7 +253,9 @@ def main():
     env_configurations.configurations["rlgpu_dexhand"]["env_creator"] = env_creator
 
     # Build and run trainer
-    runner = build_runner(train_cfg, env_creator)
+    runner = build_runner(
+        train_cfg, env_creator, reward_log_interval=args.reward_log_interval
+    )
 
     # Save training config
     with open(output_dir / "train_config.yaml", "w") as f:

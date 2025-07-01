@@ -33,7 +33,6 @@ from dexhand_env.components.tensor_manager import TensorManager
 
 # Import utilities
 from dexhand_env.utils.coordinate_transforms import point_in_hand_frame
-from dexhand_env.utils.memory_monitor import MemoryMonitor
 
 # Import task interface
 from dexhand_env.tasks.task_interface import DexTask
@@ -113,16 +112,6 @@ class DexHandBase(VecTask):
         self._configure_logging()
         self.task = task
 
-        # Initialize memory monitor if enabled
-        self.memory_monitor = None
-        if cfg["env"].get("enable_memory_monitoring", False):
-            monitor_interval = cfg["env"].get("memory_monitor_interval", 1000)
-            self.memory_monitor = MemoryMonitor(
-                device=rl_device, log_interval=monitor_interval
-            )
-            logger.info(
-                f"Memory monitoring enabled with interval: {monitor_interval} steps"
-            )
         self.asset_root = os.path.join(
             os.path.dirname(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -866,10 +855,6 @@ class DexHandBase(VecTask):
 
             # Update episode progress directly first
             self.episode_step_count += 1
-
-            # Monitor memory if enabled
-            if self.memory_monitor is not None:
-                self.memory_monitor.step()
 
             # Check for episode termination using TerminationManager
             builtin_success = {}
