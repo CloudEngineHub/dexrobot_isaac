@@ -7,7 +7,7 @@ including keyboard shortcuts for camera control, robot selection, and environmen
 Keyboard Shortcuts:
     R     - Reset all environments
     E     - Reset current Environment (the one being followed)
-    G     - Toggle between Global view and single robot view
+    F     - Toggle between Follow mode (single robot) and global view
     UP    - Previous robot (in single robot mode)
     DOWN  - Next robot (in single robot mode)
     SPACE - Toggle random actions mode
@@ -60,9 +60,9 @@ class ViewerController:
             self.viewer = None
 
         # Camera control state
-        self.camera_view_mode = "rear"  # Options: "free", "rear", "right", "bottom"
+        self.camera_view_mode = "free"  # Options: "free", "rear", "right", "bottom"
         self.camera_follow_mode = (
-            "single"  # Options: "single" (follow one robot), "global" (overview)
+            "global"  # Options: "single" (follow one robot), "global" (overview)
         )
         self.follow_robot_index = 0  # Which robot to follow in single mode
 
@@ -144,7 +144,7 @@ class ViewerController:
 
         Sets up keyboard shortcuts for:
         - Enter: Toggle camera view mode (free, rear, right, bottom)
-        - G: Toggle between single robot follow and global view
+        - F: Toggle between single robot follow and global view
         - Up/Down arrows: Navigate to previous/next robot to follow (in single mode)
         - E: Reset the currently selected environment
         - Space: Toggle random actions mode
@@ -157,7 +157,7 @@ class ViewerController:
             self.viewer, gymapi.KEY_ENTER, "toggle view mode"
         )
         self.gym.subscribe_viewer_keyboard_event(
-            self.viewer, gymapi.KEY_G, "toggle follow mode"
+            self.viewer, gymapi.KEY_F, "toggle follow mode"
         )
         self.gym.subscribe_viewer_keyboard_event(
             self.viewer, gymapi.KEY_UP, "previous robot"
@@ -254,7 +254,7 @@ class ViewerController:
                         logger.info(f"Following robot {self.follow_robot_index}")
                     else:
                         logger.warning(
-                            "Cannot change robot in global view mode. Press G to switch to single robot mode."
+                            "Cannot change robot in global view mode. Press F to switch to single robot mode."
                         )
                 elif evt.action == "next robot" and evt.value > 0:
                     # Move to next robot (only in single mode)
@@ -265,7 +265,7 @@ class ViewerController:
                         logger.info(f"Following robot {self.follow_robot_index}")
                     else:
                         logger.warning(
-                            "Cannot change robot in global view mode. Press G to switch to single robot mode."
+                            "Cannot change robot in global view mode. Press F to switch to single robot mode."
                         )
                 elif (
                     evt.action == "reset environment"
@@ -376,11 +376,11 @@ class ViewerController:
 
             target_pos = self._camera_target_cache.numpy()
 
-            # For global view, use larger fixed camera distance
+            # For global view, use closer camera distance (as if looking at first robot)
             camera_offset = gymapi.Vec3(
-                -3.0,  # Fixed position behind
+                -1.5,  # Closer position behind
                 0.0,  # Centered
-                2.5,  # Higher up for better overview
+                1.0,  # Lower height for closer view
             )
 
         # Update tracking variables
