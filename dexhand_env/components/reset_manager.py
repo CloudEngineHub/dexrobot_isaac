@@ -10,6 +10,7 @@ import torch
 from loguru import logger
 
 # Import IsaacGym
+from isaacgym import gymtorch
 
 
 class ResetManager:
@@ -75,6 +76,9 @@ class ResetManager:
         self.default_dof_pos = None
         self.default_hand_pos = torch.tensor([0.0, 0.0, 0.5], device=self.device)
         self.default_hand_rot = torch.tensor([0.0, 0.0, 0.0, 1.0], device=self.device)
+
+        # Pre-computed global actor indices - will be set when we know num_actors_per_env
+        self.all_actor_indices = None
 
     @property
     def num_envs(self):
@@ -331,6 +335,37 @@ class ResetManager:
             except AttributeError:
                 # Task doesn't implement reset_task_state - this is acceptable
                 pass
+
+            # Apply root states for all actors in the reset environments
+            # This ensures any task-specific object resets are applied to the simulation
+            # We apply root states for ALL actors to maintain architectural cleanliness
+            # without requiring knowledge of specific task implementations
+
+            # Initialize pre-computed global actor indices if not done yet
+            if self.all_actor_indices is None:
+                num_actors_per_env = self.root_state_tensor.shape[1]
+                self.all_actor_indices = torch.arange(
+                    self.num_envs * num_actors_per_env,
+                    device=self.device,
+                    dtype=torch.int32,
+                ).reshape(self.num_envs, num_actors_per_env)
+
+            # Extract global indices for ALL actors in the environments being reset
+            actor_indices_to_reset = self.all_actor_indices[env_ids].flatten()
+
+            # Extract root states for all actors in the reset environments
+            root_states_to_set = self.root_state_tensor[env_ids].reshape(-1, 13)
+
+            # Apply all actor root states at once
+            self.gym.set_actor_root_state_tensor_indexed(
+                self.sim,
+                gymtorch.unwrap_tensor(root_states_to_set),
+                gymtorch.unwrap_tensor(actor_indices_to_reset),
+                len(actor_indices_to_reset),
+            )
+
+            # Refresh tensors to make changes visible
+            self.physics_manager.refresh_tensors()
 
             # Apply DOF states to simulation
             # Use the local actor index for the hand

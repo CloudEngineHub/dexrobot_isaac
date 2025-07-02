@@ -136,6 +136,13 @@ weight = self.reward_weights.get("object_height", 0.0)
 weighted_reward = reward * weight  # Weighting happens HERE only
 ```
 
+### Architectural Principles - Task Abstraction
+- **NEVER put task-specific logic in base classes or general components**
+- Base classes should not have knowledge of specific task implementations
+- Always think abstractly - if you find yourself checking for specific task attributes (like 'box_actor_indices'), you're violating the abstraction
+- When implementing fixes, choose the most general solution that works for all tasks
+- Example: During reset, apply root states for ALL actors rather than checking for specific task objects
+
 ### Write Minimal Code
 - Don't create unnecessary instance variables
 - Use existing abstractions rather than reimplementing
