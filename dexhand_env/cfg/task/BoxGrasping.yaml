@@ -126,7 +126,7 @@ env:
     success_height_threshold: 0.2     # Object must be lifted above this height (meters)
     contact_duration_threshold: 2.0   # Minimum contact duration for success (seconds)
     min_fingers_for_grasp: 2          # Minimum number of fingers required for valid grasp
-    max_box_distance: 0.5             # Reset if box moves beyond this distance (meters)
+    max_box_distance: 0.6             # Reset if box moves beyond this distance (meters)
 
 # Task configuration
 task:

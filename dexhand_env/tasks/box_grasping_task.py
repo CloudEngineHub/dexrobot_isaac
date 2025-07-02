@@ -401,7 +401,7 @@ class BoxGraspingTask(DexTask):
             and self.box_local_rigid_body_index is not None
         ):
             # Detect finger-box contact using our heuristic method
-            finger_box_contact = self._detect_finger_box_contacts()
+            finger_box_contact = self._detect_finger_box_contacts(obs_dict)
             num_fingers_on_box = finger_box_contact.sum(dim=1)
 
             # Check height condition
@@ -464,7 +464,7 @@ class BoxGraspingTask(DexTask):
 
         return distances
 
-    def _detect_finger_box_contacts(self):
+    def _detect_finger_box_contacts(self, obs_dict: Dict[str, torch.Tensor]):
         """
         Detect which fingers are in contact with the box using heuristic criteria.
 
@@ -514,9 +514,8 @@ class BoxGraspingTask(DexTask):
         fingerpad_near_box = distances < proximity_threshold
 
         # Get finger contact from observation (already computed by observation encoder)
-        finger_has_contact = self.parent_env.observation_encoder.obs_dict[
-            "contact_binary"
-        ]
+        # Convert from float to bool (contact_binary is stored as float for compatibility)
+        finger_has_contact = obs_dict["contact_binary"].bool()
 
         # Combine all conditions: finger contact AND box contact AND proximity
         finger_box_contact = (
@@ -552,7 +551,7 @@ class BoxGraspingTask(DexTask):
         # Grasp approach reward - encourage finger-box contact specifically
         # Use our heuristic detection to identify true finger-box contact
         if self.box_local_rigid_body_index is not None:
-            finger_box_contact = self._detect_finger_box_contacts()
+            finger_box_contact = self._detect_finger_box_contacts(obs_dict)
             any_box_contact = finger_box_contact.any(dim=1).float()
             rewards["grasp_approach"] = any_box_contact
         else:
@@ -598,26 +597,20 @@ class BoxGraspingTask(DexTask):
         Returns:
             Dictionary with "grasp_lift_success" boolean tensor
         """
-        # Check height criteria
-        height_success = self.box_positions[:, 2] > self.height_threshold
-
-        # Check contact duration criteria
-        # Access contact duration directly from observation encoder
+        # Check success duration criteria
+        # We track success duration based on height AND finger-box contact
         if self.contact_duration_threshold_steps is None:
             raise RuntimeError(
                 "contact_duration_threshold_steps not set - finalize_setup not called"
             )
 
-        # Get contact durations in steps
-        contact_durations = self.parent_env.observation_encoder.contact_duration_steps
+        # Get success duration that we've been tracking
+        success_duration_steps = self.parent_env.observation_encoder.get_task_state(
+            "success_duration_steps"
+        )
 
-        # Count fingers with sufficient contact
-        sufficient_contact = (
-            contact_durations >= self.contact_duration_threshold_steps
-        ).sum(dim=1) >= self.min_fingers_for_grasp
-
-        # Both criteria must be met
-        success = height_success & sufficient_contact
+        # Success requires maintained conditions for threshold duration
+        success = success_duration_steps >= self.contact_duration_threshold_steps
 
         return {"grasp_lift_success": success}
 
@@ -638,10 +631,8 @@ class BoxGraspingTask(DexTask):
         failures["box_fell"] = self.box_positions[:, 2] < 0.0
 
         # Hand too far from box (use configured threshold)
-        if "hand_to_object_distance" in self.parent_env.observation_encoder.obs_dict:
-            hand_to_box_distance = self.parent_env.observation_encoder.obs_dict[
-                "hand_to_object_distance"
-            ]
+        if "hand_to_object_distance" in self.parent_env.obs_dict:
+            hand_to_box_distance = self.parent_env.obs_dict["hand_to_object_distance"]
             failures["box_too_far"] = hand_to_box_distance > self.max_box_distance
 
         return failures
