@@ -560,10 +560,11 @@ class BoxGraspingTask(DexTask):
 
         # Finger-to-object distance reward - encourage getting fingers close to object
         # Exponential reward: max reward when distance is 0, decays as distance increases
+        # Tuned for: ~0.8 at 3cm distance, ~0.1 at 50cm distance
         min_distance = obs_dict["min_finger_to_object_distance"]
         finger_distance_reward = torch.exp(
-            -2.0 * min_distance
-        )  # Decays quickly with distance
+            -5.0 * min_distance
+        )  # Quick decay to focus on close-range approach
         rewards["finger_to_object"] = finger_distance_reward
 
         # Hand-to-object distance reward - encourage getting hand close to object
