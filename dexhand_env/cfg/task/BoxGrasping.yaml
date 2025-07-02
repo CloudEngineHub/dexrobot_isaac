@@ -4,7 +4,7 @@ physics_engine: physx
 
 # Simulation parameters
 sim:
-  dt: 0.005                       # High-fidelity physics (200 Hz) for optimal performance
+  dt: 0.02
   substeps: 4                     # Reduced due to higher frequency
   gravity: [0.0, 0.0, -9.81]
   num_client_threads: 0
@@ -27,7 +27,7 @@ sim:
 env:
   numEnvs: ${resolve_default:2048,${..num_envs}}
   envSpacing: 2.0
-  episodeLength: 2000  # 10 seconds at 200Hz
+  episodeLength: 500  # 10 seconds at 50Hz
 
   # Action space configuration
   controlMode: position_delta
@@ -62,8 +62,10 @@ env:
     - hand_pose          # Correct key name (not hand_base_pose)
     - prev_actions
     - fingertip_poses_world
+    - episode_time       # Episode progress
+    - fingerpad_distances # Pairwise distances between fingerpads
     # NO box observations - policy is blind!
-    # All other observations (box pose, distances) are computed for rewards/analysis only
+    # grasp_duration is privileged info - not exposed to policy
 
   # Binary contact threshold (1N)
   contactBinaryThreshold: 1.0
@@ -106,30 +108,18 @@ env:
       fingertip_threshold: 0.0
       fingerpad_threshold: 0.0
 
-  # Reward weights configuration
+  # Reward weights configuration - minimal set
   rewardWeights:
-    # Common rewards (small weights to prevent dominating task rewards)
-    alive: 0.01                      # Small alive bonus
-    height_safety: 0.1               # Height safety penalty
-    finger_velocity: 0.01            # Velocity penalties
-    hand_velocity: 0.01
-    hand_angular_velocity: 0.01
-    joint_limit: 0.05                # Joint limit penalty
-    finger_acceleration: 0.005
-    hand_acceleration: 0.005
-    hand_angular_acceleration: 0.005
-    contact_stability: 0.02
-
-    # Task-specific rewards (main learning signal)
-    object_height: 2.0              # Main reward for lifting object
-    grasp_approach: 1.0              # Reward any contact with object
-    finger_to_object: 1.0           # Reward for getting fingers close
-    hand_to_object: 1.0              # Reward for getting hand close
+    # Task-specific rewards only
+    object_height: 1.0             # Main reward for lifting object
+    grasp_approach: 0.1             # Reward any contact with object
+    finger_to_object: 0.2           # Reward for getting fingers close
+    grasp_duration: 10.0             # Reward for maintaining grasp
 
     # Termination rewards (one-time at episode end)
-    termination_success: 2000.0       # Large bonus for successful grasp and lift
-    termination_failure_penalty: 1000.0       # Penalty for failure (touching ground, etc.)
-    termination_timeout_penalty: 100.0       # Small penalty for not completing task
+    termination_success: 500.0       # Large bonus for successful grasp and lift
+    termination_failure_penalty: 500.0       # Penalty for failure (touching ground, etc.)
+    termination_timeout_penalty: 500.0       # Penalty for not completing task
 
   # Task-specific parameters
   task_params:

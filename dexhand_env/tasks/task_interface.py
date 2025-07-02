@@ -205,6 +205,20 @@ class DexTask(ABC):
         # Default implementation stores the reference if task needs it
         self.root_state_tensor = root_state_tensor
 
+    def initialize_task_states(self):
+        """
+        Initialize task states that need to be registered with observation encoder.
+
+        This method is called early in initialization, before observation encoder setup,
+        to ensure task states are available when computing observation dimensions.
+
+        Tasks that track temporal state (e.g., grasp duration) should override this
+        method to register their states with the observation encoder.
+
+        Default implementation does nothing - tasks can override if needed.
+        """
+        pass
+
     def finalize_setup(self):
         """
         Complete setup after physics manager and observation encoder are available.

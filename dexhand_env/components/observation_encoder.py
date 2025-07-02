@@ -729,6 +729,11 @@ class ObservationEncoder:
         fingerpad_poses_hand = self._extract_fingerpad_poses_hand()
         obs_dict["fingerpad_poses_hand"] = fingerpad_poses_hand
 
+        # Episode time in seconds (use existing API from parent)
+        obs_dict["episode_time"] = self.parent.episode_time.unsqueeze(
+            1
+        )  # Shape: (num_envs, 1)
+
         return obs_dict
 
     def _compute_task_observations(

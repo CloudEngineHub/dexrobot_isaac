@@ -699,6 +699,10 @@ class DexHandBase(VecTask):
             ),
         )
 
+        # Initialize task states before observation encoder setup
+        # This ensures task states are registered when computing observation dimensions
+        self.task.initialize_task_states()
+
         self.observation_encoder.initialize(
             observation_keys=observation_keys,
             joint_to_control=self.hand_initializer.joint_to_control,
@@ -741,6 +745,9 @@ class DexHandBase(VecTask):
         Returns:
             Tensor of shape (num_envs,) with episode time in seconds
         """
+        if self.physics_manager is None or self.physics_manager.control_dt is None:
+            # During initialization, return zeros
+            return torch.zeros(self.num_envs, device=self.device)
         return self.episode_step_count.float() * self.physics_manager.control_dt
 
     @property
@@ -763,6 +770,8 @@ class DexHandBase(VecTask):
         Returns:
             Float episode time in seconds
         """
+        if self.physics_manager is None or self.physics_manager.control_dt is None:
+            return 0.0
         return self.episode_step_count[env_id].item() * self.physics_manager.control_dt
 
     # Note: fingertip_indices and fingerpad_indices are now stored directly on self

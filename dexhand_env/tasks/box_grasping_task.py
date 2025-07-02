@@ -93,6 +93,24 @@ class BoxGraspingTask(DexTask):
         self.box_velocities = None
         self.initial_box_positions = None
 
+    def initialize_task_states(self):
+        """
+        Initialize task states that need to be registered with observation encoder.
+
+        This is called early in initialization, before observation encoder setup,
+        to ensure states are available when computing observation dimensions.
+        """
+        if self.parent_env is None:
+            raise RuntimeError("parent_env is None - initialization failed")
+
+        # Register grasp duration tracking state
+        self.parent_env.observation_encoder.register_task_state(
+            "grasp_duration_steps", (self.num_envs,), dtype=torch.long
+        )
+        self.parent_env.observation_encoder.register_task_state(
+            "in_grasp_state", (self.num_envs,), dtype=torch.bool
+        )
+
     def finalize_setup(self):
         """
         Complete setup after physics manager is available.
@@ -113,13 +131,7 @@ class BoxGraspingTask(DexTask):
             f"{self.contact_duration_threshold_steps} steps at {1/control_dt}Hz"
         )
 
-        # Register grasp timing state with observation encoder (now available)
-        if self.parent_env.observation_encoder is None:
-            raise RuntimeError("observation_encoder is None - initialization failed")
-
-        self.parent_env.observation_encoder.register_task_state(
-            "grasp_start_steps", (self.num_envs,), dtype=torch.long
-        )
+        # Task states are now registered in initialize_task_states()
 
     def load_task_assets(self):
         """Load box asset for the grasping task."""
@@ -278,13 +290,6 @@ class BoxGraspingTask(DexTask):
         # Zero velocities
         self.root_state_tensor[env_ids, self.box_local_actor_index, 7:13] = 0
 
-        # Clear grasp timing via observer state (only if already registered)
-        if "grasp_start_steps" in self.parent_env.observation_encoder.task_states:
-            grasp_start = self.parent_env.observation_encoder.get_task_state(
-                "grasp_start_steps"
-            )
-            grasp_start[env_ids] = 0  # Use 0 to indicate grasp not started
-
     def get_task_observations(
         self, obs_dict: Dict[str, torch.Tensor]
     ) -> Optional[Dict[str, torch.Tensor]]:
@@ -337,7 +342,88 @@ class BoxGraspingTask(DexTask):
             )  # (num_envs,)
             task_obs["hand_to_object_distance"] = hand_to_object_distance
 
+        # Compute fingerpad pairwise distances (for policy observation)
+        if "fingerpad_poses_world" in obs_dict:
+            fingerpad_poses = obs_dict["fingerpad_poses_world"]  # (num_envs, 35)
+            fingerpad_poses_reshaped = fingerpad_poses.view(self.num_envs, 5, 7)
+            fingerpad_positions = fingerpad_poses_reshaped[:, :, :3]  # (num_envs, 5, 3)
+
+            # Compute pairwise distances between all fingerpads
+            # This gives us 5×4/2 = 10 unique distances
+            fingerpad_distances = self._compute_fingerpad_pairwise_distances(
+                fingerpad_positions
+            )
+            task_obs["fingerpad_distances"] = fingerpad_distances  # (num_envs, 10)
+
+        # Compute grasp duration (privileged information)
+        # Get registered task states - fail fast if not registered
+        grasp_duration_steps = self.parent_env.observation_encoder.get_task_state(
+            "grasp_duration_steps"
+        )
+        in_grasp_state = self.parent_env.observation_encoder.get_task_state(
+            "in_grasp_state"
+        )
+
+        # Update grasp duration based on contact - REQUIRED observation
+        contact_binary = obs_dict["contact_binary"]  # Fail fast if missing
+        num_fingers_in_contact = contact_binary.sum(dim=1)
+        grasp_active = num_fingers_in_contact >= self.min_fingers_for_grasp
+
+        # Detect grasp transitions
+        grasp_started = grasp_active & ~in_grasp_state
+
+        # Update duration
+        grasp_duration_steps[:] = torch.where(
+            grasp_started,
+            torch.ones_like(grasp_duration_steps),
+            torch.where(
+                grasp_active,
+                grasp_duration_steps + 1,
+                torch.zeros_like(grasp_duration_steps),
+            ),
+        )
+
+        # Update state
+        in_grasp_state[:] = grasp_active
+
+        # Convert to seconds and add to observations
+        if (
+            self.parent_env.physics_manager is not None
+            and self.parent_env.physics_manager.control_dt is not None
+        ):
+            control_dt = self.parent_env.physics_manager.control_dt
+            grasp_duration_seconds = grasp_duration_steps.float() * control_dt
+            task_obs["grasp_duration"] = grasp_duration_seconds.unsqueeze(1)
+        else:
+            # During initialization, return zeros with correct shape
+            task_obs["grasp_duration"] = torch.zeros(
+                (self.num_envs, 1), device=self.device
+            )
+
         return task_obs
+
+    def _compute_fingerpad_pairwise_distances(self, fingerpad_positions):
+        """
+        Compute pairwise distances between all fingerpads.
+
+        Args:
+            fingerpad_positions: Tensor of shape (num_envs, 5, 3)
+
+        Returns:
+            Tensor of shape (num_envs, 10) with pairwise distances
+        """
+        # Indices for upper triangular (excluding diagonal)
+        # This gives us: (0,1), (0,2), (0,3), (0,4), (1,2), (1,3), (1,4), (2,3), (2,4), (3,4)
+        indices = torch.triu_indices(5, 5, offset=1, device=self.device)
+
+        # Extract positions for each pair
+        pos1 = fingerpad_positions[:, indices[0]]  # (num_envs, 10, 3)
+        pos2 = fingerpad_positions[:, indices[1]]  # (num_envs, 10, 3)
+
+        # Compute distances
+        distances = torch.norm(pos1 - pos2, dim=2)  # (num_envs, 10)
+
+        return distances
 
     def compute_task_reward_terms(
         self, obs_dict: Dict[str, torch.Tensor]
@@ -380,6 +466,16 @@ class BoxGraspingTask(DexTask):
             -1.0 * hand_distance
         )  # Slower decay than finger reward
         rewards["hand_to_object"] = hand_distance_reward
+
+        # Grasp duration reward - reward for maintaining grasp
+        # Grasp duration is computed in observation encoder as privileged info
+        if "grasp_duration" in obs_dict:
+            grasp_duration = obs_dict["grasp_duration"].squeeze(-1)  # In seconds
+            # Normalize to [0, 1] based on contact duration threshold
+            grasp_duration_reward = torch.clamp(
+                grasp_duration / self.contact_duration_threshold_seconds, 0, 1
+            )
+            rewards["grasp_duration"] = grasp_duration_reward
 
         return rewards
 
