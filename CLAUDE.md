@@ -106,6 +106,11 @@ Key principle: If something is required for correct operation, it should NEVER b
 - Prefer vectorized operations over loops
 - Use type hints where possible
 
+### Git Commit Messages
+- **ALWAYS run `git diff` and read the entire diff before writing commit message**
+- Commit message must accurately reflect ALL changes, not just the most recent fix
+- Include all file changes, config updates, and code modifications in the message
+
 ## Implementation Guidelines
 
 ### Study Before Modifying
