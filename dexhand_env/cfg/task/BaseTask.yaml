@@ -48,6 +48,21 @@ env:
 
   # Logging configuration
   logLevel: "INFO"                # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+  # Termination criteria (for BaseTask)
+  termination:
+    # Specify which criteria are active (empty means use all available)
+    activeSuccessCriteria: []
+    activeFailureCriteria: []
+
+    # Height thresholds for ground collision detection
+    height_safety:
+      handbase_threshold: 0.0
+      fingertip_threshold: 0.0
+      fingerpad_threshold: 0.0
+
+  # Reward weights configuration (empty for BaseTask)
+  rewardWeights: {}
   enableComponentDebugLogs: false # Enable detailed debug logs for component internals
 
   # Memory monitoring (for debugging performance issues)
@@ -108,8 +123,8 @@ env:
     # - "contact_force_magnitude" # Contact force magnitude (scalar for each finger) - for tasks needing exact forces
     # - "contact_duration"       # Contact duration (seconds for each contact body) - for temporal contact criteria
 
-  # Reward parameters (weights for different reward components)
-  rewardWeights:
+# Reward parameters (weights for different reward components)
+rewardWeights:
     # Common rewards (implemented in RewardCalculator)
     alive: 0.1                    # Small constant reward per timestep
     height_safety: 1.0            # Penalize fingertips too close to ground

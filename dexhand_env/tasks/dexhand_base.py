@@ -494,33 +494,21 @@ class DexHandBase(VecTask):
             parent=self,
         )
 
+        # Create default DOF positions tensor
+        default_dof_pos = torch.zeros(self.num_dof, device=self.device)
+        # All DOFs start at 0.0 (no offset from initial placement)
+        # The hand actor itself is placed at Z=0.5m in world coordinates
+        # but the ARTz DOF represents delta/offset from that initial position
+
         # Create reset manager with all dependencies
         self.reset_manager = ResetManager(
             parent=self,
             dof_state=self.dof_state,
             root_state_tensor=self.actor_root_state_tensor,
             hand_local_actor_index=self.hand_local_actor_index,
-            hand_local_rigid_body_index=self.hand_local_rigid_body_index,
+            default_dof_pos=default_dof_pos,
             task=self.task,
-            max_episode_length=self.max_episode_length,
         )
-
-        # Configure randomization
-        if "randomize" in self.cfg["env"] and self.cfg["env"]["randomize"]:
-            self.reset_manager.set_randomization(
-                randomize_positions=self.cfg["env"].get("randomizePositions", False),
-                randomize_orientations=self.cfg["env"].get(
-                    "randomizeOrientations", False
-                ),
-                randomize_dofs=self.cfg["env"].get("randomizeDofs", False),
-                position_range=self.cfg["env"].get(
-                    "positionRandomizationRange", [0.05, 0.05, 0.05]
-                ),
-                orientation_range=self.cfg["env"].get(
-                    "orientationRandomizationRange", 0.1
-                ),
-                dof_range=self.cfg["env"].get("dofRandomizationRange", 0.05),
-            )
 
         # Create viewer controller
         self.viewer_controller = ViewerController(
@@ -652,17 +640,6 @@ class DexHandBase(VecTask):
         self.episode_step_count = torch.zeros(
             (self.num_envs,), device=self.device, dtype=torch.long
         )
-
-        # Share episode step count buffer with reset manager
-        # reset_manager must exist after _init_components()
-        self.reset_manager.set_episode_step_count_buffer(self.episode_step_count)
-
-        # Set default DOF positions for reset
-        default_dof_pos = torch.zeros(self.num_dof, device=self.device)
-        # All DOFs start at 0.0 (no offset from initial placement)
-        # The hand actor itself is placed at Z=0.5m in world coordinates
-        # but the ARTz DOF represents delta/offset from that initial position
-        self.reset_manager.set_default_state(dof_pos=default_dof_pos)
 
         # Set up action space
         # action_processor must exist after _init_components()
