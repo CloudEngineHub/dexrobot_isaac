@@ -110,14 +110,19 @@ class ViewerController:
         # Subscribe to base keyboard shortcuts
         self.gym.subscribe_viewer_keyboard_event(viewer, gymapi.KEY_ESCAPE, "QUIT")
 
-        # Set initial camera position based on up axis
+        # Set initial camera position to match "rear view" perspective
+        # This gives users a familiar starting view while keeping camera free to move
         sim_params = self.gym.get_sim_params(self.sim)
         if sim_params.up_axis == gymapi.UP_AXIS_Z:
-            cam_pos = gymapi.Vec3(20.0, 25.0, 3.0)
-            cam_target = gymapi.Vec3(10.0, 15.0, 0.0)
+            # Position camera behind and above origin, looking at world center
+            cam_pos = gymapi.Vec3(
+                -1.5, 0.0, 1.0
+            )  # Behind (-X), centered (Y), above (Z)
+            cam_target = gymapi.Vec3(0.0, 0.0, 0.0)  # Look at world origin
         else:
-            cam_pos = gymapi.Vec3(20.0, 3.0, 25.0)
-            cam_target = gymapi.Vec3(10.0, 0.0, 15.0)
+            # Y-up axis case (less common)
+            cam_pos = gymapi.Vec3(-1.5, 1.0, 0.0)
+            cam_target = gymapi.Vec3(0.0, 0.0, 0.0)
 
         self.gym.viewer_camera_look_at(viewer, None, cam_pos, cam_target)
 
