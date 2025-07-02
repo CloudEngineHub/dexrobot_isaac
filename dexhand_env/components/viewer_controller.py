@@ -367,22 +367,20 @@ class ViewerController:
 
             target_pos = self._camera_target_cache.numpy()
         else:
-            # Global view - focus on center of all robots
-            # Only update mean every N frames since it changes slowly
-            if mode_changed or (
-                hasattr(self, "_frame_count") and self._frame_count % 30 == 0
-            ):
-                self._camera_target_cache = hand_positions.mean(dim=0).cpu()
+            # Global view - use fixed position at world origin
+            # Don't update based on robot positions to avoid oscillation
+            if not hasattr(self, "_global_view_initialized") or mode_changed:
+                # Initialize to a fixed position (world origin)
+                self._camera_target_cache = torch.zeros(3, device="cpu")
+                self._global_view_initialized = True
 
             target_pos = self._camera_target_cache.numpy()
 
-            # For global view, increase camera distance
+            # For global view, use larger fixed camera distance
             camera_offset = gymapi.Vec3(
-                camera_offset.x * 2.0,
-                camera_offset.y * 2.0,
-                camera_offset.z + 1.0
-                if self.camera_view_mode != "bottom"
-                else camera_offset.z - 1.0,
+                -3.0,  # Fixed position behind
+                0.0,  # Centered
+                2.5,  # Higher up for better overview
             )
 
         # Update tracking variables

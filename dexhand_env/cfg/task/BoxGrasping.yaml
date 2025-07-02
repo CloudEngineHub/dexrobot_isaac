@@ -113,7 +113,7 @@ env:
     # Task-specific rewards only
     object_height: 1.0             # Main reward for lifting object
     grasp_approach: 0.1             # Reward any contact with object
-    finger_to_object: 0.2           # Reward for getting fingers close
+    finger_to_object: 0.5           # Reward for getting fingers close
     grasp_duration: 10.0             # Reward for maintaining grasp
 
     # Termination rewards (one-time at episode end)
