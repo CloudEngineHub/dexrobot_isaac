@@ -6,6 +6,7 @@ a 5cm box using only tactile feedback (binary contacts and duration).
 """
 
 from typing import Dict, Optional, Tuple
+import math
 
 # Import PyTorch
 import torch
@@ -86,6 +87,9 @@ class BoxGraspingTask(DexTask):
         self.box_actor_handles = []  # Store handles during creation
         self.box_actor_indices = None  # Will be set in set_tensor_references
         self.box_local_actor_index = None  # Local actor index within each environment
+        self.box_local_rigid_body_index = (
+            None  # Local rigid body index for contact detection
+        )
 
         # Internal state for rewards/termination (NOT exposed to policy)
         self.box_states = None
@@ -103,12 +107,12 @@ class BoxGraspingTask(DexTask):
         if self.parent_env is None:
             raise RuntimeError("parent_env is None - initialization failed")
 
-        # Register grasp duration tracking state
+        # Register success tracking states
         self.parent_env.observation_encoder.register_task_state(
-            "grasp_duration_steps", (self.num_envs,), dtype=torch.long
+            "success_duration_steps", (self.num_envs,), dtype=torch.long
         )
         self.parent_env.observation_encoder.register_task_state(
-            "in_grasp_state", (self.num_envs,), dtype=torch.bool
+            "success_conditions_met", (self.num_envs,), dtype=torch.bool
         )
 
     def finalize_setup(self):
@@ -238,6 +242,22 @@ class BoxGraspingTask(DexTask):
 
         logger.info(f"Box actor local index: {self.box_local_actor_index}")
 
+        # Get box rigid body index for contact detection
+        # The box actor has only one rigid body (the box itself)
+        box_handle = self.box_actor_handles[0]
+        self.box_local_rigid_body_index = self.gym.find_actor_rigid_body_index(
+            env0_ptr, box_handle, "box", gymapi.DOMAIN_SIM
+        )
+
+        # Convert from global to local index
+        # Get the first rigid body global index in env0
+        env0_first_body_global_idx = self.gym.get_actor_rigid_body_index(
+            env0_ptr, self.gym.get_actor_handle(env0_ptr, 0), 0, gymapi.DOMAIN_SIM
+        )
+        self.box_local_rigid_body_index -= env0_first_body_global_idx
+
+        logger.info(f"Box rigid body local index: {self.box_local_rigid_body_index}")
+
         # Extract box states
         # For GPU pipeline, we need to index differently
         # root_state_tensor shape: (num_envs, num_actors_per_env, 13)
@@ -289,6 +309,16 @@ class BoxGraspingTask(DexTask):
 
         # Zero velocities
         self.root_state_tensor[env_ids, self.box_local_actor_index, 7:13] = 0
+
+        # Reset success tracking states
+        success_duration_steps = self.parent_env.observation_encoder.get_task_state(
+            "success_duration_steps"
+        )
+        success_conditions_met = self.parent_env.observation_encoder.get_task_state(
+            "success_conditions_met"
+        )
+        success_duration_steps[env_ids] = 0
+        success_conditions_met[env_ids] = False
 
     def get_task_observations(
         self, obs_dict: Dict[str, torch.Tensor]
@@ -355,44 +385,53 @@ class BoxGraspingTask(DexTask):
             )
             task_obs["fingerpad_distances"] = fingerpad_distances  # (num_envs, 10)
 
-        # Compute grasp duration (privileged information)
+        # Compute success duration (privileged information for grasp duration)
         # Get registered task states - fail fast if not registered
-        grasp_duration_steps = self.parent_env.observation_encoder.get_task_state(
-            "grasp_duration_steps"
+        success_duration_steps = self.parent_env.observation_encoder.get_task_state(
+            "success_duration_steps"
         )
-        in_grasp_state = self.parent_env.observation_encoder.get_task_state(
-            "in_grasp_state"
-        )
-
-        # Update grasp duration based on contact - REQUIRED observation
-        contact_binary = obs_dict["contact_binary"]  # Fail fast if missing
-        num_fingers_in_contact = contact_binary.sum(dim=1)
-        grasp_active = num_fingers_in_contact >= self.min_fingers_for_grasp
-
-        # Detect grasp transitions
-        grasp_started = grasp_active & ~in_grasp_state
-
-        # Update duration
-        grasp_duration_steps[:] = torch.where(
-            grasp_started,
-            torch.ones_like(grasp_duration_steps),
-            torch.where(
-                grasp_active,
-                grasp_duration_steps + 1,
-                torch.zeros_like(grasp_duration_steps),
-            ),
+        success_conditions_met = self.parent_env.observation_encoder.get_task_state(
+            "success_conditions_met"
         )
 
-        # Update state
-        in_grasp_state[:] = grasp_active
-
-        # Convert to seconds and add to observations
+        # Check if we have the necessary information to compute success conditions
         if (
             self.parent_env.physics_manager is not None
             and self.parent_env.physics_manager.control_dt is not None
+            and self.box_local_rigid_body_index is not None
         ):
+            # Detect finger-box contact using our heuristic method
+            finger_box_contact = self._detect_finger_box_contacts()
+            num_fingers_on_box = finger_box_contact.sum(dim=1)
+
+            # Check height condition
+            height_above_threshold = self.box_positions[:, 2] > self.height_threshold
+
+            # Success conditions: height > threshold AND at least min_fingers on box
+            current_success_conditions = height_above_threshold & (
+                num_fingers_on_box >= self.min_fingers_for_grasp
+            )
+
+            # Detect when success conditions start being met
+            success_started = current_success_conditions & ~success_conditions_met
+
+            # Update duration counter
+            success_duration_steps[:] = torch.where(
+                success_started,
+                torch.ones_like(success_duration_steps),
+                torch.where(
+                    current_success_conditions,
+                    success_duration_steps + 1,
+                    torch.zeros_like(success_duration_steps),
+                ),
+            )
+
+            # Update state
+            success_conditions_met[:] = current_success_conditions
+
+            # Convert to seconds for observation (this is the "grasp duration")
             control_dt = self.parent_env.physics_manager.control_dt
-            grasp_duration_seconds = grasp_duration_steps.float() * control_dt
+            grasp_duration_seconds = success_duration_steps.float() * control_dt
             task_obs["grasp_duration"] = grasp_duration_seconds.unsqueeze(1)
         else:
             # During initialization, return zeros with correct shape
@@ -425,6 +464,69 @@ class BoxGraspingTask(DexTask):
 
         return distances
 
+    def _detect_finger_box_contacts(self):
+        """
+        Detect which fingers are in contact with the box using heuristic criteria.
+
+        This uses a combination of three conditions to infer finger-box contact:
+        1. Finger contact: The finger must be experiencing contact forces (from any source)
+        2. Box contact: The box must be experiencing contact forces (from any source)
+        3. Proximity: The fingerpad must be within sqrt(3) * box_size/2 of the box center
+
+        This heuristic approach avoids the need to iterate through contact pairs while
+        providing reasonable accuracy. The proximity threshold ensures we only consider
+        contacts that could plausibly be finger-box interactions (the threshold is the
+        diagonal distance from box center to corner, ensuring coverage of the entire box).
+
+        Returns:
+            torch.Tensor: Boolean tensor of shape (num_envs, num_fingers) indicating
+                         which fingers are likely in contact with the box
+        """
+        # Get contact forces for box from the full contact forces tensor
+        contact_forces_all = self.parent_env.tensor_manager.contact_forces_all
+        box_forces = contact_forces_all[:, self.box_local_rigid_body_index, :]
+        box_force_magnitude = torch.norm(box_forces, dim=1)
+
+        # Box has contact if force magnitude exceeds threshold
+        contact_threshold = self.parent_env.cfg["env"].get(
+            "contactBinaryThreshold", 1.0
+        )
+        box_has_contact = box_force_magnitude > contact_threshold
+
+        # Get fingerpad positions from rigid body states
+        rigid_body_states = self.parent_env.tensor_manager.rigid_body_states
+        fingerpad_indices = self.parent_env.hand_initializer.fingerpad_local_indices
+        fingerpad_positions = rigid_body_states[
+            :, fingerpad_indices, :3
+        ]  # (num_envs, 5, 3)
+
+        # Get box positions (already extracted)
+        box_positions_expanded = self.box_positions.unsqueeze(1)  # (num_envs, 1, 3)
+
+        # Compute distances from each fingerpad to box center
+        distances = torch.norm(
+            fingerpad_positions - box_positions_expanded, dim=2
+        )  # (num_envs, 5)
+
+        # Proximity check: distance < sqrt(3) * box_size/2
+        # This is the diagonal distance from center to corner of the box
+        proximity_threshold = math.sqrt(3) * self.box_size / 2
+        fingerpad_near_box = distances < proximity_threshold
+
+        # Get finger contact from observation (already computed by observation encoder)
+        finger_has_contact = self.parent_env.observation_encoder.obs_dict[
+            "contact_binary"
+        ]
+
+        # Combine all conditions: finger contact AND box contact AND proximity
+        finger_box_contact = (
+            finger_has_contact
+            & box_has_contact.unsqueeze(1)  # Finger sensing contact
+            & fingerpad_near_box  # Box experiencing force  # Fingerpad close to box
+        )
+
+        return finger_box_contact
+
     def compute_task_reward_terms(
         self, obs_dict: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
@@ -447,9 +549,15 @@ class BoxGraspingTask(DexTask):
             )
             rewards["object_height"] = height_reward
 
-        # Grasp approach reward - encourage any contact
-        any_contact = obs_dict["contact_binary"].any(dim=1).float()
-        rewards["grasp_approach"] = any_contact
+        # Grasp approach reward - encourage finger-box contact specifically
+        # Use our heuristic detection to identify true finger-box contact
+        if self.box_local_rigid_body_index is not None:
+            finger_box_contact = self._detect_finger_box_contacts()
+            any_box_contact = finger_box_contact.any(dim=1).float()
+            rewards["grasp_approach"] = any_box_contact
+        else:
+            # During initialization, no reward
+            rewards["grasp_approach"] = torch.zeros(self.num_envs, device=self.device)
 
         # Finger-to-object distance reward - encourage getting fingers close to object
         # Exponential reward: max reward when distance is 0, decays as distance increases
@@ -517,13 +625,26 @@ class BoxGraspingTask(DexTask):
         """
         Check task-specific failure criteria.
 
-        No additional failure criteria beyond base (ground collisions).
-        Episode timeout is handled by base environment.
+        Failures:
+        1. Box fell below table
+        2. Hand too far from box (> max_box_distance)
 
         Returns:
-            Empty dictionary
+            Dictionary with failure criteria
         """
-        return {}
+        failures = {}
+
+        # Box fell below table
+        failures["box_fell"] = self.box_positions[:, 2] < 0.0
+
+        # Hand too far from box (use configured threshold)
+        if "hand_to_object_distance" in self.parent_env.observation_encoder.obs_dict:
+            hand_to_box_distance = self.parent_env.observation_encoder.obs_dict[
+                "hand_to_object_distance"
+            ]
+            failures["box_too_far"] = hand_to_box_distance > self.max_box_distance
+
+        return failures
 
     def compute_task_rewards(
         self, obs_dict: Dict[str, torch.Tensor]
@@ -564,16 +685,10 @@ class BoxGraspingTask(DexTask):
         """
         Check if task-specific reset conditions are met.
 
-        Reset if box falls off table or gets too far from origin.
+        Task-specific resets are now handled through failure criteria.
+        This method returns all False to let failure criteria handle resets.
 
         Returns:
-            Boolean tensor indicating which environments should reset
+            Boolean tensor of all False
         """
-        # Reset if box falls below table
-        box_fell = self.box_positions[:, 2] < 0.0
-
-        # Reset if box gets too far from origin
-        box_distance = torch.norm(self.box_positions[:, :2], dim=1)
-        box_too_far = box_distance > self.max_box_distance
-
-        return box_fell | box_too_far
+        return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
