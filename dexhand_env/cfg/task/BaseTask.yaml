@@ -14,8 +14,8 @@ sim:
     solver_type: 1                # 0: PCG, 1: TGS
     num_position_iterations: 16   # Optimized for smaller timestep
     num_velocity_iterations: 0    # Set to 0 based on NVIDIA recommendations
-    contact_offset: 0.001         # Balanced value for 200 Hz physics
-    rest_offset: 0.003            # Appropriate for smaller timestep
+    contact_offset: 0.001         # Contact detection distance
+    rest_offset: 0.0005          # Must be < contact_offset for stability
     bounce_threshold_velocity: 0.15  # Moderate value for 200 Hz
     max_depenetration_velocity: 0.2  # Optimized for stable contact
     default_buffer_size_multiplier: 4.0  # Optimized for performance

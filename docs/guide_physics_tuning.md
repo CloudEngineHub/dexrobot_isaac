@@ -27,8 +27,8 @@ sim:
     solver_type: 1                # TGS solver
     num_position_iterations: 6    # Optimized for smaller timestep
     num_velocity_iterations: 0    # NVIDIA recommended
-    contact_offset: 0.008         # Balanced value for 200 Hz physics
-    rest_offset: 0.003            # Appropriate for smaller timestep
+    contact_offset: 0.001         # Contact detection distance
+    rest_offset: 0.0005          # Must be < contact_offset for stability
     contact_collection: 1         # CC_LAST_SUBSTEP (GPU critical)
     default_buffer_size_multiplier: 4.0  # Optimized for performance
     gpu_contact_pairs_per_env: 512  # Auto-scaled by num_envs
@@ -61,6 +61,19 @@ sim:
 - Optimal balance for 200 Hz simulation
 
 ### Contact Parameters
+
+**`contact_offset` and `rest_offset`** (Critical for Stability)
+- **contact_offset**: Distance at which contact constraints are generated
+- **rest_offset**: Distance at which objects come to rest
+- **IMPORTANT**: `rest_offset` must be smaller than `contact_offset`
+- If `rest_offset >= contact_offset`, objects oscillate as contacts are repeatedly lost and regenerated
+
+**Example (Box Oscillation Fix):**
+```yaml
+contact_offset: 0.001    # Contacts detected at 1mm
+rest_offset: 0.0005     # Objects rest at 0.5mm (maintains contact)
+```
+
 **`contact_collection: 1`**
 - CC_LAST_SUBSTEP mode required for GPU pipeline
 - Different modes affect contact behavior
@@ -190,3 +203,37 @@ python examples/dexhand_test.py --episode-length 1000 --num-envs 128
 - Balance accuracy with computational budget
 
 Your specific application will determine what constitutes acceptable performance.
+
+## Common Issues and Solutions
+
+### Box/Object Oscillation on Ground
+**Symptom**: Objects oscillate or jitter when resting on surfaces
+
+**Solution**: Ensure `rest_offset < contact_offset`
+```yaml
+# Correct configuration
+contact_offset: 0.001    # Larger value
+rest_offset: 0.0005     # Smaller value
+
+# Incorrect (causes oscillation)
+contact_offset: 0.001
+rest_offset: 0.003      # ERROR: Larger than contact_offset!
+```
+
+**Explanation**: When `rest_offset >= contact_offset`, objects rest at a distance where contacts aren't detected, causing them to fall slightly. This creates a cycle of contact detection → separation → contact loss → falling, resulting in oscillation.
+
+### Joint Drift
+**Symptom**: Joints slowly drift from commanded positions
+
+**Solution**:
+- Increase `num_position_iterations` (try 8-16)
+- Reduce `dt` for finer time resolution
+- Check joint damping values in MJCF
+
+### Contact Instability
+**Symptom**: Unstable or bouncy contacts
+
+**Solution**:
+- Reduce `max_depenetration_velocity` (try 0.1-0.2)
+- Lower `bounce_threshold_velocity` (try 0.1-0.15)
+- Ensure proper mass ratios between objects

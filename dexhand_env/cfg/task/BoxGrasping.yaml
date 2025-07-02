@@ -13,8 +13,8 @@ sim:
     solver_type: 1                # 0: PCG, 1: TGS
     num_position_iterations: 16   # Optimized for smaller timestep
     num_velocity_iterations: 0    # Set to 0 based on NVIDIA recommendations
-    contact_offset: 0.001         # Balanced value for 200 Hz physics
-    rest_offset: 0.003            # Appropriate for smaller timestep
+    contact_offset: 0.001         # Contact detection distance - prevents box oscillation
+    rest_offset: 0.0005          # Must be < contact_offset to maintain stable contacts
     bounce_threshold_velocity: 0.15  # Moderate value for 200 Hz
     max_depenetration_velocity: 0.2  # Optimized for stable contact
     default_buffer_size_multiplier: 4.0  # Optimized for performance
@@ -113,13 +113,13 @@ env:
     # Task-specific rewards only
     object_height: 1.0             # Main reward for lifting object
     grasp_approach: 0.1             # Reward any contact with object
-    finger_to_object: 0.5           # Reward for getting fingers close
+    finger_to_object: 1.0           # Reward for getting fingers close
     grasp_duration: 10.0             # Reward for maintaining grasp
 
     # Termination rewards (one-time at episode end)
-    termination_success: 500.0       # Large bonus for successful grasp and lift
-    termination_failure_penalty: 500.0       # Penalty for failure (touching ground, etc.)
-    termination_timeout_penalty: 500.0       # Penalty for not completing task
+    termination_success: 100.0       # Large bonus for successful grasp and lift
+    termination_failure_penalty: 100.0       # Penalty for failure (touching ground, etc.)
+    termination_timeout_penalty: 100.0       # Penalty for not completing task
 
   # Task-specific parameters
   task_params:
