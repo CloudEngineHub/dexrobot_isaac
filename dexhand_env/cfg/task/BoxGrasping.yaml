@@ -4,7 +4,7 @@ physics_engine: physx
 
 # Simulation parameters
 sim:
-  dt: 0.02
+  dt: 0.01              # 100Hz physics / 2 physics steps per control step = 50Hz control
   substeps: 4                     # Reduced due to higher frequency
   gravity: [0.0, 0.0, -9.81]
   num_client_threads: 0
@@ -100,7 +100,7 @@ env:
   termination:
     # Specify which criteria are active (fail-fast if any are missing)
     activeSuccessCriteria: ["grasp_lift_success"]
-    activeFailureCriteria: ["hitting_ground"]
+    activeFailureCriteria: ["hitting_ground", "box_too_far"]
 
     # Height thresholds for ground collision detection
     height_safety:

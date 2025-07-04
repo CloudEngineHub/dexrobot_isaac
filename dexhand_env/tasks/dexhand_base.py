@@ -759,6 +759,9 @@ class DexHandBase(VecTask):
             if len(env_ids) == 0:
                 return
 
+            # Clear termination tracking FIRST to prevent stale states
+            self.termination_manager.reset_tracking(env_ids)
+
             # Delegate all reset logic to reset_manager
             self.reset_manager.reset_idx(env_ids)
 
@@ -960,8 +963,6 @@ class DexHandBase(VecTask):
             if torch.any(self.reset_buf):
                 env_ids_to_reset = torch.nonzero(self.reset_buf).flatten()
                 self.reset_idx(env_ids_to_reset)
-                # Reset termination tracking for environments that were reset
-                self.termination_manager.reset_tracking(env_ids_to_reset)
 
             # Physics step count tracking for auto-detecting steps per control
             self.physics_manager.mark_control_step()

@@ -117,9 +117,6 @@ class ResetManager:
             # Zero DOF velocities
             self.dof_state[env_ids, :, 1] = 0
 
-            # Debug: Log what we're setting
-            logger.debug(f"Reset DOF positions to: {dof_pos[:6]}")  # Show first 6 DOFs
-
             # Call task-specific reset function - use duck typing instead of hasattr
             try:
                 self.task.reset_task_state(env_ids)
@@ -155,10 +152,9 @@ class ResetManager:
                 len(actor_indices_to_reset),
             )
 
-            # Refresh tensors to make changes visible
-            self.physics_manager.refresh_tensors()
-
             # Apply DOF states to simulation
+            # CRITICAL: Do NOT refresh tensors before applying DOF states!
+            # Refreshing would overwrite our reset values with current simulation state
             # Use the local actor index for the hand
             self.physics_manager.apply_dof_states(
                 self.gym,
@@ -170,6 +166,10 @@ class ResetManager:
 
             # Reset action processor targets to avoid jumps after reset
             self.action_processor.reset_targets(env_ids)
+
+            # Run a physics step to integrate the DOF changes
+            # This is critical to ensure rigid body positions are updated to match DOF states
+            self.physics_manager.step_physics(refresh_tensors=True)
 
             # Reset completed successfully
             return True
