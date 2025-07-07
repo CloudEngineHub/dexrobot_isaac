@@ -280,11 +280,11 @@ class BoxGraspingTask(DexTask):
         if len(env_ids) == 0:
             return
 
-        # Skip if tensors not set up yet (called during initialization)
+        # Fail fast if required dependencies are missing
         if self.root_state_tensor is None:
-            return
+            raise RuntimeError("root_state_tensor is None - initialization failed")
         if self.box_actor_indices is None:
-            return
+            raise RuntimeError("box_actor_indices is None - initialization failed")
 
         # Reset box positions with randomization - vectorized
         num_resets = len(env_ids)
@@ -337,60 +337,55 @@ class BoxGraspingTask(DexTask):
         """
         task_obs = {}
 
-        # Object pose (position + orientation)
-        if self.box_positions is not None:
-            task_obs["object_pos"] = self.box_positions
-            task_obs["object_vel"] = self.box_velocities
+        # Object pose (position + orientation) - fail fast if not initialized
+        if self.box_positions is None:
+            raise RuntimeError("box_positions is None - initialization failed")
+        task_obs["object_pos"] = self.box_positions
+        task_obs["object_vel"] = self.box_velocities
 
         # Compute finger-to-object distances for reward calculation
-        if "fingerpad_poses_world" in obs_dict and self.box_positions is not None:
-            fingerpad_poses = obs_dict["fingerpad_poses_world"]  # (num_envs, 35)
-            fingerpad_poses_reshaped = fingerpad_poses.view(self.num_envs, 5, 7)
-            fingerpad_positions = fingerpad_poses_reshaped[:, :, :3]  # (num_envs, 5, 3)
+        # fingerpad_poses_world is required - fail fast if missing
+        fingerpad_poses = obs_dict["fingerpad_poses_world"]  # (num_envs, 35)
+        fingerpad_poses_reshaped = fingerpad_poses.view(self.num_envs, 5, 7)
+        fingerpad_positions = fingerpad_poses_reshaped[:, :, :3]  # (num_envs, 5, 3)
 
-            # Compute distances from each fingerpad to object center
-            object_pos_expanded = self.box_positions.unsqueeze(1).expand(
-                -1, 5, -1
-            )  # (num_envs, 5, 3)
-            finger_to_object_distances = torch.norm(
-                fingerpad_positions - object_pos_expanded, dim=2
-            )  # (num_envs, 5)
+        # Compute distances from each fingerpad to object center
+        object_pos_expanded = self.box_positions.unsqueeze(1).expand(
+            -1, 5, -1
+        )  # (num_envs, 5, 3)
+        finger_to_object_distances = torch.norm(
+            fingerpad_positions - object_pos_expanded, dim=2
+        )  # (num_envs, 5)
 
-            # Average distance from all fingerpads to object (encourages all fingers to approach)
-            avg_finger_to_object_distance = torch.mean(
-                finger_to_object_distances, dim=1
-            )
-            task_obs["finger_to_object_distances"] = finger_to_object_distances
-            task_obs["avg_finger_to_object_distance"] = avg_finger_to_object_distance
+        # Average distance from all fingerpads to object (encourages all fingers to approach)
+        avg_finger_to_object_distance = torch.mean(finger_to_object_distances, dim=1)
+        task_obs["finger_to_object_distances"] = finger_to_object_distances
+        task_obs["avg_finger_to_object_distance"] = avg_finger_to_object_distance
 
         # Compute hand-to-object distance
-        if "hand_pose" in obs_dict and self.box_positions is not None:
-            hand_poses = obs_dict["hand_pose"]  # (num_envs, 7)
-            hand_positions = hand_poses[:, :3]  # (num_envs, 3)
-            hand_to_object_distance = torch.norm(
-                hand_positions - self.box_positions, dim=1
-            )  # (num_envs,)
-            task_obs["hand_to_object_distance"] = hand_to_object_distance
+        # hand_pose is required - fail fast if missing
+        hand_poses = obs_dict["hand_pose"]  # (num_envs, 7)
+        hand_positions = hand_poses[:, :3]  # (num_envs, 3)
+        hand_to_object_distance = torch.norm(
+            hand_positions - self.box_positions, dim=1
+        )  # (num_envs,)
+        task_obs["hand_to_object_distance"] = hand_to_object_distance
 
         # Compute fingerpad pairwise distances (for policy observation)
-        if "fingerpad_poses_world" in obs_dict:
-            fingerpad_poses = obs_dict["fingerpad_poses_world"]  # (num_envs, 35)
-            fingerpad_poses_reshaped = fingerpad_poses.view(self.num_envs, 5, 7)
-            fingerpad_positions = fingerpad_poses_reshaped[:, :, :3]  # (num_envs, 5, 3)
+        # fingerpad_poses_world already extracted above, reuse fingerpad_positions
+        # Compute pairwise distances between all fingerpads
+        # This gives us 5×4/2 = 10 unique distances
+        fingerpad_distances = self._compute_fingerpad_pairwise_distances(
+            fingerpad_positions
+        )
+        task_obs["fingerpad_distances"] = fingerpad_distances  # (num_envs, 10)
 
-            # Compute pairwise distances between all fingerpads
-            # This gives us 5×4/2 = 10 unique distances
-            fingerpad_distances = self._compute_fingerpad_pairwise_distances(
-                fingerpad_positions
-            )
-            task_obs["fingerpad_distances"] = fingerpad_distances  # (num_envs, 10)
-
-            # Compute centroid of first 3 fingerpads for policy observation
-            first_three_fingerpads = fingerpad_positions[:, :3, :]  # (num_envs, 3, 3)
-            first_three_centroid = torch.mean(
-                first_three_fingerpads, dim=1
-            )  # (num_envs, 3)
-            task_obs["first_three_fingerpad_centroid"] = first_three_centroid
+        # Compute centroid of first 3 fingerpads for policy observation
+        first_three_fingerpads = fingerpad_positions[:, :3, :]  # (num_envs, 3, 3)
+        first_three_centroid = torch.mean(
+            first_three_fingerpads, dim=1
+        )  # (num_envs, 3)
+        task_obs["first_three_fingerpad_centroid"] = first_three_centroid
 
         # Compute success duration (privileged information for grasp duration)
         # Get registered task states - fail fast if not registered
@@ -402,11 +397,22 @@ class BoxGraspingTask(DexTask):
         )
 
         # Check if we have the necessary information to compute success conditions
-        if (
-            self.parent_env.physics_manager is not None
-            and self.parent_env.physics_manager.control_dt is not None
-            and self.box_local_rigid_body_index is not None
-        ):
+        # Some dependencies may be None during initialization - handle gracefully
+        if self.parent_env.physics_manager is None:
+            raise RuntimeError("physics_manager is None - initialization failed")
+        if self.box_local_rigid_body_index is None:
+            raise RuntimeError(
+                "box_local_rigid_body_index is None - initialization failed"
+            )
+
+        # During initialization, control_dt may not be set yet
+        if self.parent_env.physics_manager.control_dt is None:
+            # During initialization, provide default grasp duration
+            task_obs["grasp_duration"] = torch.zeros(
+                (self.num_envs, 1), device=self.device
+            )
+        else:
+            # Normal runtime computation of grasp duration
             # Detect finger-box contact using our heuristic method
             finger_box_contact = self._detect_finger_box_contacts(obs_dict)
             num_fingers_on_box = finger_box_contact.sum(dim=1)
@@ -440,11 +446,6 @@ class BoxGraspingTask(DexTask):
             control_dt = self.parent_env.physics_manager.control_dt
             grasp_duration_seconds = success_duration_steps.float() * control_dt
             task_obs["grasp_duration"] = grasp_duration_seconds.unsqueeze(1)
-        else:
-            # During initialization, return zeros with correct shape
-            task_obs["grasp_duration"] = torch.zeros(
-                (self.num_envs, 1), device=self.device
-            )
 
         return task_obs
 
@@ -548,39 +549,35 @@ class BoxGraspingTask(DexTask):
         rewards = {}
 
         # Object height reward - encourage lifting
-        if self.box_positions is not None:
-            height_above_table = self.box_positions[:, 2] - self.box_z
-            height_reward = torch.clamp(
-                height_above_table / (self.height_threshold - self.box_z), 0, 1
-            )
-            rewards["object_height"] = height_reward
+        if self.box_positions is None:
+            raise RuntimeError("box_positions is None - initialization failed")
+        height_above_table = self.box_positions[:, 2] - self.box_z
+        height_reward = torch.clamp(
+            height_above_table / (self.height_threshold - self.box_z), 0, 1
+        )
+        rewards["object_height"] = height_reward
 
         # Contact rewards - encourage finger-box contact with distinction between single vs multi-finger
         # Use our heuristic detection to identify true finger-box contact
-        if self.box_local_rigid_body_index is not None:
-            finger_box_contact = self._detect_finger_box_contacts(obs_dict)
-            num_fingers_on_box = finger_box_contact.sum(dim=1).float()
-
-            # Single finger contact reward (exactly 1 finger touching)
-            single_finger_contact = (num_fingers_on_box == 1).float()
-            rewards["single_finger_contact"] = single_finger_contact
-
-            # Multi finger contact reward (thumb + at least one other finger touching)
-            # Finger 0 is thumb, fingers 1-4 are other fingers
-            thumb_touching = finger_box_contact[:, 0]  # (num_envs,) - thumb is finger 0
-            other_fingers_touching = finger_box_contact[:, 1:].any(
-                dim=1
-            )  # (num_envs,) - any of fingers 1-4
-            multi_finger_contact = (thumb_touching & other_fingers_touching).float()
-            rewards["multi_finger_contact"] = multi_finger_contact
-        else:
-            # During initialization, no reward
-            rewards["single_finger_contact"] = torch.zeros(
-                self.num_envs, device=self.device
+        if self.box_local_rigid_body_index is None:
+            raise RuntimeError(
+                "box_local_rigid_body_index is None - initialization failed"
             )
-            rewards["multi_finger_contact"] = torch.zeros(
-                self.num_envs, device=self.device
-            )
+        finger_box_contact = self._detect_finger_box_contacts(obs_dict)
+        num_fingers_on_box = finger_box_contact.sum(dim=1).float()
+
+        # Single finger contact reward (exactly 1 finger touching)
+        single_finger_contact = (num_fingers_on_box == 1).float()
+        rewards["single_finger_contact"] = single_finger_contact
+
+        # Multi finger contact reward (thumb + at least one other finger touching)
+        # Finger 0 is thumb, fingers 1-4 are other fingers
+        thumb_touching = finger_box_contact[:, 0]  # (num_envs,) - thumb is finger 0
+        other_fingers_touching = finger_box_contact[:, 1:].any(
+            dim=1
+        )  # (num_envs,) - any of fingers 1-4
+        multi_finger_contact = (thumb_touching & other_fingers_touching).float()
+        rewards["multi_finger_contact"] = multi_finger_contact
 
         # Finger-to-object distance reward - encourage getting fingers close to object
         # Exponential reward: max reward when distance is 0, decays as distance increases
@@ -593,25 +590,16 @@ class BoxGraspingTask(DexTask):
 
         # Fingerpad centroid to box centroid distance reward
         # Encourages the first 3 fingerpads to center around the box
-        if (
-            "first_three_fingerpad_centroid" in obs_dict
-            and self.box_positions is not None
-        ):
-            fingerpad_centroid = obs_dict[
-                "first_three_fingerpad_centroid"
-            ]  # (num_envs, 3)
-            box_centroid = (
-                self.box_positions
-            )  # Box centroid is its center position (num_envs, 3)
-            centroid_distance = torch.norm(
-                fingerpad_centroid - box_centroid, dim=1
-            )  # (num_envs,)
-            centroid_distance_reward = torch.exp(-5.0 * centroid_distance)
-            rewards["fingerpad_to_box_centroid"] = centroid_distance_reward
-        else:
-            rewards["fingerpad_to_box_centroid"] = torch.zeros(
-                self.num_envs, device=self.device
-            )
+        # first_three_fingerpad_centroid is required - fail fast if missing
+        fingerpad_centroid = obs_dict["first_three_fingerpad_centroid"]  # (num_envs, 3)
+        box_centroid = (
+            self.box_positions
+        )  # Box centroid is its center position (num_envs, 3)
+        centroid_distance = torch.norm(
+            fingerpad_centroid - box_centroid, dim=1
+        )  # (num_envs,)
+        centroid_distance_reward = torch.exp(-32.0 * centroid_distance)
+        rewards["fingerpad_to_box_centroid"] = centroid_distance_reward
 
         # Hand-to-object distance reward - encourage getting hand close to object
         # Similar exponential reward for hand approach
@@ -678,9 +666,9 @@ class BoxGraspingTask(DexTask):
         failures["box_fell"] = self.box_positions[:, 2] < 0.0
 
         # Hand too far from box (use configured threshold)
-        if "hand_to_object_distance" in self.parent_env.obs_dict:
-            hand_to_box_distance = self.parent_env.obs_dict["hand_to_object_distance"]
-            failures["box_too_far"] = hand_to_box_distance > self.max_box_distance
+        # hand_to_object_distance is required - fail fast if missing
+        hand_to_box_distance = self.parent_env.obs_dict["hand_to_object_distance"]
+        failures["box_too_far"] = hand_to_box_distance > self.max_box_distance
 
         return failures
 

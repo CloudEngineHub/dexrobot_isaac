@@ -117,7 +117,7 @@ env:
     single_finger_contact: 0.5      # Reward when exactly 1 finger touches box
     multi_finger_contact: 2.0       # Reward when thumb + another finger touch box (larger reward)
     finger_to_object: 0.05          # Reward for getting fingers close (reduced weight)
-    fingerpad_to_box_centroid: 0.1  # Reward for centering first 3 fingerpads around box centroid
+    fingerpad_to_box_centroid: 1.0  # Reward for centering first 3 fingerpads around box centroid
     grasp_duration: 10.0             # Reward for maintaining grasp
 
     # Termination rewards (one-time at episode end)
