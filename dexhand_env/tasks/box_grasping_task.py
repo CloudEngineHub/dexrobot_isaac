@@ -343,25 +343,25 @@ class BoxGraspingTask(DexTask):
             task_obs["object_vel"] = self.box_velocities
 
         # Compute finger-to-object distances for reward calculation
-        if "fingertip_poses_world" in obs_dict and self.box_positions is not None:
-            fingertip_poses = obs_dict["fingertip_poses_world"]  # (num_envs, 35)
-            fingertip_poses_reshaped = fingertip_poses.view(self.num_envs, 5, 7)
-            fingertip_positions = fingertip_poses_reshaped[:, :, :3]  # (num_envs, 5, 3)
+        if "fingerpad_poses_world" in obs_dict and self.box_positions is not None:
+            fingerpad_poses = obs_dict["fingerpad_poses_world"]  # (num_envs, 35)
+            fingerpad_poses_reshaped = fingerpad_poses.view(self.num_envs, 5, 7)
+            fingerpad_positions = fingerpad_poses_reshaped[:, :, :3]  # (num_envs, 5, 3)
 
-            # Compute distances from each fingertip to object center
+            # Compute distances from each fingerpad to object center
             object_pos_expanded = self.box_positions.unsqueeze(1).expand(
                 -1, 5, -1
             )  # (num_envs, 5, 3)
             finger_to_object_distances = torch.norm(
-                fingertip_positions - object_pos_expanded, dim=2
+                fingerpad_positions - object_pos_expanded, dim=2
             )  # (num_envs, 5)
 
-            # Minimum distance from any fingertip to object
-            min_finger_to_object_distance = torch.min(
+            # Average distance from all fingerpads to object (encourages all fingers to approach)
+            avg_finger_to_object_distance = torch.mean(
                 finger_to_object_distances, dim=1
-            )[0]
+            )
             task_obs["finger_to_object_distances"] = finger_to_object_distances
-            task_obs["min_finger_to_object_distance"] = min_finger_to_object_distance
+            task_obs["avg_finger_to_object_distance"] = avg_finger_to_object_distance
 
         # Compute hand-to-object distance
         if "hand_pose" in obs_dict and self.box_positions is not None:
@@ -548,22 +548,34 @@ class BoxGraspingTask(DexTask):
             )
             rewards["object_height"] = height_reward
 
-        # Grasp approach reward - encourage finger-box contact specifically
+        # Contact rewards - encourage finger-box contact with distinction between single vs multi-finger
         # Use our heuristic detection to identify true finger-box contact
         if self.box_local_rigid_body_index is not None:
             finger_box_contact = self._detect_finger_box_contacts(obs_dict)
-            any_box_contact = finger_box_contact.any(dim=1).float()
-            rewards["grasp_approach"] = any_box_contact
+            num_fingers_on_box = finger_box_contact.sum(dim=1).float()
+
+            # Single finger contact reward (exactly 1 finger touching)
+            single_finger_contact = (num_fingers_on_box == 1).float()
+            rewards["single_finger_contact"] = single_finger_contact
+
+            # Multi finger contact reward (2 or more fingers touching)
+            multi_finger_contact = (num_fingers_on_box >= 2).float()
+            rewards["multi_finger_contact"] = multi_finger_contact
         else:
             # During initialization, no reward
-            rewards["grasp_approach"] = torch.zeros(self.num_envs, device=self.device)
+            rewards["single_finger_contact"] = torch.zeros(
+                self.num_envs, device=self.device
+            )
+            rewards["multi_finger_contact"] = torch.zeros(
+                self.num_envs, device=self.device
+            )
 
         # Finger-to-object distance reward - encourage getting fingers close to object
         # Exponential reward: max reward when distance is 0, decays as distance increases
-        # Tuned for: ~0.8 at 3cm distance, ~0.1 at 50cm distance
-        min_distance = obs_dict["min_finger_to_object_distance"]
+        # Uses average distance to encourage all fingers to approach, not just the closest one
+        avg_distance = obs_dict["avg_finger_to_object_distance"]
         finger_distance_reward = torch.exp(
-            -5.0 * min_distance
+            -5.0 * avg_distance
         )  # Quick decay to focus on close-range approach
         rewards["finger_to_object"] = finger_distance_reward
 
@@ -577,13 +589,13 @@ class BoxGraspingTask(DexTask):
 
         # Grasp duration reward - reward for maintaining grasp
         # Grasp duration is computed in observation encoder as privileged info
-        if "grasp_duration" in obs_dict:
-            grasp_duration = obs_dict["grasp_duration"].squeeze(-1)  # In seconds
-            # Normalize to [0, 1] based on contact duration threshold
-            grasp_duration_reward = torch.clamp(
-                grasp_duration / self.contact_duration_threshold_seconds, 0, 1
-            )
-            rewards["grasp_duration"] = grasp_duration_reward
+        # Fail fast - grasp_duration should always exist after proper initialization
+        grasp_duration = obs_dict["grasp_duration"].squeeze(-1)  # In seconds
+        # Normalize to [0, 1] based on contact duration threshold
+        grasp_duration_reward = torch.clamp(
+            grasp_duration / self.contact_duration_threshold_seconds, 0, 1
+        )
+        rewards["grasp_duration"] = grasp_duration_reward
 
         return rewards
 
