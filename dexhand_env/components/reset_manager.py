@@ -141,13 +141,12 @@ class ResetManager:
             # Extract global indices for ALL actors in the environments being reset
             actor_indices_to_reset = self.all_actor_indices[env_ids].flatten()
 
-            # Extract root states for all actors in the reset environments
-            root_states_to_set = self.root_state_tensor[env_ids].reshape(-1, 13)
-
             # Apply all actor root states at once
+            # Use the full tensor - Isaac Gym API expects the full tensor, not sliced data
+            # The actor indices tell Isaac Gym which actors to update within the full tensor
             self.gym.set_actor_root_state_tensor_indexed(
                 self.sim,
-                gymtorch.unwrap_tensor(root_states_to_set),
+                gymtorch.unwrap_tensor(self.root_state_tensor),
                 gymtorch.unwrap_tensor(actor_indices_to_reset),
                 len(actor_indices_to_reset),
             )

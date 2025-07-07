@@ -49,13 +49,26 @@ class PhysicsManager:
         # control_dt will be set by measurement
         self.control_dt = None
 
-        # Number of actors per environment (TODO: make this configurable for multi-actor support)
-        self.num_actors_per_env = 1
-
     @property
     def device(self):
         """Access device from parent (single source of truth)."""
         return self.parent.device
+
+    @property
+    def tensor_manager(self):
+        """Access tensor_manager from parent (single source of truth)."""
+        return self.parent.tensor_manager
+
+    @property
+    def num_actors_per_env(self):
+        """Get number of actors per environment dynamically from tensor shape."""
+        if self.tensor_manager is None:
+            raise RuntimeError("tensor_manager is None - initialization failed")
+        if self.tensor_manager.actor_root_state_tensor is None:
+            raise RuntimeError(
+                "actor_root_state_tensor is None - tensor setup not complete"
+            )
+        return self.tensor_manager.actor_root_state_tensor.shape[1]
 
     def step_physics(self, refresh_tensors=True):
         """
@@ -174,8 +187,7 @@ class PhysicsManager:
             # Use advanced indexing to extract indices
             indices_to_use = actor_indices[env_ids].to(torch.int32)
 
-            # Vectorized extraction of root states
-            # Check bounds once
+            # Validate tensor bounds
             if max_env_id >= root_state_tensor.shape[0]:
                 raise RuntimeError(
                     f"Environment ID {max_env_id} out of range for root_state_tensor (shape: {root_state_tensor.shape})"
@@ -187,32 +199,14 @@ class PhysicsManager:
                     f"Actor index {max_actor_idx} out of range for root_state_tensor (shape: {root_state_tensor.shape})"
                 )
 
-            # Use advanced indexing to extract all states at once
-            # First, get the states for the requested environments
-            env_states = root_state_tensor[
-                env_ids
-            ]  # Shape: (len(env_ids), num_actors_per_env, 13)
-
-            # Create indices for gather operation
-            # We need to expand indices_to_use to match the last dimension (13)
-            gather_indices = (
-                indices_to_use.unsqueeze(-1)
-                .unsqueeze(-1)
-                .expand(-1, -1, 13)
-                .to(torch.long)
-            )
-
-            # Use gather to select the specific actor for each environment
-            actor_states = env_states.gather(1, gather_indices).squeeze(
-                1
-            )  # Shape: (len(env_ids), 13)
-
-            # Apply root states
+            # Apply root states using the full tensor
+            # Isaac Gym API expects the full tensor, not sliced data
+            # The actor indices tell Isaac Gym which actors to update within the full tensor
             self.gym.set_actor_root_state_tensor_indexed(
                 self.sim,
-                gymtorch.unwrap_tensor(actor_states),
+                gymtorch.unwrap_tensor(root_state_tensor),
                 gymtorch.unwrap_tensor(indices_to_use),
-                len(env_ids),
+                len(indices_to_use),
             )
 
             # Refresh tensors to make changes visible
