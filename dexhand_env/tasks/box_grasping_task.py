@@ -385,6 +385,13 @@ class BoxGraspingTask(DexTask):
             )
             task_obs["fingerpad_distances"] = fingerpad_distances  # (num_envs, 10)
 
+            # Compute centroid of first 3 fingerpads for policy observation
+            first_three_fingerpads = fingerpad_positions[:, :3, :]  # (num_envs, 3, 3)
+            first_three_centroid = torch.mean(
+                first_three_fingerpads, dim=1
+            )  # (num_envs, 3)
+            task_obs["first_three_fingerpad_centroid"] = first_three_centroid
+
         # Compute success duration (privileged information for grasp duration)
         # Get registered task states - fail fast if not registered
         success_duration_steps = self.parent_env.observation_encoder.get_task_state(
@@ -558,8 +565,13 @@ class BoxGraspingTask(DexTask):
             single_finger_contact = (num_fingers_on_box == 1).float()
             rewards["single_finger_contact"] = single_finger_contact
 
-            # Multi finger contact reward (2 or more fingers touching)
-            multi_finger_contact = (num_fingers_on_box >= 2).float()
+            # Multi finger contact reward (thumb + at least one other finger touching)
+            # Finger 0 is thumb, fingers 1-4 are other fingers
+            thumb_touching = finger_box_contact[:, 0]  # (num_envs,) - thumb is finger 0
+            other_fingers_touching = finger_box_contact[:, 1:].any(
+                dim=1
+            )  # (num_envs,) - any of fingers 1-4
+            multi_finger_contact = (thumb_touching & other_fingers_touching).float()
             rewards["multi_finger_contact"] = multi_finger_contact
         else:
             # During initialization, no reward
@@ -578,6 +590,28 @@ class BoxGraspingTask(DexTask):
             -5.0 * avg_distance
         )  # Quick decay to focus on close-range approach
         rewards["finger_to_object"] = finger_distance_reward
+
+        # Fingerpad centroid to box centroid distance reward
+        # Encourages the first 3 fingerpads to center around the box
+        if (
+            "first_three_fingerpad_centroid" in obs_dict
+            and self.box_positions is not None
+        ):
+            fingerpad_centroid = obs_dict[
+                "first_three_fingerpad_centroid"
+            ]  # (num_envs, 3)
+            box_centroid = (
+                self.box_positions
+            )  # Box centroid is its center position (num_envs, 3)
+            centroid_distance = torch.norm(
+                fingerpad_centroid - box_centroid, dim=1
+            )  # (num_envs,)
+            centroid_distance_reward = torch.exp(-5.0 * centroid_distance)
+            rewards["fingerpad_to_box_centroid"] = centroid_distance_reward
+        else:
+            rewards["fingerpad_to_box_centroid"] = torch.zeros(
+                self.num_envs, device=self.device
+            )
 
         # Hand-to-object distance reward - encourage getting hand close to object
         # Similar exponential reward for hand approach

@@ -62,6 +62,8 @@ env:
     - hand_pose          # Correct key name (not hand_base_pose)
     - prev_actions
     - fingertip_poses_world
+    - fingerpad_poses_world  # Fingerpad poses for better grasping control
+    - first_three_fingerpad_centroid  # Centroid of first 3 fingerpads for spatial awareness
     - episode_time       # Episode progress
     - fingerpad_distances # Pairwise distances between fingerpads
     # NO box observations - policy is blind!
@@ -113,8 +115,9 @@ env:
     # Task-specific rewards only
     object_height: 1.0             # Main reward for lifting object
     single_finger_contact: 0.5      # Reward when exactly 1 finger touches box
-    multi_finger_contact: 2.0       # Reward when ≥2 fingers touch box (larger reward)
-    finger_to_object: 0.1           # Reward for getting fingers close (using average distance)
+    multi_finger_contact: 2.0       # Reward when thumb + another finger touch box (larger reward)
+    finger_to_object: 0.05          # Reward for getting fingers close (reduced weight)
+    fingerpad_to_box_centroid: 0.1  # Reward for centering first 3 fingerpads around box centroid
     grasp_duration: 10.0             # Reward for maintaining grasp
 
     # Termination rewards (one-time at episode end)
