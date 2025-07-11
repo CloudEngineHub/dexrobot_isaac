@@ -1,0 +1,28 @@
+# @package _global_
+# Base video configuration for all video modes
+# Contains common video settings shared across recording and streaming
+#
+# INDEPENDENT FEATURES:
+# - Video recording (env.recordVideo: true/false) - Saves MP4 files to disk
+# - HTTP streaming (env.streamVideo: true/false) - Serves real-time MJPEG over HTTP
+# - Both features can be enabled/disabled independently
+# - Both use the same unified camera system (ViewerController's persistent camera)
+#
+# USAGE EXAMPLES:
+# Recording only:    env.recordVideo=true env.streamVideo=false
+# Streaming only:    env.recordVideo=false env.streamVideo=true
+# Both enabled:      env.recordVideo=true env.streamVideo=true
+# Neither enabled:   env.recordVideo=false env.streamVideo=false (default)
+
+env:
+  # Video recording configuration (requires OpenCV)
+  videoFps: 60.0                    # Frames per second for MP4 output
+  videoResolution: [1920, 1080]    # Width x Height for both recording and streaming (Full HD)
+  videoCodec: mp4v                  # Video codec (mp4v, XVID, H264)
+  videoMaxDuration: 300             # Maximum duration per video file (seconds)
+
+  # HTTP streaming configuration (requires Flask)
+  videoStreamHost: "127.0.0.1"     # Server host address
+  videoStreamPort: 8080             # Server port
+  videoStreamQuality: 100           # JPEG quality (1-100) - Maximum quality
+  videoStreamBufferSize: 10         # Frame buffer size

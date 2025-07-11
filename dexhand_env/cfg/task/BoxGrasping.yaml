@@ -1,55 +1,18 @@
 # @package task
-name: BoxGrasping
-physics_engine: physx
+# BoxGrasping task configuration - inherits from BaseTask
+defaults:
+  - BaseTask
+  - _self_
 
-# Simulation parameters
+name: BoxGrasping
+
+# Override physics parameters for higher fidelity grasping
 sim:
   dt: 0.01              # 100Hz physics / 2 physics steps per control step = 50Hz control
-  substeps: 4                     # Reduced due to higher frequency
-  gravity: [0.0, 0.0, -9.81]
-  num_client_threads: 0
-
-  physx:
-    solver_type: 1                # 0: PCG, 1: TGS
-    num_position_iterations: 16   # Optimized for smaller timestep
-    num_velocity_iterations: 0    # Set to 0 based on NVIDIA recommendations
-    contact_offset: 0.001         # Contact detection distance - prevents box oscillation
-    rest_offset: 0.0005          # Must be < contact_offset to maintain stable contacts
-    bounce_threshold_velocity: 0.15  # Moderate value for 200 Hz
-    max_depenetration_velocity: 0.2  # Optimized for stable contact
-    default_buffer_size_multiplier: 4.0  # Optimized for performance
-    num_subscenes: 0
-    contact_collection: 1         # 1: CC_LAST_SUBSTEP (critical for GPU pipeline)
-    gpu_contact_pairs_per_env: 512  # Contact pairs per environment (will be auto-multiplied by num_envs)
-    always_use_articulations: true  # Always use articulations for stability
-    num_threads: 4                # Standard CPU threads
 
 env:
-  numEnvs: ${resolve_default:2048,${..num_envs}}
-  envSpacing: 2.0
+  numEnvs: ${env.numEnvs}
   episodeLength: 500  # 10 seconds at 50Hz
-
-  # Action space configuration
-  controlMode: position_delta
-  policyControlsHandBase: true
-  policyControlsFingers: true
-
-  # Default targets for uncontrolled DOFs (not used in this task since policy controls all)
-  defaultBaseTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  defaultFingerTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-
-  # Component-wise velocity limits for position_delta mode action scaling
-  maxFingerJointVelocity: 1.0     # Maximum velocity for each finger joint (rad/s)
-  maxBaseLinearVelocity: 0.5      # Maximum velocity for each base linear axis (m/s)
-  maxBaseAngularVelocity: 1.5     # Maximum velocity for each base angular axis (rad/s)
-
-  # Initial pose
-  initialHandPos: [0.0, 0.0, 0.5]
-  initialHandRot: [0.0, 0.0, 0.0, 1.0]
-
-  # Logging configuration
-  logLevel: "INFO"
-  enableComponentDebugLogs: false
 
   # Policy observation keys - what the policy actually sees (blind policy design)
   policyObservationKeys:
@@ -68,25 +31,6 @@ env:
     - fingerpad_distances # Pairwise distances between fingerpads
     # NO box observations - policy is blind!
     # grasp_duration is privileged info - not exposed to policy
-
-  # Binary contact threshold (1N)
-  contactBinaryThreshold: 1.0
-
-  # Contact force bodies (for contact sensing)
-  contactForceBodies:
-    - "r_f_link1_4"  # thumb distal phalanx
-    - "r_f_link2_4"  # index distal phalanx
-    - "r_f_link3_4"  # middle distal phalanx
-    - "r_f_link4_4"  # ring distal phalanx
-    - "r_f_link5_4"  # pinky distal phalanx
-
-  # Contact force visualization settings
-  contactVisualization:
-    enabled: true
-    forceThreshold: 0.1
-    forceMaxIntensity: 100.0
-    baseColor: [1.0, 0.2, 0.2]
-    defaultColor: [0.7, 0.7, 0.7]
 
   # Box properties
   box:
@@ -110,28 +54,41 @@ env:
       fingertip_threshold: 0.0
       fingerpad_threshold: 0.0
 
-  # Reward weights configuration - minimal set
-  rewardWeights:
-    # Task-specific rewards only
-    object_height: 1.0             # Main reward for lifting object
-    single_finger_contact: 0.5      # Reward when exactly 1 finger touches box
-    multi_finger_contact: 2.0       # Reward when thumb + another finger touch box (larger reward)
-    finger_to_object: 0.05          # Reward for getting fingers close (reduced weight)
-    fingerpad_to_box_centroid: 1.0  # Reward for centering first 3 fingerpads around box centroid
-    grasp_duration: 10.0             # Reward for maintaining grasp
-
-    # Termination rewards (one-time at episode end)
-    termination_success: 100.0       # Large bonus for successful grasp and lift
-    termination_failure_penalty: 100.0       # Penalty for failure (touching ground, etc.)
-    termination_timeout_penalty: 100.0       # Penalty for not completing task
-
   # Task-specific parameters
-  task_params:
+  taskParams:
     success_height_threshold: 0.2     # Object must be lifted above this height (meters)
     contact_duration_threshold: 2.0   # Minimum contact duration for success (seconds)
     min_fingers_for_grasp: 2          # Minimum number of fingers required for valid grasp
     max_box_distance: 0.6             # Reset if box moves beyond this distance (meters)
 
+# Reward weights configuration - override BaseTask completely
+rewardWeights:
+  _delete_: true  # Delete parent rewardWeights to ensure BoxGrasping has complete control
+
+  # Task-specific rewards only
+  object_height: 1.0             # Main reward for lifting object
+  single_finger_contact: 0.5      # Reward when exactly 1 finger touches box
+  multi_finger_contact: 2.0       # Reward when thumb + another finger touch box (larger reward)
+  finger_to_object: 0.05          # Reward for getting fingers close (reduced weight)
+  fingerpad_to_box_centroid: 1.0  # Reward for centering first 3 fingerpads around box centroid
+  grasp_duration: 10.0             # Reward for maintaining grasp
+
+  # Termination rewards (one-time at episode end)
+  termination_success: 100.0       # Large bonus for successful grasp and lift
+  termination_failure_penalty: 100.0       # Penalty for failure (touching ground, etc.)
+  termination_timeout_penalty: 100.0       # Penalty for not completing task
+
+  # Explicitly disable BaseTask rewards (set to 0.0)
+  alive: 0.0                      # No alive bonus for BoxGrasping
+  height_safety: 0.0              # No height safety penalty (handled by termination)
+  finger_velocity: 0.0            # No velocity penalties
+  hand_velocity: 0.0
+  hand_angular_velocity: 0.0
+  joint_limit: 0.0                # No joint limit penalties
+  finger_acceleration: 0.0        # No acceleration penalties
+  hand_acceleration: 0.0
+  hand_angular_acceleration: 0.0
+  contact_stability: 0.0          # No contact stability reward
+
 # Task configuration
-task:
-  randomize: true  # Enable position randomization
+task: {}

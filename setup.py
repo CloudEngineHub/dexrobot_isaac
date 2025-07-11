@@ -29,6 +29,13 @@ INSTALL_REQUIRES = [
     "trimesh==3.23.5",
 ]
 
+# Optional dependencies for additional features
+EXTRAS_REQUIRE = {
+    "streaming": ["flask>=2.0.0"],  # For HTTP video streaming
+    "video": ["opencv-python>=4.5.0"],  # For video recording
+    "all": ["flask>=2.0.0", "opencv-python>=4.5.0"],  # All optional features
+}
+
 
 # Installation operation
 setup(
@@ -40,6 +47,7 @@ setup(
     include_package_data=True,
     python_requires=">=3.6",
     install_requires=INSTALL_REQUIRES,
+    extras_require=EXTRAS_REQUIRE,
     packages=find_packages("."),
     classifiers=[
         "Natural Language :: English",

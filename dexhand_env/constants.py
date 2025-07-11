@@ -8,6 +8,7 @@ This module defines all shared constants to ensure single source of truth.
 NUM_BASE_DOFS = 6  # ARTx, ARTy, ARTz, ARRx, ARRy, ARRz
 NUM_ACTIVE_FINGER_DOFS = 12  # 12 finger controls mapping to 19 DOFs with coupling
 NUM_TOTAL_FINGER_DOFS = 20  # 5 fingers × 4 joints (including fixed joint3_1)
+NUM_FINGERS = 5  # Thumb, index, middle, ring, pinky
 
 # Joint names
 BASE_JOINT_NAMES = ["ARTx", "ARTy", "ARTz", "ARRx", "ARRy", "ARRz"]

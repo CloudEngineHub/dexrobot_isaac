@@ -17,8 +17,12 @@ _doxygen
 logs*
 nn/
 runs/
+runs_all/
 .idea
 outputs/
+
+# Preserve directory structure with .gitkeep files
+!**/.gitkeep
 *.hydra*
 CLAUDE.md
 .unison.*

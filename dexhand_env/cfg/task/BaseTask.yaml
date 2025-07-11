@@ -1,4 +1,5 @@
 # Base Task Configuration File
+name: BaseTask
 
 # Physics engine configuration
 physics_engine: "physx"
@@ -28,6 +29,7 @@ sim:
 env:
   # Task parameters
   episodeLength: 300              # Maximum number of steps per episode
+  envSpacing: 2.0                 # Environment spacing in meters (distance between environment centers)
 
   # Action space configuration
   controlMode: "position_delta"   # position or position_delta
@@ -46,8 +48,7 @@ env:
   maxBaseLinearVelocity: 0.5      # Maximum velocity for each base linear axis (m/s) - applied per x/y/z axis
   maxBaseAngularVelocity: 1.5     # Maximum velocity for each base angular axis (rad/s) - applied per rx/ry/rz axis
 
-  # Logging configuration
-  logLevel: "INFO"                # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  # Logging configuration is now managed centrally via logging.logLevel
 
   # Termination criteria (for BaseTask)
   termination:
@@ -65,9 +66,6 @@ env:
   rewardWeights: {}
   enableComponentDebugLogs: false # Enable detailed debug logs for component internals
 
-  # Memory monitoring (for debugging performance issues)
-  enable_memory_monitoring: false  # Disabled by default
-  memory_monitor_interval: 1000   # Log memory stats every 1000 steps
 
   # Bodies to monitor for contact force observations
   contactForceBodies:
@@ -95,7 +93,7 @@ env:
   initialHandRot: [0.0, 0.0, 0.0, 1.0]  # Initial hand rotation (quaternion)
 
   # Observation configuration
-  observationKeys:              # List of observation components to include in final observation tensor
+  policyObservationKeys:        # List of observation components to include in final observation tensor
     - "base_dof_pos"            # Base DOF positions (6 DOFs: x, y, z, rx, ry, rz)
     - "base_dof_vel"            # Base DOF velocities (6 DOFs: x, y, z, rx, ry, rz)
     - "active_finger_dof_pos"   # Active finger DOF positions (12 active finger controls) - for RL
@@ -114,7 +112,7 @@ env:
     # Uncomment any of these to include them in the RL observation tensor:
 
     # Note: The following are always available in obs_dict for semantic access regardless of whether
-    # they are included in observationKeys. They are commented out to avoid redundancy in RL tensor.
+    # they are included in policyObservationKeys. They are commented out to avoid redundancy in RL tensor.
 
     # - "all_finger_dof_pos"     # All finger DOF positions (20 finger DOFs) - semantic access only
     # - "all_finger_dof_vel"     # All finger DOF velocities (20 finger DOFs) - semantic access only
@@ -138,5 +136,4 @@ rewardWeights:
     contact_stability: 0.2        # Reward consistent contacts
 
 # These parameters are passed to training algorithms
-task:
-  randomize: false                # Whether to use domain randomization
+task: {}

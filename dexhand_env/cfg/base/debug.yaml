@@ -1,0 +1,9 @@
+# @package _global_
+# Base debug configuration
+# Contains common settings for debug mode environments
+
+env:
+  numEnvs: 4           # Small number for debugging
+
+logging:
+  logLevel: "debug"    # Verbose logging for debugging

@@ -5,7 +5,7 @@ This module defines the interface that all task implementations must follow.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Callable, List
 
 # Import PyTorch
 import torch
@@ -19,31 +19,6 @@ class DexTask(ABC):
     It specifies methods for computing task-specific rewards, checking success
     and failure criteria, and resetting task-specific state.
     """
-
-    @abstractmethod
-    def compute_task_rewards(
-        self, obs_dict: Dict[str, torch.Tensor]
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        """
-        Compute task rewards.
-
-        Args:
-            obs_dict: Dictionary of observations
-
-        Returns:
-            Tuple of (reward tensor, reward terms dictionary)
-        """
-        pass
-
-    @abstractmethod
-    def check_task_reset(self) -> torch.Tensor:
-        """
-        Check if task-specific reset conditions are met.
-
-        Returns:
-            Boolean tensor indicating which environments should reset
-        """
-        pass
 
     @abstractmethod
     def compute_task_reward_terms(
@@ -230,5 +205,126 @@ class DexTask(ABC):
         - Perform any other setup that requires access to environment components
 
         Default implementation does nothing - tasks can override if needed.
+        """
+        pass
+
+    # ============================================================================
+    # Action Processing Interface
+    # ============================================================================
+
+    @property
+    def pre_action_rule(self) -> Optional[Callable]:
+        """
+        Return custom pre-action rule or None for default.
+
+        Pre-action rules process previous targets with state/observations to produce
+        rule targets that can be modified by the main action rule.
+
+        Function signature: (active_prev_targets, state) -> active_rule_targets
+        - active_prev_targets: torch.Tensor (num_envs, 18) - Previous active targets
+        - state: Dict with 'obs_dict' and 'env' keys
+
+        Returns:
+            Optional callable implementing pre-action rule or None to use identity function
+
+        Example:
+            ```python
+            @property
+            def pre_action_rule(self):
+                def rule(active_prev_targets, state):
+                    # Apply some transformation based on task state
+                    targets = active_prev_targets.clone()
+                    # ... task-specific logic ...
+                    return targets
+                return rule
+            ```
+        """
+        return None
+
+    @property
+    def action_rule(self) -> Optional[Callable]:
+        """
+        Return custom action rule or None for default position/position_delta behavior.
+
+        Action rules process policy actions with rule targets to produce raw targets.
+        This is the main action processing step where actions are interpreted.
+
+        Function signature: (active_prev_targets, active_rule_targets, actions, config) -> active_raw_targets
+        - active_prev_targets: torch.Tensor (num_envs, 18) - Previous active targets
+        - active_rule_targets: torch.Tensor (num_envs, 18) - Output from pre-action rule
+        - actions: torch.Tensor (num_envs, num_actions) - Policy actions
+        - config: Dict with control configuration (policy_controls_base, etc.)
+
+        Returns:
+            Optional callable implementing action rule or None to use default behavior
+
+        Example:
+            ```python
+            @property
+            def action_rule(self):
+                def rule(active_prev_targets, active_rule_targets, actions, config):
+                    # Custom action interpretation
+                    targets = active_rule_targets.clone()
+
+                    # Example: Policy controls fingers only, task controls base
+                    if config["policy_controls_fingers"]:
+                        finger_actions = actions[:, :12]
+                        targets[:, 6:] = self._process_finger_actions(finger_actions)
+
+                    # Task-specific base control
+                    targets[:, :6] = self._compute_task_base_targets()
+
+                    return targets
+                return rule
+            ```
+        """
+        return None
+
+    @property
+    def post_action_filters(self) -> List[str]:
+        """
+        Return list of additional post-action filter names.
+
+        Post-action filters are applied after the main action rule to enforce
+        constraints like velocity limits or position bounds. Built-in filters
+        include "velocity_clamp" and "position_clamp".
+
+        Returns:
+            List of filter names to apply in addition to configured filters
+
+        Example:
+            ```python
+            @property
+            def post_action_filters(self):
+                return ["task_specific_constraint", "safety_filter"]
+            ```
+        """
+        return []
+
+    def register_custom_filters(self, action_processor) -> None:
+        """
+        Register custom post-action filters with the action processor.
+
+        This method is called during initialization to register any custom
+        filters that the task provides. The filters will be available for
+        use if listed in post_action_filters.
+
+        Args:
+            action_processor: ActionProcessor instance to register filters with
+
+        Example:
+            ```python
+            def register_custom_filters(self, action_processor):
+                def task_constraint_filter(active_prev_targets, active_rule_targets, active_targets):
+                    # Apply task-specific constraints
+                    constrained_targets = active_targets.clone()
+                    # ... constraint logic ...
+                    return constrained_targets
+
+                action_processor.register_post_action_filter(
+                    "task_specific_constraint",
+                    task_constraint_filter
+                )
+            ```
         """
         pass

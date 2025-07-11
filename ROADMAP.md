@@ -2,7 +2,41 @@
 
 ## 🟡 Current Issues
 
-(Currently no pending issues)
+### 1. Contact Force Verification (Issue #4)
+- **Status**: ✅ INVESTIGATION COMPLETE - System working correctly
+- **Problem**: Contact forces showing as zeros despite visual contact
+- **Root Cause**: Contact forces are detected correctly but on hand base/palm (rigid body indices 9,11,17,19) rather than fingertips (indices 14,20,26,32,38)
+- **Key Findings**:
+  - ✅ TensorManager.refresh_tensors() successfully detects contact forces up to 1211N magnitude
+  - ✅ Contact force tensor and indexing system working correctly
+  - ✅ Debug logging confirmed contact forces are detected at non-fingertip rigid bodies
+- **Next Steps**: Verify fingertip collision geometry in MJCF model or adjust test scene for fingertip contact
+- **Impact**: Contact force system is functional - just need proper contact setup
+
+### 2. Episode Length Parameter Not Working
+- **Status**: ✅ FIXED
+- **Problem**: The `--episode-length` parameter in test script does not properly limit episode duration
+- **Root Cause**: `reset_buf` was not cleared after resetting environments, causing continuous resets
+- **Fix**: Added `self.reset_buf[env_ids] = 0` in `reset_manager.reset_idx()` following Isaac Gym standard
+- **Documentation**: Created `docs/guide-environment-resets.md` explaining the reset system
+- **Verified**: Episodes now properly reset at configured length without continuous resets
+
+### 3. th_rot_target Decreases Instead of Increasing
+- **Status**: 🟡 PENDING
+- **Problem**: With `--policy-controls-fingers=true`, th_rot_target decreases from step 20 to 25 in test script
+- **Expected**: Should increase linearly during this period
+- **Location**: Likely in action_processor.py finger coupling logic or test script action generation
+- **Impact**: Incorrect thumb rotation control
+- **Steps to reproduce**: Run `python examples/dexhand_test.py --policy-controls-fingers=true` and observe th_rot_target values
+
+### 4. Multi-Environment Testing
+- **Status**: 🟡 PENDING
+- **Problem**: Need to verify system works correctly with num_envs > 1
+- **Tasks**:
+  - Test with various num_envs (2, 4, 16, 64)
+  - Verify reset_idx works correctly with different environment indices
+  - Check performance scaling with multiple environments
+  - Ensure observations/actions are properly batched
 
 ## 🟢 Future Development
 

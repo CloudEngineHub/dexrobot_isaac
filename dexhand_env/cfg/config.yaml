@@ -1,0 +1,46 @@
+# Main Hydra configuration for DexHand training
+# Use: python train.py
+# Override: python train.py task=BoxGrasping env.num_envs=2048
+
+defaults:
+  - task: BaseTask
+  - train: BaseTaskPPO
+  - _self_
+
+# Task and training configs will be loaded from task/ and train/ subdirectories
+# The following are runtime overrides
+
+# Environment configuration
+env:
+  numEnvs: 1024  # Basic config for training, can be overridden
+  device: "cuda:0"
+  graphicsDeviceId: 0
+  render: null  # null = use defaults (test=render, train=headless), true/false = explicit override
+  recordVideo: false  # Enable video recording in headless mode
+  streamVideo: false  # Enable HTTP video streaming
+  envName: "rlgpu_dexhand"  # RL Games environment name
+
+# Training configuration
+training:
+  seed: 42
+  torchDeterministic: false
+  checkpoint: null
+  test: false
+  maxIterations: 10000
+
+# Testing configuration
+testing:
+  reloadInterval: 30  # Seconds between checkpoint reloads in test mode
+
+# Experiment management configuration
+experiment:
+  maxRecentRuns: 10      # Maximum number of recent experiments to show in runs/ (older ones archived to runs_all/)
+  useCleanWorkspace: true # Enable clean workspace management (symlinks recent runs, archives all runs)
+
+# Logging configuration
+logging:
+  experimentName: null  # Auto-generated if null
+  logInterval: 10
+  rewardLogInterval: 10
+  logLevel: "info"
+  noLogFile: false

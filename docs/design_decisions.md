@@ -47,7 +47,7 @@
 ## Related Documentation
 
 - **DOF/Action Reference**: [`api_dof_control.md`](api_dof_control.md)
-- **Observation System**: [`guide_observation_system.md`](guide_observation_system.md)
-- **Component Initialization**: [`guide_component_initialization.md`](guide_component_initialization.md)
-- **Physics Tuning**: [`guide_physics_tuning.md`](guide_physics_tuning.md)
-- **Implementation Details**: [`reference_physics_implementation.md`](reference_physics_implementation.md)
+- **Observation System**: [`guide-observation-system.md`](guide-observation-system.md)
+- **Component Initialization**: [`guide-component-initialization.md`](guide-component-initialization.md)
+- **Physics Tuning**: [`guide-physics-tuning.md`](guide-physics-tuning.md)
+- **Implementation Details**: [`reference-physics-implementation.md`](reference-physics-implementation.md)

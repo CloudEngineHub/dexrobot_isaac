@@ -1059,83 +1059,136 @@ BaseTask.create_task_objects = _patched_create_task_objects
 
 def main():
     """Main function to test the DexHand environment."""
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Test DexHand environment")
-    parser.add_argument(
-        "--config", type=str, default=None, help="Path to config YAML file"
+    # Parse command line arguments with organized groups
+    parser = argparse.ArgumentParser(
+        description="Test DexHand environment with comprehensive debugging and validation",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s                                    # Basic test with default settings
+  %(prog)s --headless --steps 500            # Headless test for 500 steps
+  %(prog)s --control-mode position_delta     # Test with delta control mode
+  %(prog)s --enable-plotting --record-video  # Test with visualization and recording
+        """,
     )
-    parser.add_argument(
-        "--num-envs", type=int, default=1, help="Number of environments"
+
+    # Environment Configuration
+    env_group = parser.add_argument_group("Environment Configuration")
+    env_group.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to config YAML file (default: auto-detect)",
     )
-    parser.add_argument(
-        "--episode-length", type=int, default=1200, help="Maximum episode length"
+    env_group.add_argument(
+        "--num-envs",
+        type=int,
+        default=1,
+        help="Number of parallel environments (default: 1)",
     )
-    parser.add_argument(
-        "--headless", action="store_true", help="Run without visualization"
+    env_group.add_argument(
+        "--episode-length",
+        type=int,
+        default=1200,
+        help="Maximum episode length before reset (default: 1200)",
     )
-    parser.add_argument("--debug", action="store_true", help="Enable debug output")
-    parser.add_argument(
-        "--steps", type=int, default=1200, help="Number of steps to run"
-    )
-    parser.add_argument(
-        "--movement-speed", type=float, default=0.05, help="Speed of DOF movement"
-    )
-    parser.add_argument(
-        "--sleep", type=float, default=0.01, help="Sleep time between steps"
-    )
-    parser.add_argument(
+    env_group.add_argument(
         "--device",
         type=str,
         default="cuda:0",
-        help="Device to run simulation on (cuda:0 or cpu)",
+        help="Device for simulation and RL (default: cuda:0)",
     )
 
-    # Action mode control arguments
-    parser.add_argument(
+    # Action Control
+    action_group = parser.add_argument_group("Action Control")
+    action_group.add_argument(
         "--control-mode",
         type=str,
-        choices=["position", "position_delta"],
         default="position",
-        help="Control mode: position (absolute) or position_delta (incremental)",
+        choices=["position", "position_delta"],
+        help="Control mode: position (absolute) or position_delta (incremental) (default: position)",
     )
-    parser.add_argument(
+    action_group.add_argument(
         "--policy-controls-base",
         type=str,
         default="false",
         choices=["true", "false"],
         help="Include hand base in policy action space (default: false)",
     )
-    parser.add_argument(
+    action_group.add_argument(
         "--policy-controls-fingers",
         type=str,
         default="true",
         choices=["true", "false"],
         help="Include fingers in policy action space (default: true)",
     )
-    parser.add_argument(
-        "--enable-plotting",
-        action="store_true",
-        help="Enable real-time plotting with Rerun",
-    )
-    parser.add_argument(
-        "--plot-env-idx",
+
+    # Execution Parameters
+    exec_group = parser.add_argument_group("Execution Parameters")
+    exec_group.add_argument(
+        "--steps",
         type=int,
-        default=0,
-        help="Environment index to plot (default: 0)",
+        default=1200,
+        help="Total number of test steps to run (default: 1200)",
     )
-    parser.add_argument(
+    exec_group.add_argument(
+        "--sleep",
+        type=float,
+        default=0.01,
+        help="Sleep time between steps in seconds (default: 0.01)",
+    )
+
+    # Output & Debugging
+    debug_group = parser.add_argument_group("Output & Debugging")
+    debug_group.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run without GUI visualization (default: False)",
+    )
+    debug_group.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug output and additional logging (default: False)",
+    )
+    debug_group.add_argument(
         "--log-level",
         type=str,
         default="info",
         choices=["debug", "info", "warning", "error"],
         help="Set logging verbosity level (default: info)",
     )
-    parser.add_argument(
+    debug_group.add_argument(
         "--profile",
         action="store_true",
-        help="Enable detailed performance profiling with timing breakdown",
+        help="Enable detailed performance profiling with timing breakdown (default: False)",
     )
+
+    # Visualization & Recording
+    viz_group = parser.add_argument_group("Visualization & Recording")
+    viz_group.add_argument(
+        "--enable-plotting",
+        action="store_true",
+        help="Enable real-time plotting with Rerun (default: False)",
+    )
+    viz_group.add_argument(
+        "--plot-env-idx",
+        type=int,
+        default=0,
+        help="Environment index to plot (default: 0)",
+    )
+    viz_group.add_argument(
+        "--record-video",
+        action="store_true",
+        help="Enable video recording (works in headless mode too) (default: False)",
+    )
+
     args = parser.parse_args()
+
+    # Validate argument combinations
+    if args.enable_plotting and args.plot_env_idx >= args.num_envs:
+        parser.error(
+            f"--plot-env-idx ({args.plot_env_idx}) must be less than --num-envs ({args.num_envs})"
+        )
 
     # Set up logging
     setup_logging(args.log_level)
@@ -1185,9 +1238,9 @@ def main():
     sim_device = args.device
     rl_device = args.device
 
-    # Use -1 for graphics_device_id only if headless
-    # CPU physics can still use GPU graphics for rendering
-    graphics_device_id = -1 if args.headless else 0
+    # Use -1 for graphics_device_id only if headless AND not recording video
+    # Camera recording requires graphics device even in headless mode
+    graphics_device_id = -1 if (args.headless and not args.record_video) else 0
 
     # Add debug information if requested
     if args.debug:
@@ -1202,6 +1255,16 @@ def main():
 
     # Create environment
     try:
+        # Configure video recording if requested
+        video_config = None
+        if args.record_video:
+            video_config = {
+                "enabled": True,
+                "output_dir": "/tmp/dexhand_videos",
+                "video_resolution": [1024, 768],
+                "fps": 30,
+            }
+
         env = create_dex_env(
             task_name=cfg.get("name", "Base"),
             cfg=cfg,
@@ -1209,8 +1272,9 @@ def main():
             sim_device=sim_device,
             graphics_device_id=graphics_device_id,
             headless=args.headless,
-            force_render=not args.headless,
-            virtual_screen_capture=False,
+            force_render=not args.headless or args.record_video,
+            virtual_screen_capture=args.record_video and args.headless,
+            video_config=video_config,
         )
         logger.info("Environment created successfully!")
     except Exception as e:
@@ -1464,7 +1528,7 @@ def main():
     )
 
     logger.info("\nStarting action-to-DOF verification test...")
-    logger.info(f"Movement magnitude: {args.movement_speed}")
+    logger.info("Movement pattern: -1 → 1 → -1 over 100 steps")
     logger.info("Steps per action: 100")
     logger.info(f"Total test duration: {12 * 100} steps")
     logger.info("=" * 50)

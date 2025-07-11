@@ -10,7 +10,6 @@ from loguru import logger
 
 # Import tasks first (they will import Isaac Gym)
 from dexhand_env.tasks.dexhand_base import DexHandBase
-from dexhand_env.tasks.dex_grasp_task import DexGraspTask
 from dexhand_env.tasks.base_task import BaseTask
 from dexhand_env.tasks.box_grasping_task import BoxGraspingTask
 
@@ -27,6 +26,7 @@ def create_dex_env(
     headless,
     virtual_screen_capture=False,
     force_render=False,
+    video_config=None,
 ):
     """
     Create a DexHand environment with the specified task.
@@ -40,6 +40,7 @@ def create_dex_env(
         headless: Whether to run headless
         virtual_screen_capture: Whether to enable virtual screen capture
         force_render: Whether to force rendering
+        video_config: Optional video recording configuration
 
     Returns:
         A DexHand environment with the specified task
@@ -48,15 +49,7 @@ def create_dex_env(
 
     # Create the task component based on the task name
     try:
-        if task_name == "DexGrasp":
-            # We need to pass the sim and gym instances, but they're not available yet
-            # We'll create a placeholder and update it after initializing the environment
-            logger.debug("Creating DexGraspTask...")
-            # Ensure device is properly set - rl_device is the one used for tensors
-            task = DexGraspTask(
-                None, None, torch.device(rl_device), cfg["env"]["numEnvs"], cfg
-            )
-        elif task_name == "DexHand" or task_name == "Base":
+        if task_name == "BaseTask":
             # Base task with minimal functionality
             logger.debug("Creating BaseTask...")
             # Ensure device is properly set - rl_device is the one used for tensors
@@ -84,6 +77,7 @@ def create_dex_env(
             headless,
             virtual_screen_capture,
             force_render,
+            video_config,
         )
 
         logger.debug("Environment created successfully")
@@ -108,6 +102,7 @@ def make_env(
     cfg: dict = None,
     virtual_screen_capture: bool = False,
     force_render: bool = False,
+    video_config: dict = None,
 ):
     """
     Create a DexHand environment for RL training.
@@ -125,6 +120,7 @@ def make_env(
         cfg: Optional configuration dictionary (will load from file if not provided)
         virtual_screen_capture: Whether to enable virtual screen capture
         force_render: Whether to force rendering even in headless mode
+        video_config: Optional video recording configuration
 
     Returns:
         DexHandBase environment instance
@@ -143,20 +139,9 @@ def make_env(
         logger.info(f"Updating numEnvs from {cfg['env']['numEnvs']} to {num_envs}")
         cfg["env"]["numEnvs"] = num_envs
 
-    # Map task names for compatibility
-    task_map = {
-        "BaseTask": "Base",
-        "DexGraspTask": "DexGrasp",
-        "Base": "Base",
-        "DexGrasp": "DexGrasp",
-        "DexHand": "Base",  # DexHand maps to Base task
-    }
-
-    mapped_task = task_map.get(task_name, task_name)
-
     # Create environment using existing factory function
     env = create_dex_env(
-        task_name=mapped_task,
+        task_name=task_name,
         cfg=cfg,
         rl_device=rl_device,
         sim_device=sim_device,
@@ -164,6 +149,7 @@ def make_env(
         headless=headless,
         virtual_screen_capture=virtual_screen_capture,
         force_render=force_render,
+        video_config=video_config,
     )
 
     return env

@@ -80,6 +80,37 @@ self.viewer_controller.update_camera_position(hand_positions)
 
 Key principle: If something is required for correct operation, it should NEVER be None after initialization. Don't check - just use it and let it fail fast if there's a bug.
 
+### Issue Resolution Protocol - CRITICAL
+The AI must NEVER claim an issue is resolved without explicit user confirmation, especially in long-running troubleshooting tasks.
+
+❌ WRONG - Premature resolution claims:
+```
+"The issue has been fixed by updating the configuration."
+"This should resolve the problem."
+"The bug is now resolved."
+"Now HTTP video streaming is working."
+"The fix resolves the original issue."
+```
+
+✅ CORRECT - Seek explicit confirmation:
+```
+"I've implemented a potential fix. Please test and confirm if this resolves the issue."
+"The changes are complete. Can you verify the problem is fixed?"
+"Please run the test and let me know if the issue persists."
+"I've made changes that should help - please test if the streaming works now."
+```
+
+**Key principle:** Only the user can confirm that an issue is truly resolved. The AI provides fixes and requests verification, but never assumes success without user confirmation.
+
+### Debugging Protocol - CRITICAL
+When investigating issues:
+1. **Test thoroughly** - Run the actual failing scenario, don't just assume fixes work
+2. **Check end-to-end** - Verify the complete workflow, not just individual components
+3. **Wait for user feedback** - Always ask the user to confirm if the issue is resolved
+4. **Document actual behavior** - Report what actually happens, not what should happen
+5. **Never claim success** - If testing shows intermittent results, crashes, or hangs, report the actual behavior
+6. **Distinguish between partial progress and full resolution** - Component initialization ≠ working system
+
 ## Critical Design Caveats
 
 ### Fixed Base with Relative Motion
@@ -156,21 +187,172 @@ Before implementing:
 
 ## Component Architecture
 
-### Two-Phase Initialization
-Many components require two-phase init due to control_dt dependency:
-```python
-# Phase 1: Basic setup
-action_processor = ActionProcessor(...)
-action_processor.initialize_from_config(config)
+### Two-Stage Initialization Pattern
 
-# Phase 2: After physics manager ready
-action_processor.finalize_setup()  # Now control_dt available
+The DexHand environment uses a **two-stage initialization pattern** that is a **core architectural principle** and must be respected by all components.
+
+#### Why Two-Stage is Necessary
+
+The pattern exists because `control_dt` can only be determined at runtime by measuring actual physics behavior:
+
+```python
+# control_dt = physics_dt × physics_steps_per_control
+# where physics_steps_per_control is measured, not configured
 ```
+
+**Why measurement is required:**
+- Environment resets require variable physics steps to stabilize
+- Isaac Gym may add internal physics steps during state changes
+- GPU pipeline timing variations
+- Multi-environment synchronization effects
+
+This is **not a design flaw** - it's the correct engineering solution for interfacing with unpredictable simulation behavior.
+
+#### The Two-Stage Lifecycle
+
+**Stage 1: Construction + Basic Initialization**
+```python
+# Create components with known dependencies
+action_processor = ActionProcessor(parent=self)
+action_processor.initialize_from_config(config)
+# Component is functional but cannot access control_dt yet
+```
+
+**Stage 2: Finalization After Measurement**
+```python
+# Measure control_dt by running dummy control cycle
+self.physics_manager.start_control_cycle_measurement()
+# ... run measurement cycle ...
+self.physics_manager.finish_control_cycle_measurement()
+
+# Now finalize all components
+action_processor.finalize_setup()  # Can now access control_dt
+task.finalize_setup()
+```
+
+#### Component Development Rules
+
+**✅ CORRECT: Use property decorators for control_dt access**
+```python
+@property
+def control_dt(self):
+    """Access control_dt from physics manager (single source of truth)."""
+    return self.parent.physics_manager.control_dt
+```
+
+**❌ WRONG: Don't check if control_dt exists**
+```python
+# This violates "fail fast" principle
+if self.physics_manager.control_dt is None:
+    raise RuntimeError("control_dt not available")
+```
+
+**✅ CORRECT: Trust initialization order**
+```python
+# After finalize_setup(), control_dt is guaranteed to exist
+def compute_velocity_scaling(self):
+    dt = self.control_dt  # This WILL work post-finalization
+    return action_delta / dt
+```
+
+#### Implementation Guidelines
+
+1. **Split initialization logic**: Basic setup in `__init__`/`initialize_from_config()`, control_dt-dependent logic in `finalize_setup()`
+2. **Use property decorators**: Always access `control_dt` via `self.parent.physics_manager.control_dt`
+3. **No defensive programming**: Don't check if `control_dt` exists - trust the initialization order
+4. **Document dependencies**: Clearly mark which methods require finalization
+
+### Component Development Guidelines
+
+When creating new components for the DexHand environment, follow these standards:
+
+#### Component Structure Pattern
+```python
+class MyComponent:
+    """
+    Component description and responsibilities.
+
+    This component provides functionality to:
+    - Specific responsibility 1
+    - Specific responsibility 2
+    """
+
+    def __init__(self, parent):
+        """Initialize with parent reference only."""
+        self.parent = parent
+        self.gym = parent.gym
+        self.sim = parent.sim
+
+        # Component state variables
+        self._initialized = False
+
+    @property
+    def device(self):
+        """Access device from parent (single source of truth)."""
+        return self.parent.device
+
+    @property
+    def control_dt(self):
+        """Access control_dt from physics manager (single source of truth)."""
+        return self.parent.physics_manager.control_dt
+
+    def initialize_from_config(self, config):
+        """Phase 1: Initialize with configuration (no control_dt access)."""
+        # Set up everything that doesn't need control_dt
+        pass
+
+    def finalize_setup(self):
+        """Phase 2: Complete initialization (control_dt now available)."""
+        # Set up everything that needs control_dt
+        self._initialized = True
+```
+
+#### Property Decorator Standards
+
+**✅ ALWAYS use property decorators for parent access:**
+```python
+@property
+def tensor_manager(self):
+    """Access tensor_manager from parent (single source of truth)."""
+    return self.parent.tensor_manager
+
+@property
+def num_envs(self):
+    """Access num_envs from parent (single source of truth)."""
+    return self.parent.num_envs
+```
+
+**❌ NEVER store direct references to sibling components:**
+```python
+def __init__(self, parent):
+    # WRONG - creates coupling
+    self.tensor_manager = parent.tensor_manager
+    self.physics_manager = parent.physics_manager
+```
+
+#### Responsibility Separation
+
+**Each component has a single, clear responsibility:**
+
+- **PhysicsManager**: Physics simulation, stepping, tensor refresh
+- **TensorManager**: Simulation tensor acquisition and management
+- **ActionProcessor**: Action scaling, control mode logic, DOF mapping
+- **ObservationEncoder**: Observation space construction and encoding
+- **RewardCalculator**: Reward computation and weighting
+- **TerminationManager**: Success/failure criteria evaluation
+- **ResetManager**: Environment reset and randomization logic
+- **ViewerController**: Camera control and visualization
+
+**❌ NEVER mix responsibilities across components**
+**✅ ALWAYS delegate to the appropriate component**
 
 ### Single Source of Truth
 - `control_dt` lives only in PhysicsManager
+- `device` lives only in parent (DexHandBase)
+- `num_envs` lives only in parent (DexHandBase)
 - Components access via property decorators
 - No manual synchronization needed
+- Property decorators provide clean access without coupling
 
 ## Critical Lessons - Optimization and Refactoring
 
@@ -231,5 +413,5 @@ See [`ROADMAP.md`](ROADMAP.md) for detailed project status, completed features, 
 ## Essential Documentation
 - **Critical Caveats**: [`docs/design_decisions.md`](docs/design_decisions.md) - READ FIRST!
 - **DOF/Action Reference**: [`docs/api_dof_control.md`](docs/api_dof_control.md)
-- **Observation System**: [`docs/guide_observation_system.md`](docs/guide_observation_system.md)
-- **Component Init**: [`docs/guide_component_initialization.md`](docs/guide_component_initialization.md)
+- **Observation System**: [`docs/guide-observation-system.md`](docs/guide-observation-system.md)
+- **Component Init**: [`docs/guide-component-initialization.md`](docs/guide-component-initialization.md)

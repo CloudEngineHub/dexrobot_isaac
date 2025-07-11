@@ -14,21 +14,28 @@ from loguru import logger
 # Import Gym
 
 # Import IsaacGym first
-from isaacgym import gymapi, gymtorch
+from isaacgym import gymapi
 
 # Then import PyTorch
 import torch
 
 # Import components
-from dexhand_env.components.viewer_controller import ViewerController
-from dexhand_env.components.termination_manager import TerminationManager
-from dexhand_env.components.reward_calculator import RewardCalculator
-from dexhand_env.components.physics_manager import PhysicsManager
-from dexhand_env.components.hand_initializer import HandInitializer
-from dexhand_env.components.action_processor import ActionProcessor
-from dexhand_env.components.observation_encoder import ObservationEncoder
-from dexhand_env.components.reset_manager import ResetManager
-from dexhand_env.components.tensor_manager import TensorManager
+from dexhand_env.components.graphics.viewer_controller import ViewerController
+from dexhand_env.components.termination.termination_manager import TerminationManager
+from dexhand_env.components.reward.reward_calculator import RewardCalculator
+from dexhand_env.components.physics.physics_manager import PhysicsManager
+from dexhand_env.components.initialization.hand_initializer import HandInitializer
+from dexhand_env.components.action.action_processor import ActionProcessor
+from dexhand_env.components.observation.observation_encoder import ObservationEncoder
+from dexhand_env.components.reset.reset_manager import ResetManager
+from dexhand_env.components.physics.tensor_manager import TensorManager
+from dexhand_env.components.graphics.video_manager import VideoManager
+from dexhand_env.components.graphics.graphics_manager import GraphicsManager
+from dexhand_env.components.initialization.initialization_manager import (
+    InitializationManager,
+)
+from dexhand_env.components.step_processor import StepProcessor
+from dexhand_env.components.action import DefaultActionRules, RuleBasedController
 
 # Import utilities
 from dexhand_env.utils.coordinate_transforms import point_in_hand_frame
@@ -82,6 +89,7 @@ class DexHandBase(VecTask):
         headless,
         virtual_screen_capture=False,
         force_render=False,
+        video_config=None,
     ):
         """
         Initialize the DexHandBase environment.
@@ -95,6 +103,7 @@ class DexHandBase(VecTask):
             headless: If True, don't render to a window.
             virtual_screen_capture: If True, allow capturing screen for rgb_array mode.
             force_render: If True, always render in the steps.
+            video_config: Optional video recording configuration dictionary.
         """
         logger.info("\n===== DEXHAND ENVIRONMENT INITIALIZATION =====")
         logger.info(f"RL Device: {rl_device}")
@@ -106,6 +115,7 @@ class DexHandBase(VecTask):
 
         # Core initialization variables
         self.cfg = cfg
+        self.video_config = video_config
 
         # Configure logging based on user preferences
         self._configure_logging()
@@ -158,10 +168,6 @@ class DexHandBase(VecTask):
         # Flag to track initialization state
         self._tensors_initialized = False
 
-        # Initialize rule-based controller functions
-        self.rule_based_base_controller = None
-        self.rule_based_finger_controller = None
-
         # Initialize the base class
         logger.info("Initializing VecTask parent class...")
         super().__init__(
@@ -197,96 +203,60 @@ class DexHandBase(VecTask):
         self.obs_dict = {}
 
         # Create index mappings for convenient access (must be before _setup_additional_tensors)
-        self._create_index_mappings()
+        self.initialization_manager.create_index_mappings()
 
         # Additional setup (should only happen after components are created)
-        self._setup_additional_tensors()
+        self.initialization_manager.setup_additional_tensors()
 
-        # Set up default action rule
-        self._setup_default_action_rule()
+        # Set up action rules (default + task-provided)
+        self._setup_action_rules()
+
+        # Add initialization flag to prevent video recording during init resets
+        self._initialization_complete = False
 
         # Perform control cycle measurement after all setup is complete
         logger.info("Performing control cycle measurement...")
         self._perform_control_cycle_measurement()
 
+        # Mark initialization as complete - video recording can now start
+        self._initialization_complete = True
         logger.info("DexHandBase initialization complete.")
+
+    # ============================================================================
+    # ACTION PROCESSING METHODS
+    # ============================================================================
+
+    def _setup_action_rules(self):
+        """Set up action rules: default + task-provided overrides."""
+        # First set up default action rule based on control mode
+        self._setup_default_action_rule()
+
+        # Check for task-provided action rules and register them
+        # Pre-action rule
+        if self.task.pre_action_rule is not None:
+            self.action_processor.set_pre_action_rule(self.task.pre_action_rule)
+
+        # Action rule
+        if self.task.action_rule is not None:
+            self.action_processor.set_action_rule(self.task.action_rule)
+
+        # Register custom filters from task
+        self.task.register_custom_filters(self.action_processor)
+
+        # Add task-specific post-action filters to configuration
+        task_filters = self.task.post_action_filters
+        if task_filters:
+            # Get current enabled filters and add task filters
+            current_filters = self.action_processor._enabled_post_action_filters
+            extended_filters = current_filters + task_filters
+            self.action_processor._enabled_post_action_filters = extended_filters
 
     def _setup_default_action_rule(self):
         """Set up a default action rule based on control mode."""
         control_mode = self.cfg["env"].get("controlMode", "position_delta")
-
-        if control_mode == "position":
-
-            def position_action_rule(
-                active_prev_targets, active_rule_targets, actions, config
-            ):
-                """Default position mode action rule."""
-                # Start with rule targets - preserves rule-based control for uncontrolled DOFs
-                targets = active_rule_targets.clone()
-
-                # Only update the DOFs that the policy controls
-                if config["policy_controls_base"]:
-                    # Scale base actions from [-1, 1] to DOF limits
-                    base_lower = self.action_processor.active_lower_limits[:6]
-                    base_upper = self.action_processor.active_upper_limits[:6]
-                    scaled_base = (actions[:, :6] + 1.0) * 0.5 * (
-                        base_upper - base_lower
-                    ) + base_lower
-                    targets[:, :6] = scaled_base
-
-                if config["policy_controls_fingers"]:
-                    # Get finger action indices
-                    finger_start = 6 if config["policy_controls_base"] else 0
-                    finger_end = finger_start + 12
-
-                    # Scale finger actions from [-1, 1] to DOF limits
-                    finger_lower = self.action_processor.active_lower_limits[6:]
-                    finger_upper = self.action_processor.active_upper_limits[6:]
-                    scaled_fingers = (
-                        actions[:, finger_start:finger_end] + 1.0
-                    ) * 0.5 * (finger_upper - finger_lower) + finger_lower
-                    targets[:, 6:] = scaled_fingers
-
-                return targets
-
-            self.action_processor.set_action_rule(position_action_rule)
-
-        else:  # position_delta mode
-
-            def position_delta_action_rule(
-                active_prev_targets, active_rule_targets, actions, config
-            ):
-                """Default position_delta mode action rule."""
-                # Start with rule targets
-                targets = active_rule_targets.clone()
-
-                # Apply deltas scaled by velocity limits
-                ap = self.action_processor
-
-                if config["policy_controls_base"]:
-                    # Base deltas
-                    base_deltas = actions[:, :6] * ap.max_deltas[:6]
-                    targets[:, :6] = active_prev_targets[:, :6] + base_deltas
-
-                if config["policy_controls_fingers"]:
-                    # Get finger action indices
-                    finger_start = 6 if config["policy_controls_base"] else 0
-                    finger_end = finger_start + 12
-
-                    # Finger deltas
-                    finger_deltas = (
-                        actions[:, finger_start:finger_end] * ap.max_deltas[6:]
-                    )
-                    targets[:, 6:] = active_prev_targets[:, 6:] + finger_deltas
-
-                # Clamp to limits
-                targets = torch.clamp(
-                    targets, ap.active_lower_limits, ap.active_upper_limits
-                )
-
-                return targets
-
-            self.action_processor.set_action_rule(position_delta_action_rule)
+        DefaultActionRules.setup_default_action_rule(
+            self.action_processor, control_mode
+        )
 
     def _perform_control_cycle_measurement(self):
         """
@@ -332,6 +302,10 @@ class DexHandBase(VecTask):
             f"Control cycle measurement complete: control_dt = {self.physics_manager.control_dt}"
         )
 
+    # ============================================================================
+    # COMPONENT INITIALIZATION METHODS
+    # ============================================================================
+
     def _init_components(self):
         """
         Initialize all components for the environment.
@@ -340,6 +314,15 @@ class DexHandBase(VecTask):
 
         # Create simulation (parent class only defines the method, doesn't call it)
         self.sim = self.create_sim()
+
+        # Create graphics manager - centralizes all Isaac Gym graphics operations
+        self.graphics_manager = GraphicsManager(parent=self)
+        logger.debug("GraphicsManager created")
+
+        # Create video manager with graphics manager dependency
+        self.video_manager = VideoManager(
+            parent=self, graphics_manager=self.graphics_manager
+        )
 
         # Update task with sim and gym instances early
         self.task.sim = self.sim
@@ -399,9 +382,10 @@ class DexHandBase(VecTask):
         self.hand_local_rigid_body_index = rigid_body_indices[
             "hand_local_rigid_body_index"
         ]
+        # hand_local_rigid_body_index is required after initialization - fail fast if missing
         if self.hand_local_rigid_body_index is None:
             raise RuntimeError(
-                "hand_local_rigid_body_index is None - HandInitializer should have set local index"
+                "hand_local_rigid_body_index is None - initialization failed"
             )
 
         self.fingertip_local_indices = rigid_body_indices["fingertip_local_indices"]
@@ -431,6 +415,9 @@ class DexHandBase(VecTask):
         logger.debug("Preparing simulation...")
         self.gym.prepare_sim(self.sim)
         logger.debug("Simulation prepared successfully")
+
+        # Create camera for video recording if enabled (AFTER prepare_sim)
+        self.video_manager.setup_video_camera(self.video_config, self.envs)
 
         # Set up tensors
         tensors = self.tensor_manager.setup_tensors(
@@ -510,13 +497,14 @@ class DexHandBase(VecTask):
             task=self.task,
         )
 
-        # Create viewer controller
+        # Create viewer controller with graphics manager dependency
         self.viewer_controller = ViewerController(
             parent=self,
             gym=self.gym,
             sim=self.sim,
             env_handles=self.envs,
             headless=self.headless,
+            graphics_manager=self.graphics_manager,
         )
 
         # Create termination manager
@@ -524,6 +512,74 @@ class DexHandBase(VecTask):
 
         # Create reward calculator
         self.reward_calculator = RewardCalculator(parent=self, cfg=self.cfg)
+
+        # Create initialization manager
+        self.initialization_manager = InitializationManager(parent=self)
+
+        # Create step processor
+        self.step_processor = StepProcessor(parent=self)
+
+        # Create rule-based controller
+        self.rule_based_controller = RuleBasedController(parent=self)
+
+        # Initialize video recorder if video recording is enabled
+        self.video_recorder = None
+        self._video_episode_count = 0
+        if (
+            self.video_config
+            and self.video_config.get("enabled", False)
+            and self.video_config.get("output_dir")
+        ):
+            try:
+                from dexhand_env.components.graphics.video.video_recorder import (
+                    create_video_recorder_from_config,
+                )
+
+                self.video_recorder = create_video_recorder_from_config(
+                    output_dir=self.video_config["output_dir"],
+                    video_config=self.video_config,
+                )
+                logger.info(
+                    f"Video recorder initialized: {self.video_config['output_dir']}"
+                )
+            except ImportError as e:
+                logger.warning(f"Failed to import VideoRecorder (OpenCV required): {e}")
+                self.video_recorder = None
+            except Exception as e:
+                logger.error(f"Failed to initialize VideoRecorder: {e}")
+                self.video_recorder = None
+        else:
+            logger.info("Video recording disabled")
+
+        # Initialize HTTP video streamer if streaming is enabled
+        self.http_streamer = None
+        if self.video_config and self.video_config.get("stream_enabled", False):
+            try:
+                from dexhand_env.components.graphics.video.http_video_streamer import (
+                    create_http_video_streamer_from_config,
+                )
+
+                self.http_streamer = create_http_video_streamer_from_config(
+                    self.video_config
+                )
+                success = self.http_streamer.start_server()
+                if success:
+                    logger.info(
+                        f"HTTP video streamer started: http://{self.video_config['stream_host']}:{self.video_config['stream_port']}"
+                    )
+                else:
+                    logger.error("Failed to start HTTP video streamer")
+                    self.http_streamer = None
+            except ImportError as e:
+                logger.warning(
+                    f"Failed to import HTTPVideoStreamer (Flask required): {e}"
+                )
+                self.http_streamer = None
+            except Exception as e:
+                logger.error(f"Failed to initialize HTTPVideoStreamer: {e}")
+                self.http_streamer = None
+        else:
+            logger.info("HTTP video streaming disabled")
 
         # Real-time viewer synchronization is handled by parent class VecTask
         # via gym.sync_frame_time() - no need for duplicate sync here
@@ -543,9 +599,15 @@ class DexHandBase(VecTask):
         """
         logger.info("Creating environments and actors...")
 
-        # Define environment spacing
-        env_lower = gymapi.Vec3(-1.0, -1.0, 0.0)
-        env_upper = gymapi.Vec3(1.0, 1.0, 1.0)
+        # Define environment spacing (configurable)
+        env_spacing = self.cfg["env"].get(
+            "envSpacing", 2.0
+        )  # Default 2.0m if not specified
+        half_spacing = env_spacing / 2.0
+        env_lower = gymapi.Vec3(-half_spacing, -half_spacing, 0.0)
+        env_upper = gymapi.Vec3(
+            half_spacing, half_spacing, half_spacing * 2
+        )  # Height = spacing
 
         # Set up environment grid
         num_per_row = int(math.sqrt(self.num_envs))
@@ -621,99 +683,9 @@ class DexHandBase(VecTask):
             logger.debug(f"  {j:2d}: {name:<20} ({joint_type})")
         logger.debug("=====================================")
 
-    def _setup_additional_tensors(self):
-        """
-        Set up additional tensors needed after component initialization.
-        """
-        # Note: obs_buf and states_buf are now initialized in _init_components
-        # after observation_encoder.initialize() sets num_observations
-
-        # Create reward buffer
-        self.rew_buf = torch.zeros((self.num_envs,), device=self.device)
-
-        # Create reset buffer
-        self.reset_buf = torch.zeros(
-            (self.num_envs,), device=self.device, dtype=torch.bool
-        )
-
-        # Create episode step count buffer
-        self.episode_step_count = torch.zeros(
-            (self.num_envs,), device=self.device, dtype=torch.long
-        )
-
-        # Set up action space
-        # action_processor must exist after _init_components()
-        # Calculate action space size
-        num_actions = 0
-        if self.action_processor.policy_controls_hand_base:
-            num_actions += self.action_processor.NUM_BASE_DOFS
-
-        if self.action_processor.policy_controls_fingers:
-            num_actions += self.action_processor.NUM_ACTIVE_FINGER_DOFS
-
-        # Now set the property once we have the final value
-        self.num_actions = num_actions
-
-        # Create the action space
-        self.actions = torch.zeros(
-            (self.num_envs, self.num_actions), device=self.device
-        )
-
-        # Initialize observation encoder now that we know the action space size
-        # First try new key name, fall back to old key for backward compatibility
-        observation_keys = self.cfg["env"].get(
-            "policyObservationKeys",
-            self.cfg["env"].get(
-                "observationKeys",
-                [
-                    "base_dof_pos",
-                    "base_dof_vel",
-                    "finger_dof_pos",
-                    "finger_dof_vel",
-                    "hand_pose",
-                    "contact_forces",
-                ],
-            ),
-        )
-
-        # Initialize task states before observation encoder setup
-        # This ensures task states are registered when computing observation dimensions
-        self.task.initialize_task_states()
-
-        self.observation_encoder.initialize(
-            observation_keys=observation_keys,
-            joint_to_control=self.hand_initializer.joint_to_control,
-            active_joint_names=self.hand_initializer.active_joint_names,
-            num_actions=self.num_actions,
-            action_processor=self.action_processor,
-            index_mappings={
-                "base_joint_to_index": self.base_joint_to_index,
-                "control_name_to_index": self.control_name_to_index,
-                "raw_dof_name_to_index": self.raw_dof_name_to_index,
-                "finger_body_to_index": self.finger_body_to_index,
-            },
-        )
-
-        # Set observation space dimensions needed by VecTask
-        self.num_observations = self.observation_encoder.num_observations
-
-        # Now initialize observation and state buffers with correct size
-        self.obs_buf = torch.zeros(
-            (self.num_envs, self.num_observations),
-            device=self.device,
-        )
-        self.states_buf = torch.zeros(
-            (self.num_envs, self.num_observations),
-            device=self.device,
-        )
-
-        # ObservationEncoder now accesses control_dt directly from physics_manager via property decorator
-
-        # Create extras dictionary for additional info
-        self.extras = {}
-
-        # Initialize reward components to ensure it always exists
-        self.last_reward_components = {}
+    # ============================================================================
+    # PROPERTIES
+    # ============================================================================
 
     @property
     def episode_time(self):
@@ -722,8 +694,8 @@ class DexHandBase(VecTask):
         Returns:
             Tensor of shape (num_envs,) with episode time in seconds
         """
-        if self.physics_manager is None or self.physics_manager.control_dt is None:
-            # During initialization, return zeros
+        # During initialization, control_dt might not be available yet
+        if self.physics_manager.control_dt is None:
             return torch.zeros(self.num_envs, device=self.device)
         return self.episode_step_count.float() * self.physics_manager.control_dt
 
@@ -747,11 +719,14 @@ class DexHandBase(VecTask):
         Returns:
             Float episode time in seconds
         """
-        if self.physics_manager is None or self.physics_manager.control_dt is None:
+        # During initialization, control_dt might not be available yet
+        if self.physics_manager.control_dt is None:
             return 0.0
         return self.episode_step_count[env_id].item() * self.physics_manager.control_dt
 
-    # Note: fingertip_indices and fingerpad_indices are now stored directly on self
+    # ============================================================================
+    # ENVIRONMENT LIFECYCLE METHODS
+    # ============================================================================
 
     def reset_idx(self, env_ids):
         """Reset environments at specified indices."""
@@ -767,6 +742,46 @@ class DexHandBase(VecTask):
 
             # Reset observer internal state for the reset environments
             self.observation_encoder.reset_observer_state(env_ids)
+
+            # Handle video recording for episode resets
+            if self.video_recorder:
+                # If recording is active and env 0 is being reset (episode end)
+                if self.video_recorder.is_recording() and 0 in env_ids:
+                    # Stop current recording
+                    saved_file = self.video_recorder.stop_recording()
+                    if saved_file:
+                        # Only increment counter for videos that were actually saved (not empty)
+                        self._video_episode_count = self._video_episode_count + 1
+                        logger.info(f"Episode video saved: {saved_file}")
+
+                # Start new recording for env 0 (new episode)
+                if 0 in env_ids:
+                    # Only start recording if camera system is ready AND initialization is complete
+                    # This prevents recording during initialization measurement resets
+                    # Check if video config is available (camera will be created lazily when needed)
+                    video_system_ready = (
+                        self.video_manager
+                        and hasattr(self.video_manager, "_video_config")
+                        and self.video_manager._video_config is not None
+                    )
+                    if video_system_ready and self._initialization_complete:
+                        # Use NEXT episode ID for recording (current + 1)
+                        episode_id = self._video_episode_count + 1
+                        success = self.video_recorder.start_episode_recording(
+                            episode_id
+                        )
+                        if success:
+                            logger.info(f"Started recording episode {episode_id}")
+                    else:
+                        init_status = (
+                            "complete"
+                            if self._initialization_complete
+                            else "in progress"
+                        )
+                        camera_status = "ready" if video_system_ready else "not ready"
+                        logger.info(
+                            f"Skipping recording start - initialization: {init_status}, video_system: {camera_status}"
+                        )
 
         except Exception as e:
             logger.critical(f"CRITICAL ERROR in reset_idx: {e}")
@@ -857,141 +872,7 @@ class DexHandBase(VecTask):
 
     def post_physics_step(self):
         """Process state after physics simulation step."""
-        try:
-            # Refresh tensors from simulation
-            self.tensor_manager.refresh_tensors(self.contact_force_local_body_indices)
-
-            # Observations were already computed in pre_physics_step
-            # We just need to return them here
-            # The obs_buf and obs_dict are already set from pre_physics_step
-
-            # Update episode progress directly first
-            self.episode_step_count += 1
-
-            # Check for episode termination using TerminationManager
-            builtin_success = {}
-            task_success = {}
-            builtin_failure = {}
-            task_failure = {}
-
-            # Implement ground collision detection
-            if "height_safety" in self.cfg["env"]["termination"]:
-                height_thresholds = self.cfg["env"]["termination"]["height_safety"]
-
-                # Check hand base height
-                hand_base_z = self.rigid_body_states[
-                    :, self.hand_local_rigid_body_index, 2
-                ]
-                handbase_hitting_ground = (
-                    hand_base_z < height_thresholds["handbase_threshold"]
-                )
-
-                # Check fingertip heights (already in obs_dict)
-                fingertip_heights = self.obs_dict["fingertip_poses_world"].view(
-                    self.num_envs, 5, 7
-                )[:, :, 2]
-                min_fingertip_height = torch.min(fingertip_heights, dim=1)[0]
-                fingertips_hitting_ground = (
-                    min_fingertip_height < height_thresholds["fingertip_threshold"]
-                )
-
-                # Combine both conditions
-                builtin_failure["hitting_ground"] = (
-                    handbase_hitting_ground | fingertips_hitting_ground
-                )
-
-            # Get task-specific success/failure criteria
-            task_success = self.task.check_task_success_criteria()
-            task_failure = self.task.check_task_failure_criteria()
-
-            # Evaluate termination conditions
-            (
-                should_reset,
-                termination_info,
-                termination_rewards,  # One-time bonuses/penalties at episode end (weighted)
-                raw_termination_rewards,  # Raw unscaled values
-            ) = self.termination_manager.evaluate(
-                self.episode_step_count,
-                builtin_success,
-                task_success,
-                builtin_failure,
-                task_failure,
-            )
-
-            self.reset_buf = should_reset
-
-            # Get task rewards
-            self.rew_buf[:], reward_components = self.task.compute_task_rewards(
-                self.obs_dict
-            )
-
-            # Store reward components for logging
-            self.last_reward_components = reward_components
-
-            # Track successes for curriculum learning
-            if "success" in termination_info:
-                self.termination_manager.update_consecutive_successes(
-                    termination_info["success"]
-                )
-
-            # Add termination rewards to total rewards AND tracked components
-            for reward_type, reward_tensor in termination_rewards.items():
-                self.rew_buf += reward_tensor
-                # Track both raw and weighted termination rewards
-                # Raw values
-                raw_key = f"termination_{reward_type}"
-                reward_components[raw_key] = raw_termination_rewards[reward_type]
-                # Weighted values
-                weighted_key = f"termination_{reward_type}_weighted"
-                reward_components[weighted_key] = reward_tensor
-
-            # Update last_reward_components to include termination rewards
-            self.last_reward_components = reward_components
-
-            # Update fingertip visualization
-            # Update camera position if following robot
-            if self.viewer_controller:
-                # Get hand positions for camera following
-                # rigid_body_states shape: [num_envs, num_bodies, 13]
-                # Extract positions for all hands using the constant index
-                hand_positions = self.rigid_body_states[
-                    :, self.hand_local_rigid_body_index, :3
-                ]
-                self.viewer_controller.update_camera_position(hand_positions)
-
-            # Reset environments that completed episodes
-            if torch.any(self.reset_buf):
-                env_ids_to_reset = torch.nonzero(self.reset_buf).flatten()
-                self.reset_idx(env_ids_to_reset)
-
-            # Physics step count tracking for auto-detecting steps per control
-            self.physics_manager.mark_control_step()
-
-            # Control_dt is now accessed directly from physics_manager via property decorators
-            # No need to explicitly update components when auto-detection occurs
-
-            # Update extras
-            self.extras = {
-                "consecutive_successes": self.termination_manager.consecutive_successes
-                if hasattr(self, "termination_manager")
-                else 0,
-                "episode_length": self.episode_step_count.clone(),  # Add episode length for logging
-            }
-
-            # Add termination info to extras for logging
-            self.extras.update(termination_info)
-
-            # Add reward components to extras for logging
-            self.extras["reward_components"] = self.last_reward_components
-
-            return self.obs_buf, self.rew_buf, self.reset_buf, self.extras
-
-        except Exception as e:
-            logger.critical(f"CRITICAL ERROR in post_physics_step: {e}")
-            import traceback
-
-            traceback.print_exc()
-            raise
+        return self.step_processor.process_physics_step()
 
     def step(self, actions):
         """
@@ -1029,11 +910,24 @@ class DexHandBase(VecTask):
             traceback.print_exc()
             raise
 
-        # Render viewer if it exists
-        if self.viewer_controller and self.viewer_controller.viewer:
-            self.render()
+        # Render viewer if it exists OR if video recording/streaming is active
+        should_render = (
+            (self.viewer_controller and self.viewer_controller.viewer)
+            or (self.video_recorder and self.video_recorder.is_recording())
+            or (self.http_streamer and self.http_streamer.is_streaming())
+        )
+
+        # Call render if viewer is enabled OR if video recording/streaming is active
+        needs_render = should_render
+
+        if needs_render:
+            self.render()  # Let it crash and show exact stack trace and array shape
 
         return obs, rew, done, info
+
+    # ============================================================================
+    # OBSERVATION AND CONTROL METHODS
+    # ============================================================================
 
     def get_observations_dict(self):
         """
@@ -1073,175 +967,82 @@ class DexHandBase(VecTask):
 
             env.set_rule_based_controllers(base_controller=my_base_controller)
         """
-        self.rule_based_base_controller = base_controller
-        self.rule_based_finger_controller = finger_controller
-
-        # Validate controllers
-        if base_controller is not None and self.policy_controls_hand_base:
-            logger.warning(
-                "Base controller provided but policy_controls_hand_base=True. Controller will be ignored."
-            )
-        if finger_controller is not None and self.policy_controls_fingers:
-            logger.warning(
-                "Finger controller provided but policy_controls_fingers=True. Controller will be ignored."
-            )
+        self.rule_based_controller.set_controllers(base_controller, finger_controller)
 
     def _apply_rule_based_control(self):
         """
         Internal method to apply rule-based control using registered controller functions.
         Called automatically during pre_physics_step.
         """
-        # action_processor and dof_pos must be initialized by this point
-        # If they're not, that indicates an initialization bug
+        self.rule_based_controller.apply_rule_based_control()
 
-        # Apply base controller if available and base is not policy-controlled
-        if (
-            not self.policy_controls_hand_base
-            and hasattr(self, "rule_based_base_controller")
-            and self.rule_based_base_controller is not None
-        ):
-            try:
-                base_targets = self.rule_based_base_controller(self)
-                if base_targets.shape == (
-                    self.num_envs,
-                    self.action_processor.NUM_BASE_DOFS,
-                ):
-                    # Directly set base DOF targets (raw physical values)
-                    self.action_processor.current_targets[
-                        :, 0 : self.action_processor.NUM_BASE_DOFS
-                    ] = base_targets
-                else:
-                    logger.error(
-                        f"Base controller returned shape {base_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_BASE_DOFS})"
-                    )
-            except Exception as e:
-                logger.error(f"Error in base controller: {e}")
-                import traceback
-
-                traceback.print_exc()
-
-        # Apply finger controller if available and fingers are not policy-controlled
-        if (
-            not self.policy_controls_fingers
-            and hasattr(self, "rule_based_finger_controller")
-            and self.rule_based_finger_controller is not None
-        ):
-            try:
-                finger_targets = self.rule_based_finger_controller(self)
-                if finger_targets.shape == (
-                    self.num_envs,
-                    self.action_processor.NUM_ACTIVE_FINGER_DOFS,
-                ):
-                    # Apply finger coupling by creating full active targets
-                    active_targets = torch.zeros(
-                        (self.num_envs, 18), device=self.device  # 6 base + 12 fingers
-                    )
-                    # Copy current base targets
-                    active_targets[:, :6] = self.action_processor.current_targets[:, :6]
-                    # Set finger targets
-                    active_targets[:, 6:] = finger_targets
-
-                    # Apply coupling to get full DOF targets and overwrite current_targets
-                    self.action_processor.current_targets = (
-                        self.action_processor.apply_coupling(active_targets)
-                    )
-                else:
-                    logger.error(
-                        f"Finger controller returned shape {finger_targets.shape}, expected ({self.num_envs}, {self.action_processor.NUM_ACTIVE_FINGER_DOFS})"
-                    )
-            except Exception as e:
-                logger.error(f"Error in finger controller: {e}")
-                import traceback
-
-                traceback.print_exc()
-
-        # Only apply targets if we actually modified them via rule-based control
-        # If only policy controls both base and fingers, don't call set_dof_position_target_tensor
-        # as it was already called by process_actions()
-        if (
-            not self.policy_controls_hand_base
-            and hasattr(self, "rule_based_base_controller")
-            and self.rule_based_base_controller is not None
-        ) or (
-            not self.policy_controls_fingers
-            and hasattr(self, "rule_based_finger_controller")
-            and self.rule_based_finger_controller is not None
-        ):
-            try:
-                self.gym.set_dof_position_target_tensor(
-                    self.sim,
-                    gymtorch.unwrap_tensor(self.action_processor.current_targets),
-                )
-            except Exception as e:
-                logger.error(f"Error setting DOF targets: {e}")
-                import traceback
-
-                traceback.print_exc()
-
-    def _create_index_mappings(self):
-        """
-        Create index mappings for convenient access to tensors by key names.
-        """
-        logger.debug("Creating index mappings...")
-
-        # 1. Base joint name to index mapping (ARTx, ARTy, etc. -> 0-5)
-        self.base_joint_to_index = {}
-        for i, joint_name in enumerate(self.base_joint_names):
-            self.base_joint_to_index[joint_name] = i
-
-        # 2. Control name to active finger DOF index mapping (th_dip, etc. -> 0-11)
-        self.control_name_to_index = {}
-        # hand_initializer must exist and have active_joint_names after _init_components()
-        for i, control_name in enumerate(self.hand_initializer.active_joint_names):
-            self.control_name_to_index[control_name] = i
-
-        # 3. Raw finger DOF name to raw DOF tensor index mapping (r_f_joint1_1, etc. -> 0-25)
-        self.raw_dof_name_to_index = {}
-        # observation_encoder must exist but might not have dof_names yet
-        if self.observation_encoder.dof_names:
-            for i, dof_name in enumerate(self.observation_encoder.dof_names):
-                self.raw_dof_name_to_index[dof_name] = i
-
-        # 4. Finger name + pad/tip to body tensor index mapping
-        self.finger_body_to_index = {}
-
-        # Map fingertip body names to indices
-        for i, tip_name in enumerate(self.fingertip_body_names):
-            finger_name = tip_name.replace(
-                "_tip", ""
-            )  # e.g., "r_f_link1_tip" -> "r_f_link1"
-            self.finger_body_to_index[f"{finger_name}_tip"] = ("fingertip", i)
-
-        # Map fingerpad body names to indices
-        for i, pad_name in enumerate(self.fingerpad_body_names):
-            finger_name = pad_name.replace(
-                "_pad", ""
-            )  # e.g., "r_f_link1_pad" -> "r_f_link1"
-            self.finger_body_to_index[f"{finger_name}_pad"] = ("fingerpad", i)
-
-        logger.debug("Created mappings:")
-        logger.debug(f"  Base joints: {len(self.base_joint_to_index)} entries")
-        logger.debug(f"  Control names: {len(self.control_name_to_index)} entries")
-        logger.debug(f"  Raw DOF names: {len(self.raw_dof_name_to_index)} entries")
-        logger.debug(f"  Finger bodies: {len(self.finger_body_to_index)} entries")
+    # ============================================================================
+    # RENDERING AND VISUALIZATION METHODS
+    # ============================================================================
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""
+        # CRITICAL: Reset graphics state for new frame
+        self.graphics_manager.reset_graphics_state()
+
+        # CRITICAL: Step graphics pipeline ONCE before any camera operations
+        # This is the centralized fix for the segfault issue
+        self.graphics_manager.step_graphics()
+
+        # Now all graphics consumers can safely operate
+        result = None
+
+        # Update camera position if following robot (moved from StepProcessor)
         if self.viewer_controller and self.viewer_controller.viewer:
+            # Get hand positions for camera following
+            # rigid_body_states shape: [num_envs, num_bodies, 13]
+            # Extract positions for all hands using the constant index
+            hand_positions = self.rigid_body_states[
+                :, self.hand_local_rigid_body_index, :3
+            ]
+            self.viewer_controller.update_camera_position(hand_positions)
+
             # Delegate rendering to viewer controller with reset callback
             result = self.viewer_controller.render(
                 mode, reset_callback=lambda env_ids: self.reset_idx(env_ids)
             )
 
-            # Handle virtual display if needed
-            if self.virtual_display and mode == "rgb_array":
-                img = self.virtual_display.grab()
-                return np.array(img)
+        # Unified video capture using VideoManager (works with or without viewer)
+        if (self.video_recorder or self.http_streamer) and mode == "rgb_array":
+            # Use VideoManager for all video capture (unified path)
+            frame = self.video_manager.capture_frame(self.envs)
+            if frame is not None:
+                # Add frame to video recorder if recording
+                if self.video_recorder and self.video_recorder.is_recording():
+                    self.video_recorder.add_frame(frame)
+                # Add frame to HTTP streamer if streaming
+                if self.http_streamer and self.http_streamer.is_streaming():
+                    self.http_streamer.add_frame(frame)
+                return frame
 
-            return result
+        # Return viewer result if available, otherwise None
+        return result
+
+    # ============================================================================
+    # UTILITY METHODS
+    # ============================================================================
 
     def close(self):
         """Close the environment."""
+        # Stop video recording if active
+        if self.video_recorder and self.video_recorder.is_recording():
+            saved_file = self.video_recorder.stop_recording()
+            if saved_file:
+                logger.info(f"Final video saved on close: {saved_file}")
+
+        # Clean up video recorder
+        if self.video_recorder:
+            self.video_recorder.cleanup()
+
+        # Clean up HTTP streamer
+        if self.http_streamer:
+            self.http_streamer.cleanup()
+
         # ViewerController handles viewer destruction
         if self.viewer_controller and self.viewer_controller.viewer:
             self.gym.destroy_viewer(self.viewer_controller.viewer)
@@ -1259,7 +1060,7 @@ class DexHandBase(VecTask):
         # Check if loguru already has handlers (e.g., from command-line setup)
         existing_handlers = len(logger._core.handlers)
 
-        # Get logging preferences from config
+        # Get logging preferences from config (now passed from logging.logLevel)
         log_level = self.cfg.get("env", {}).get("logLevel", "INFO").upper()
         enable_debug_logs = self.cfg.get("env", {}).get(
             "enableComponentDebugLogs", False

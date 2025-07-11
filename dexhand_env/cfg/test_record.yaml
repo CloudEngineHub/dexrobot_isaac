@@ -1,0 +1,23 @@
+# @package _global_
+# Test configuration with video recording (headless)
+
+defaults:
+  - config             # Inherit from main config (includes training.checkpoint)
+  - base/video         # Add video configuration
+  - _self_
+
+env:
+  render: false        # Explicitly headless
+  recordVideo: true    # Enable video recording
+  streamVideo: false   # Disable HTTP streaming (can be enabled for both modes)
+  numEnvs: 4           # Small number for testing
+
+training:
+  test: true           # Enable test mode
+  maxIterations: 10    # Short test sessions
+
+testing:
+  reloadInterval: 30   # Hot-reload for testing
+
+logging:
+  logLevel: "info"     # Standard logging level for tests

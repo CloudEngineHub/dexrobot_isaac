@@ -2,6 +2,13 @@
 
 This document describes how to train reinforcement learning policies for the DexHand environment using the rl_games library.
 
+**Related Documentation:**
+- [Getting Started](docs/GETTING_STARTED.md) - Quick setup and first training run
+- [System Architecture](docs/ARCHITECTURE.md) - Design principles and component structure
+- [Task Creation Guide](docs/guide-task-creation.md) - Creating custom manipulation tasks
+- [DOF and Action Control API](docs/reference-dof-control-api.md) - Understanding action spaces
+- [Terminology Glossary](docs/GLOSSARY.md) - Definitions of key concepts
+
 ## Quick Start
 
 ### Basic Training
@@ -9,78 +16,169 @@ This document describes how to train reinforcement learning policies for the Dex
 To start training a policy with default settings:
 
 ```bash
-python train.py --task BaseTask --num-envs 1024 --headless
+python train.py
 ```
 
-### Training with Visualization
+### Training with Custom Configuration
 
-To train while viewing the simulation:
+The project uses Hydra for configuration management. You can override any configuration parameter using either full paths or simplified aliases:
 
 ```bash
-python train.py --task BaseTask --num-envs 64
+# Train with different task and environment count
+python train.py task=BoxGrasping numEnvs=2048
+
+# Training with visualization (fewer environments for better performance)
+python train.py render=true numEnvs=64
+
+# Use predefined configuration
+python train.py config=train_headless
 ```
 
-Note: Using fewer environments when visualizing improves performance.
+> **CLI Aliases:** The training script supports convenient aliases that map to full Hydra configuration paths. See the alias reference table below for the complete mapping.
 
-## Command Line Arguments
+### Test Mode with Automatic Rendering
 
-### Environment Arguments
+Test mode automatically enables rendering by default:
 
-- `--task`: Task to train on (default: "BaseTask")
-  - Available tasks: `BaseTask`, `DexGrasp`
-- `--num-envs`: Number of parallel environments (default: 1024)
-- `--sim-device`: Device for physics simulation (default: "cuda:0")
-- `--rl-device`: Device for RL algorithm (default: "cuda:0")
-- `--graphics-device-id`: Graphics device ID (default: 0)
-- `--headless`: Run without visualization
+```bash
+# Test mode (renders by default) with smart checkpoint resolution
+python train.py test=true checkpoint=latest
 
-### Training Arguments
+# Test specific task with directory auto-resolution
+python train.py task=BoxGrasping test=true checkpoint=runs/BoxGrasping_20250707_183716
 
-- `--train-config`: Path to training configuration file (default: "dexhand_env/cfg/train/BaseTaskPPO.yaml")
-- `--seed`: Random seed, use -1 for random (default: 42)
-- `--torch-deterministic`: Use deterministic algorithms for reproducibility
-- `--checkpoint`: Path to checkpoint to resume from
-- `--test`: Run in test mode (no training)
-- `--max-iterations`: Maximum training iterations (default: 10000)
+# Force headless in test mode
+python train.py test=true checkpoint=latest render=false
 
-### Logging Arguments
+# Hot-reload test mode (reloads checkpoint every 30 seconds)
+python train.py test=true checkpoint=path/to/checkpoint.pth testing.reloadInterval=30
+```
 
-- `--experiment-name`: Name for the experiment (auto-generated if not provided)
-- `--log-interval`: Logging interval in episodes (default: 10)
+### CLI Alias Reference
+
+The training script supports convenient aliases that map to full Hydra configuration paths:
+
+| Alias | Full Path | Description |
+|-------|-----------|-------------|
+| `config` | `--config-name` | Configuration file to use |
+| `numEnvs` | `env.numEnvs` | Number of parallel environments |
+| `test` | `training.test` | Enable test mode |
+| `checkpoint` | `training.checkpoint` | Checkpoint path for testing |
+| `seed` | `training.seed` | Random seed |
+| `render` | `env.render` | Enable visualization |
+| `device` | `env.device` | CUDA device (e.g., "cuda:0") |
+| `maxIter` | `training.maxIterations` | Maximum training iterations |
+| `logLevel` | `logging.logLevel` | Logging level for entire system (debug, info, warning) |
+
+> **Note**: The `logLevel` setting controls logging for both the training script and the environment/simulation. This provides a unified logging experience across the entire system.
+
+**Usage Examples:**
+```bash
+# Using aliases (recommended for simplicity)
+python train.py task=BoxGrasping numEnvs=1024 render=true
+
+# Control logging level for entire system
+python train.py logLevel=debug  # Enable debug logging everywhere
+python train.py logLevel=warning  # Only show warnings and errors
+
+# Using full paths (equivalent)
+python train.py task=BoxGrasping env.numEnvs=1024 env.render=true
+
+# Smart checkpoint resolution:
+checkpoint=latest                    # Auto-finds latest experiment (any task)
+checkpoint=runs/experiment_dir       # Auto-finds .pth file in directory
+```
+
+## Configuration Structure
+
+### Main Configuration Sections
+
+- **task**: Task-specific settings (loaded from `dexhand_env/cfg/task/`)
+- **train**: Training algorithm configuration (loaded from `dexhand_env/cfg/train/`)
+- **env**: Environment settings (num_envs, device, render, record_video)
+- **training**: Training parameters (seed, checkpoint, test mode, max_iterations)
+- **logging**: Logging configuration (experiment_name, log_level, intervals)
+
+### Available Tasks
+
+- `BaseTask`: Basic environment for testing and development
+- `BoxGrasping`: Grasping and manipulation task with box objects
+
+### Environment Parameters
+
+- `env.numEnvs`: Number of parallel environments (default: 1024)
+- `env.device`: Device for simulation and RL algorithm (default: "cuda:0")
+- `env.graphicsDeviceId`: Graphics device ID (default: 0)
+- `env.render`: Rendering mode (null=auto, true=force, false=headless)
+- `env.recordVideo`: Enable video recording in headless mode
+
+### Training Parameters
+
+- `training.seed`: Random seed, use -1 for random (default: 42)
+- `training.torch_deterministic`: Use deterministic algorithms for reproducibility
+- `training.checkpoint`: Path to checkpoint to resume from
+- `training.test`: Run in test mode (no training)
+- `training.max_iterations`: Maximum training iterations (default: 10000)
+- `testing.reloadInterval`: Checkpoint hot-reload interval in test mode (seconds)
+
+### Experiment Management Parameters
+
+- `experiment.maxRecentRuns`: Maximum recent experiments to show in workspace (default: 10)
+- `experiment.useCleanWorkspace`: Enable workspace management system (default: true)
+
+### Logging Parameters
+
+- `logging.experiment_name`: Name for the experiment (auto-generated if null)
+- `logging.log_interval`: Logging interval in episodes (default: 10)
 
 ## Examples
 
 ### Resume Training from Checkpoint
 
 ```bash
-python train.py --task BaseTask --checkpoint runs/BaseTask_20240101_120000/nn/checkpoint_1000.pth
+# Using simplified syntax with smart checkpoint resolution
+python train.py task=BaseTask checkpoint=runs/BaseTask_20240101_120000
+
+# Using full path
+python train.py task=BaseTask training.checkpoint=runs/BaseTask_20240101_120000/nn/checkpoint_1000.pth
 ```
 
 ### Test a Trained Policy
 
 ```bash
-python train.py --task BaseTask --test --checkpoint runs/BaseTask_20240101_120000/nn/checkpoint_best.pth
+# Using simplified syntax
+python train.py task=BaseTask test=true checkpoint=latest
+
+# Test with specific checkpoint
+python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000
+
+# Test with hot-reload (checkpoint reloads every 30 seconds)
+python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000 testing.reloadInterval=30
 ```
+
+### Video Recording
+
+```bash
+# Record video in headless mode
+python train.py task=BoxGrasping training.test=true training.checkpoint=latest env.render=false env.recordVideo=true
+
+# Record video with rendering
+python train.py task=BoxGrasping training.test=true training.checkpoint=latest env.render=true env.recordVideo=true
+```
+
+> **Video Output:** Videos are saved in MP4 format to the Hydra output directory, typically `outputs/<YYYY-MM-DD>/<HH-MM-SS>/videos/`. Video recording may have a minor impact on performance but is useful for debugging and visualization.
 
 ### Multi-GPU Training
 
 For multi-GPU training, use PyTorch's distributed launch:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2 train.py --task BaseTask --num-envs 2048 --headless
+python -m torch.distributed.launch --nproc_per_node=2 train.py task=BaseTask env.numEnvs=2048 env.render=false
 ```
 
 ## Training Configuration
 
-The PPO hyperparameters are defined in YAML configuration files located in `dexhand_env/cfg/train/`.
-
-### Key Hyperparameters
-
-- `learning_rate`: Learning rate for the optimizer (default: 3e-4)
-- `gamma`: Discount factor (default: 0.99)
-- `horizon_length`: Number of steps before update (default: 16)
-- `minibatch_size`: Minibatch size for PPO updates (default: 8192)
-- `mini_epochs`: Number of PPO epochs per update (default: 8)
+Training hyperparameters are defined in YAML configuration files located in `dexhand_env/cfg/train/`. See the [rl_games documentation](https://github.com/Denys88/rl_games) for parameter descriptions.
 
 ### Creating Custom Training Configs
 
@@ -95,24 +193,41 @@ To create a custom training configuration:
 
 3. Use it for training:
    ```bash
-   python train.py --task MyTask --train-config dexhand_env/cfg/train/MyTaskPPO.yaml
+   python train.py task=MyTask train=MyTaskPPO
    ```
 
 ## Output Structure
 
-Training outputs are saved in the `runs/` directory:
+Training outputs use an intelligent workspace management system:
 
 ```
-runs/
-└── BaseTask_20240101_120000/
-    ├── args.yaml           # Command line arguments
-    ├── train_config.yaml   # Training configuration
-    ├── train.log          # Training logs
-    └── nn/                # Neural network checkpoints
-        ├── checkpoint_100.pth
-        ├── checkpoint_200.pth
-        └── checkpoint_best.pth
+runs_all/                   # Permanent archive (all experiments)
+├── BaseTask_20240101_120000/
+│   ├── config.yaml        # Complete configuration
+│   ├── train.log         # Training logs
+│   └── nn/               # Neural network checkpoints
+│       ├── checkpoint_100.pth
+│       └── checkpoint_best.pth
+└── BoxGrasping_20240102_150000/
+    └── ...
+
+runs/                      # Clean workspace (10 most recent + pinned)
+├── BaseTask_20240101_120000/     # symlink → runs_all/BaseTask_20240101_120000/
+├── BoxGrasping_20240102_150000/  # symlink → runs_all/BoxGrasping_20240102_150000/
+├── ... (8 more recent symlinks)
+└── pinned/                       # User favorites (real directories)
+    ├── .gitkeep
+    ├── best_grasping_model/      # Your favorite experiment
+    └── production_baseline/      # Another favorite
 ```
+
+### Workspace Management Features
+
+- **Clean workspace**: `runs/` shows only your 10 most recent experiments plus pinned favorites
+- **Full archive**: `runs_all/` contains all experiments permanently (never auto-deleted)
+- **Pinning favorites**: Move important experiments to `runs/pinned/` to keep them always visible
+- **Automatic cleanup**: Old symlinks are removed automatically to keep workspace tidy
+- **Smart checkpoint resolution**: CLI tools find checkpoints in both locations automatically
 
 ## Monitoring Training
 
@@ -134,51 +249,86 @@ The training script prints statistics every `log_interval` episodes:
 - Value loss
 - Entropy
 
-## Customizing Rewards
+## Using Custom Reward Functions
 
-To customize the reward function for your task:
+To use custom reward functions in your training:
 
-1. Edit your task class (e.g., `BaseTask` or `DexGraspTask`)
-2. Implement the `compute_task_rewards()` method
-3. Configure reward weights in the task config file
+1. **Configure reward weights** in your task config file:
+   ```yaml
+   # In your custom task config: my_custom_task.yaml
+   reward:
+     # Standard rewards
+     alive: 1.0
+     height_safety: -10.0
+     # Custom task-specific rewards
+     my_custom_reward: 2.0
+     distance_penalty: -0.5
+   ```
 
-Example reward implementation:
+2. **Implement the reward logic** in your task class - see the [Task Creation Guide](docs/guide-task-creation.md) for detailed implementation examples and [System Architecture](docs/ARCHITECTURE.md) for component interaction patterns.
 
-```python
-def compute_task_rewards(self):
-    # Example: reward for keeping hand at a certain height
-    hand_height = self.hand_positions[:, 2]  # Z coordinate
-    height_reward = torch.exp(-torch.abs(hand_height - 0.5))
+> **Fail-Fast Training:** The training script performs extensive configuration checks before launching Isaac Sim. If it detects an error, it will exit immediately. This 'fail-fast' approach saves you from waiting for the simulation to load only to have it crash seconds later due to a simple typo in a config file.
 
-    return {"height": height_reward}
+## Troubleshooting Training Issues
+
+**Enable Debug Logging:** For detailed troubleshooting, enable debug logging across the entire system:
+```bash
+python train.py logLevel=debug
+```
+This will show detailed information from both the training script and the environment/simulation.
+
+For comprehensive troubleshooting including component initialization, reward system problems, action space mismatches, and performance issues, see the **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)**.
+
+For general rl_games troubleshooting, see [rl_games documentation](https://github.com/Denys88/rl_games).
+
+## Organizing Your Experiments
+
+### Pinning Important Experiments
+
+When you find an experiment worth keeping permanently visible:
+
+```bash
+# After training completes, pin your favorite experiment
+mv runs/BoxGrasping_excellent_results_20240101_120000 runs/pinned/
+
+# Or give it a meaningful name when pinning
+mv runs/BoxGrasping_train_20240101_120000 runs/pinned/best_grasping_model
 ```
 
-## Troubleshooting
+**Benefits of pinning:**
+- Pinned experiments remain in `runs/pinned/` permanently
+- They don't get moved to archive or cleaned up automatically
+- Easy access to your best models for testing and comparison
+- Survives workspace cleanup when you exceed the recent runs limit
 
-### Out of Memory
+### Workspace Cleanup
 
-If you encounter GPU memory issues:
-- Reduce `--num-envs`
-- Reduce `minibatch_size` in the training config
-- Use `--headless` mode
+The system automatically maintains a clean workspace:
 
-### Slow Training
+- Only 10 most recent experiments shown in `runs/` (configurable via `experiment.maxRecentRuns`)
+- Older experiments automatically moved to archive symlinks
+- All experiment data preserved permanently in `runs_all/`
+- Pinned experiments in `runs/pinned/` never auto-cleaned
 
-To improve training speed:
-- Use `--headless` mode
-- Increase `--num-envs` (if GPU memory allows)
-- Use GPU simulation: `--sim-device cuda:0`
+### Finding Old Experiments
 
-### Diverging Training
+All experiments are always preserved and accessible:
 
-If training becomes unstable:
-- Reduce `learning_rate`
-- Reduce `horizon_length`
-- Check reward scaling in your task
+```bash
+# Search in full archive
+ls runs_all/ | grep BoxGrasping
 
-## Next Steps
+# Smart checkpoint resolution works with archived experiments
+python train.py test=true checkpoint=runs_all/old_experiment_20231201_100000
 
-1. Implement task-specific rewards in your task class
-2. Tune hyperparameters for your specific task
-3. Add domain randomization for sim-to-real transfer
-4. Implement curriculum learning for complex tasks
+# Latest checkpoint resolution searches both locations automatically
+python train.py test=true checkpoint=latest
+```
+
+### Disabling Workspace Management
+
+To use legacy behavior (all experiments directly in `runs/`):
+
+```bash
+python train.py experiment.useCleanWorkspace=false
+```

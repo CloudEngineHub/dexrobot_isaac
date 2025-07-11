@@ -6,7 +6,7 @@ without adding any specific task behavior. It can be used as a starting point fo
 or for testing the basic environment functionality.
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 # Import PyTorch
 import torch
@@ -44,55 +44,6 @@ class BaseTask(DexTask):
 
         # Reference to parent environment (set by DexHandBase)
         self.parent_env = None
-
-    def compute_task_rewards(
-        self, obs_dict: Dict[str, torch.Tensor]
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        """
-        Compute task rewards using the reward calculator.
-
-        Args:
-            obs_dict: Dictionary of observations
-
-        Returns:
-            Tuple of (reward tensor, reward terms dictionary)
-        """
-        # Check if we have access to parent environment (FAIL FAST - no fallbacks)
-        if self.parent_env is None:
-            raise RuntimeError("parent_env is None - initialization failed")
-
-        # Check if obs_dict is valid (FAIL FAST - no fallbacks)
-        if not obs_dict:
-            raise RuntimeError("obs_dict is empty - observation computation failed")
-
-        # Compute common reward terms using simplified API
-        common_rewards = self.parent_env.reward_calculator.compute_common_reward_terms(
-            obs_dict, self.parent_env
-        )
-
-        # Base task has no task-specific rewards
-        task_rewards = self.compute_task_reward_terms(obs_dict)
-
-        # Compute total reward
-        (
-            total_rewards,
-            reward_components,
-        ) = self.parent_env.reward_calculator.compute_total_reward(
-            common_rewards=common_rewards,
-            task_rewards=task_rewards,
-        )
-
-        return total_rewards, reward_components
-
-    def check_task_reset(self) -> torch.Tensor:
-        """
-        Check if task-specific reset conditions are met.
-
-        Returns:
-            Boolean tensor indicating which environments should reset
-        """
-        # Base task has no specific reset conditions
-        return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
     def compute_task_reward_terms(
         self, obs_dict: Dict[str, torch.Tensor]

@@ -1,0 +1,10 @@
+# @package _global_
+# Test configuration with rendering enabled
+
+defaults:
+  - config
+  - base/test
+  - _self_
+
+env:
+  render: true

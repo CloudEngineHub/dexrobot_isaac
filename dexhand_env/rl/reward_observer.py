@@ -18,7 +18,8 @@ class RewardComponentObserver(AlgoObserver):
     - Provides separate statistics by termination type (success/failure/timeout)
 
     TensorBoard organization:
-    - rewards/: Total rewards (logged by rl_games) and termination rates
+    - rewards/: Total rewards (logged by rl_games)
+    - training/: Training metrics including termination rates
     - reward_breakdown/: Detailed component analysis with 5-level hierarchy
       - Level 1: reward_breakdown
       - Level 2: termination_type (all, success, failure, timeout)
@@ -327,7 +328,7 @@ class RewardComponentObserver(AlgoObserver):
             for term_type, count in self.episodes_by_type.items():
                 rate = count / self.total_episodes
                 self.writer.add_scalar(
-                    f"rewards/termination_rates/{term_type}", rate, frame
+                    f"training/termination_rates/{term_type}", rate, frame
                 )
 
     def after_clear_stats(self):

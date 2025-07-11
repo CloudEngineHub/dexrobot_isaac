@@ -5,7 +5,7 @@ This module implements a blind grasping task where the policy learns to grasp
 a 5cm box using only tactile feedback (binary contacts and duration).
 """
 
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 import math
 
 # Import PyTorch
@@ -71,7 +71,7 @@ class BoxGraspingTask(DexTask):
         # Task configuration parameters (not weights)
 
         # Task-specific parameters from config
-        task_params = cfg["env"]["task_params"]
+        task_params = cfg["env"]["taskParams"]
         self.height_threshold = task_params["success_height_threshold"]
         self.contact_duration_threshold_seconds = task_params[
             "contact_duration_threshold"
@@ -201,6 +201,11 @@ class BoxGraspingTask(DexTask):
             prop.friction = self.box_friction
             prop.restitution = self.box_restitution
         gym.set_actor_rigid_shape_properties(env_ptr, box_actor, box_props)
+
+        # Set box color to light blue
+        gym.set_rigid_body_color(
+            env_ptr, box_actor, 0, gymapi.MESH_VISUAL, gymapi.Vec3(0.5, 0.8, 1.0)
+        )
 
         # Store actor handle (will be converted to index in set_tensor_references)
         self.box_actor_handles.append(box_actor)
@@ -671,50 +676,3 @@ class BoxGraspingTask(DexTask):
         failures["box_too_far"] = hand_to_box_distance > self.max_box_distance
 
         return failures
-
-    def compute_task_rewards(
-        self, obs_dict: Dict[str, torch.Tensor]
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        """
-        Compute task rewards using the reward calculator.
-
-        Args:
-            obs_dict: Dictionary of observations
-
-        Returns:
-            Tuple of (reward tensor, reward terms dictionary)
-        """
-        # Check parent environment access
-        if self.parent_env is None:
-            raise RuntimeError("parent_env is None - initialization failed")
-
-        # Compute common reward terms
-        common_rewards = self.parent_env.reward_calculator.compute_common_reward_terms(
-            obs_dict, self.parent_env
-        )
-
-        # Compute task-specific rewards
-        task_rewards = self.compute_task_reward_terms(obs_dict)
-
-        # Compute total reward
-        (
-            total_rewards,
-            reward_components,
-        ) = self.parent_env.reward_calculator.compute_total_reward(
-            common_rewards=common_rewards,
-            task_rewards=task_rewards,
-        )
-
-        return total_rewards, reward_components
-
-    def check_task_reset(self) -> torch.Tensor:
-        """
-        Check if task-specific reset conditions are met.
-
-        Task-specific resets are now handled through failure criteria.
-        This method returns all False to let failure criteria handle resets.
-
-        Returns:
-            Boolean tensor of all False
-        """
-        return torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
