@@ -23,13 +23,12 @@ sys.path.append(str(Path(__file__).parent))
 
 # Import CLI utilities for preprocessing
 from dexhand_env.utils.cli_utils import preprocess_cli_args, show_cli_help  # noqa: E402
-from dexhand_env.utils.config_validation import validate_config  # noqa: E402
-from dexhand_env.utils.config_helpers import (  # noqa: E402
+from dexhand_env.utils.config_utils import (  # noqa: E402
+    validate_config,
     get_experiment_name,
     resolve_config_safely,
-    save_config_with_metadata,
+    save_config,
     validate_checkpoint_exists,
-    check_config_compatibility,
 )
 from dexhand_env.utils.experiment_manager import create_experiment_manager  # noqa: E402
 
@@ -195,9 +194,8 @@ def main(cfg: DictConfig):
             format="{time:YYYY-MM-DD HH:mm:ss} | {level:8} | {message}",
         )
 
-    # Save configuration with metadata
-    config_metadata = {"timestamp": timestamp, "git_commit": None}
-    save_config_with_metadata(cfg, output_dir, config_metadata)
+    # Save configuration
+    save_config(cfg, output_dir)
 
     # Save git metadata and command line for reproducibility
     try:
@@ -281,12 +279,11 @@ def main(cfg: DictConfig):
     logger.info(f"Starting training with config: {OmegaConf.to_yaml(cfg)}")
 
     # Validate configuration
-    if not validate_config(cfg):
-        logger.error("Configuration validation failed. Please fix the errors above.")
+    try:
+        validate_config(cfg)
+    except Exception as e:
+        logger.error(f"Configuration validation failed: {e}")
         return
-
-    # Check configuration compatibility
-    check_config_compatibility(cfg)
 
     # Validate checkpoint exists if specified
     if not validate_checkpoint_exists(cfg.train.checkpoint):
