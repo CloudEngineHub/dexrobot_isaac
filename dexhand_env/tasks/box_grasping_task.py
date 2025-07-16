@@ -368,6 +368,22 @@ class BoxGraspingTask(DexTask):
         task_obs["finger_to_object_distances"] = finger_to_object_distances
         task_obs["avg_finger_to_object_distance"] = avg_finger_to_object_distance
 
+        # Compute finger-to-object height difference for new reward system
+        # We want fingertips to be at the same height as the object
+        fingerpad_heights = fingerpad_positions[:, :, 2]  # (num_envs, 5)
+        object_height = self.box_positions[:, 2]  # (num_envs,)
+        object_height_expanded = object_height.unsqueeze(1).expand(
+            -1, 5
+        )  # (num_envs, 5)
+        finger_to_object_height_diff = torch.abs(
+            fingerpad_heights - object_height_expanded
+        )  # (num_envs, 5)
+        avg_finger_to_object_height_diff = torch.mean(
+            finger_to_object_height_diff, dim=1
+        )
+        task_obs["finger_to_object_height_diff"] = finger_to_object_height_diff
+        task_obs["avg_finger_to_object_height_diff"] = avg_finger_to_object_height_diff
+
         # Compute hand-to-object distance
         # hand_pose is required - fail fast if missing
         hand_poses = obs_dict["hand_pose"]  # (num_envs, 7)
@@ -568,29 +584,33 @@ class BoxGraspingTask(DexTask):
                 "box_local_rigid_body_index is None - initialization failed"
             )
         finger_box_contact = self._detect_finger_box_contacts(obs_dict)
-        num_fingers_on_box = finger_box_contact.sum(dim=1).float()
 
-        # Single finger contact reward (exactly 1 finger touching)
-        single_finger_contact = (num_fingers_on_box == 1).float()
-        rewards["single_finger_contact"] = single_finger_contact
+        # Thumb touching reward - reward when thumb (finger 0) touches box
+        thumb_touching = finger_box_contact[
+            :, 0
+        ].float()  # (num_envs,) - thumb is finger 0
+        rewards["thumb_touching"] = thumb_touching
 
-        # Multi finger contact reward (thumb + at least one other finger touching)
-        # Finger 0 is thumb, fingers 1-4 are other fingers
-        thumb_touching = finger_box_contact[:, 0]  # (num_envs,) - thumb is finger 0
-        other_fingers_touching = finger_box_contact[:, 1:].any(
-            dim=1
+        # Other fingers touching reward - reward when any of fingers 1-4 touch box
+        other_fingers_touching = (
+            finger_box_contact[:, 1:].any(dim=1).float()
         )  # (num_envs,) - any of fingers 1-4
-        multi_finger_contact = (thumb_touching & other_fingers_touching).float()
-        rewards["multi_finger_contact"] = multi_finger_contact
+        rewards["other_fingers_touching"] = other_fingers_touching
 
-        # Finger-to-object distance reward - encourage getting fingers close to object
-        # Exponential reward: max reward when distance is 0, decays as distance increases
-        # Uses average distance to encourage all fingers to approach, not just the closest one
-        avg_distance = obs_dict["avg_finger_to_object_distance"]
-        finger_distance_reward = torch.exp(
-            -5.0 * avg_distance
-        )  # Quick decay to focus on close-range approach
-        rewards["finger_to_object"] = finger_distance_reward
+        # Grasp state reward (formerly multi_finger_contact) - reward when thumb + at least one other finger touching
+        grasp_state = (
+            finger_box_contact[:, 0] & finger_box_contact[:, 1:].any(dim=1)
+        ).float()
+        rewards["grasp_state"] = grasp_state
+
+        # Finger-to-object height difference reward - encourage getting fingers at same height as object
+        # Exponential reward: max reward when height difference is 0, decays as height difference increases
+        # Uses average height difference to encourage all fingers to be at object height
+        avg_height_diff = obs_dict["avg_finger_to_object_height_diff"]
+        finger_height_reward = torch.exp(
+            -5.0 * avg_height_diff
+        )  # Quick decay to focus on height alignment
+        rewards["finger_to_object_height"] = finger_height_reward
 
         # Fingerpad centroid to box centroid distance reward
         # Encourages the first 3 fingerpads to center around the box

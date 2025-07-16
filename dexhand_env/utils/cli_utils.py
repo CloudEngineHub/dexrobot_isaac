@@ -6,7 +6,32 @@ Provides simplified command-line interface with aliases and smart path resolutio
 
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
+
+
+def find_latest_checkpoint_file(experiment_dir: Path) -> Optional[Path]:
+    """Find the most recent checkpoint file in an experiment directory.
+
+    Args:
+        experiment_dir: Path to experiment directory
+
+    Returns:
+        Path to the most recent .pth file, or None if no checkpoints found
+    """
+    # Look for nn/*.pth files first (standard location)
+    nn_dir = experiment_dir / "nn"
+    if nn_dir.exists():
+        pth_files = list(nn_dir.glob("*.pth"))
+        if pth_files:
+            # Always prioritize most recently modified checkpoint
+            return max(pth_files, key=lambda p: p.stat().st_mtime)
+
+    # Fall back to any .pth file in the directory
+    pth_files = list(experiment_dir.glob("**/*.pth"))
+    if pth_files:
+        return max(pth_files, key=lambda p: p.stat().st_mtime)
+
+    return None
 
 
 class CLIPreprocessor:
@@ -65,7 +90,7 @@ class CLIPreprocessor:
         return None
 
     def _resolve_checkpoint_path(self, path: str, task_name: str = None) -> str:
-        """Resolve checkpoint path with smart directory handling."""
+        """Resolve checkpoint path to a .pth file."""
         if path in ["null", "None", ""]:
             return path
 
@@ -75,7 +100,7 @@ class CLIPreprocessor:
         if path_obj.suffix == ".pth" and path_obj.exists():
             return str(path_obj)
 
-        # Directory - auto-resolve to checkpoint
+        # Directory - auto-resolve to checkpoint file
         if path_obj.is_dir():
             return self._find_checkpoint_in_dir(path_obj)
 
@@ -84,35 +109,46 @@ class CLIPreprocessor:
             return self._resolve_latest_checkpoint(path, task_name)
 
         # Partial path matching
-        return self._find_matching_directory(path) or path
+        result = self._find_matching_directory(path)
+        return result or path
+
+    def _resolve_experiment_dir(self, path: str, task_name: str = None) -> str:
+        """Resolve path to an experiment directory."""
+        if path in ["null", "None", ""]:
+            return path
+
+        path_obj = Path(path)
+
+        # Direct directory
+        if path_obj.is_dir():
+            return str(path_obj)
+
+        # Direct .pth file - return parent directory
+        if path_obj.suffix == ".pth" and path_obj.exists():
+            # If file is in nn/ subdirectory, return parent of that
+            if path_obj.parent.name == "nn":
+                return str(path_obj.parent.parent)
+            return str(path_obj.parent)
+
+        # Special symlinks
+        if path in ["latest", "latest_train", "latest_test"]:
+            return self._resolve_latest_experiment_dir(path, task_name)
+
+        # Partial path matching
+        result = self._find_matching_experiment_dir(path)
+        return result or path
 
     def _find_checkpoint_in_dir(self, dir_path: Path) -> str:
-        """Find best checkpoint in directory."""
-        # Look for nn/*.pth files first
-        nn_dir = dir_path / "nn"
-        if nn_dir.exists():
-            pth_files = list(nn_dir.glob("*.pth"))
-            if pth_files:
-                # Prefer non-last_ files, then most recent
-                non_last = [f for f in pth_files if not f.name.startswith("last_")]
-                best_file = (
-                    non_last[0]
-                    if non_last
-                    else max(pth_files, key=lambda p: p.stat().st_mtime)
-                )
-                return str(best_file)
-
-        # Fall back to any .pth file
-        pth_files = list(dir_path.glob("**/*.pth"))
-        if pth_files:
-            return str(max(pth_files, key=lambda p: p.stat().st_mtime))
-
+        """Find most recent checkpoint file in directory."""
+        checkpoint_file = find_latest_checkpoint_file(dir_path)
+        if checkpoint_file:
+            return str(checkpoint_file)
         return str(dir_path)
 
     def _resolve_latest_checkpoint(
         self, symlink_name: str, task_name: str = None
     ) -> str:
-        """Resolve latest checkpoint using symlinks."""
+        """Resolve latest checkpoint to a .pth file using symlinks."""
         runs_dir = Path("runs")
 
         # Try symlink first
@@ -121,25 +157,37 @@ class CLIPreprocessor:
 
         symlink_path = runs_dir / symlink_name
         if symlink_path.exists() and symlink_path.is_symlink():
-            return self._find_checkpoint_in_dir(symlink_path.resolve())
+            resolved_dir = symlink_path.resolve()
+            return self._find_checkpoint_in_dir(resolved_dir)
 
         # Fallback to manual search
         return self._find_latest_by_search(
             task_name, symlink_name.replace("latest_", "")
         )
 
-    def _find_latest_by_search(self, task_name: str, run_type: str) -> str:
-        """Find latest experiment by searching directories."""
-        experiments = []
+    def _resolve_latest_experiment_dir(
+        self, symlink_name: str, task_name: str = None
+    ) -> str:
+        """Resolve latest experiment directory using symlinks."""
+        runs_dir = Path("runs")
 
-        # Search runs_all first
-        for search_dir in [Path("runs_all"), Path("runs")]:
-            if search_dir.exists():
-                for item in search_dir.iterdir():
-                    if item.is_dir() and item.name != "pinned":
-                        real_dir = item.resolve() if item.is_symlink() else item
-                        if list(real_dir.glob("**/*.pth")):  # Has checkpoints
-                            experiments.append(real_dir)
+        # Try symlink first
+        if symlink_name == "latest":
+            symlink_name = "latest_train"  # Default to train
+
+        symlink_path = runs_dir / symlink_name
+        if symlink_path.exists() and symlink_path.is_symlink():
+            resolved_dir = symlink_path.resolve()
+            return str(resolved_dir)
+
+        # Fallback to manual search
+        return self._find_latest_experiment_by_search(
+            task_name, symlink_name.replace("latest_", "")
+        )
+
+    def _find_latest_by_search(self, task_name: str, run_type: str) -> str:
+        """Find latest experiment checkpoint by searching directories."""
+        experiments = self._find_experiments_with_checkpoints()
 
         if not experiments:
             return "latest"
@@ -158,18 +206,64 @@ class CLIPreprocessor:
 
         return "latest"
 
+    def _find_latest_experiment_by_search(self, task_name: str, run_type: str) -> str:
+        """Find latest experiment directory by searching directories."""
+        experiments = self._find_experiments_with_checkpoints()
+
+        if not experiments:
+            return "latest"
+
+        # Filter by type and task
+        if run_type:
+            experiments = [
+                e for e in experiments if self._classify_run_type(e.name) == run_type
+            ]
+        if task_name:
+            experiments = [e for e in experiments if e.name.startswith(task_name)]
+
+        if experiments:
+            latest = max(experiments, key=lambda d: d.stat().st_mtime)
+            return str(latest)
+
+        return "latest"
+
+    def _find_experiments_with_checkpoints(self) -> List[Path]:
+        """Find all experiment directories that contain checkpoints."""
+        experiments = []
+
+        # Search runs_all first
+        for search_dir in [Path("runs_all"), Path("runs")]:
+            if search_dir.exists():
+                for item in search_dir.iterdir():
+                    if item.is_dir() and item.name != "pinned":
+                        real_dir = item.resolve() if item.is_symlink() else item
+                        if list(real_dir.glob("**/*.pth")):  # Has checkpoints
+                            experiments.append(real_dir)
+
+        return experiments
+
     def _classify_run_type(self, experiment_name: str) -> str:
         """Classify experiment type."""
         return "test" if "_test_" in experiment_name.lower() else "train"
 
     def _find_matching_directory(self, path: str) -> str:
-        """Find directory with partial name match."""
+        """Find directory with partial name match and return checkpoint file."""
         for search_dir in [Path("runs"), Path("runs_all")]:
             if search_dir.exists():
                 for item in search_dir.iterdir():
                     if item.is_dir() and path in item.name and item.name != "pinned":
                         real_dir = item.resolve() if item.is_symlink() else item
                         return self._find_checkpoint_in_dir(real_dir)
+        return None
+
+    def _find_matching_experiment_dir(self, path: str) -> str:
+        """Find directory with partial name match and return the directory."""
+        for search_dir in [Path("runs"), Path("runs_all")]:
+            if search_dir.exists():
+                for item in search_dir.iterdir():
+                    if item.is_dir() and path in item.name and item.name != "pinned":
+                        real_dir = item.resolve() if item.is_symlink() else item
+                        return str(real_dir)
         return None
 
     def get_usage_examples(self) -> str:

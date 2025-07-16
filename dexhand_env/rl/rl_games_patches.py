@@ -15,18 +15,29 @@ import threading
 import torch
 from loguru import logger
 from pathlib import Path
+from dexhand_env.utils.cli_utils import find_latest_checkpoint_file, CLIPreprocessor
 
 
 class HotReloadManager:
     """Manages hot-reload functionality for rl_games models."""
 
-    def __init__(self, checkpoint_path: str, reload_interval: float = 30.0):
-        self.checkpoint_path = Path(checkpoint_path)
+    def __init__(self, experiment_dir: str, reload_interval: float = 30.0):
+        """Initialize hot-reload manager.
+
+        Args:
+            experiment_dir: Path to experiment directory to monitor for checkpoints
+            reload_interval: Interval in seconds between checkpoint checks
+        """
+        self.experiment_dir = Path(experiment_dir)
         self.reload_interval = reload_interval
         self.last_mtime = 0
         self.is_running = False
         self.monitor_thread = None
         self.runner = None
+
+    def _get_current_checkpoint_path(self) -> Path:
+        """Get the current checkpoint path to monitor."""
+        return find_latest_checkpoint_file(self.experiment_dir)
 
     def start_monitoring(self, runner):
         """Start monitoring the checkpoint file for changes."""
@@ -34,15 +45,16 @@ class HotReloadManager:
         self.is_running = True
 
         # Get initial modification time
-        if self.checkpoint_path.exists():
-            self.last_mtime = os.path.getmtime(self.checkpoint_path)
+        current_checkpoint = self._get_current_checkpoint_path()
+        if current_checkpoint and current_checkpoint.exists():
+            self.last_mtime = os.path.getmtime(current_checkpoint)
 
         # Start monitoring thread
         self.monitor_thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.monitor_thread.start()
 
         logger.info(
-            f"Hot-reload monitoring started: {self.checkpoint_path} (interval: {self.reload_interval}s)"
+            f"Hot-reload monitoring started: {self.experiment_dir} (interval: {self.reload_interval}s)"
         )
 
     def stop_monitoring(self):
@@ -56,14 +68,15 @@ class HotReloadManager:
         """Main monitoring loop that runs in a separate thread."""
         while self.is_running:
             try:
-                if self.checkpoint_path.exists():
-                    current_mtime = os.path.getmtime(self.checkpoint_path)
+                # Get the current checkpoint path (may change dynamically)
+                current_checkpoint = self._get_current_checkpoint_path()
+
+                if current_checkpoint and current_checkpoint.exists():
+                    current_mtime = os.path.getmtime(current_checkpoint)
 
                     # Check if file was modified (and we have a baseline)
                     if current_mtime != self.last_mtime and self.last_mtime > 0:
-                        logger.info(
-                            f"Checkpoint update detected: {self.checkpoint_path}"
-                        )
+                        logger.info(f"Checkpoint update detected: {current_checkpoint}")
 
                         # Wait for player to be available if not yet created
                         max_wait_time = 10.0  # seconds
@@ -80,7 +93,7 @@ class HotReloadManager:
                             time.sleep(wait_interval)
                             waited_time += wait_interval
 
-                        self._reload_model()
+                        self._reload_model(current_checkpoint)
                         self.last_mtime = current_mtime
                     elif self.last_mtime == 0:
                         # First time seeing the file
@@ -92,14 +105,21 @@ class HotReloadManager:
                 logger.error(f"Hot-reload monitoring error: {e}")
                 time.sleep(self.reload_interval)
 
-    def _reload_model(self):
+    def _reload_model(self, checkpoint_path: Path = None):
         """Reload the model with new checkpoint weights."""
         try:
-            logger.info("Reloading model weights...")
+            # Use provided path or find current checkpoint
+            if checkpoint_path is None:
+                checkpoint_path = self._get_current_checkpoint_path()
+                if checkpoint_path is None:
+                    logger.error("No checkpoint found for hot-reload")
+                    return
+
+            logger.info(f"Reloading model weights from: {checkpoint_path}")
 
             # Load the new checkpoint (safer loading)
             checkpoint = torch.load(
-                self.checkpoint_path, map_location="cpu", weights_only=False
+                checkpoint_path, map_location="cpu", weights_only=False
             )
 
             # Extract model state dict (handle different checkpoint formats)
@@ -240,8 +260,12 @@ def apply_rl_games_patches():
                     "interval", 30.0
                 )
 
+                # Convert checkpoint path to experiment directory
+                preprocessor = CLIPreprocessor()
+                experiment_dir = preprocessor._resolve_experiment_dir(checkpoint_path)
+
                 # Create and start hot-reload manager
-                _hot_reload_manager = HotReloadManager(checkpoint_path, reload_interval)
+                _hot_reload_manager = HotReloadManager(experiment_dir, reload_interval)
                 _hot_reload_manager.start_monitoring(self)
 
                 try:

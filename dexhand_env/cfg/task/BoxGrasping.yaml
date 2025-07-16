@@ -32,6 +32,9 @@ task:
   maxBaseAngularVelocity: 0.5
   maxFingerJointVelocity: 0.5  # Reduced for more controlled movements
 
+  # Contact detection
+  contactBinaryThreshold: 0.1
+
   # Policy observation keys - what the policy actually sees (blind policy design)
   policyObservationKeys:
     - base_dof_pos
@@ -73,17 +76,19 @@ task:
     _delete_: true  # Delete parent rewardWeights to ensure BoxGrasping has complete control
 
     # Task-specific rewards only
-    object_height: 1.0             # Main reward for lifting object
-    single_finger_contact: 0.5      # Reward when exactly 1 finger touches box
-    multi_finger_contact: 2.0       # Reward when thumb + another finger touch box (larger reward)
-    finger_to_object: 0.05          # Reward for getting fingers close (reduced weight)
-    fingerpad_to_box_centroid: 1.0  # Reward for centering first 3 fingerpads around box centroid
-    grasp_duration: 10.0             # Reward for maintaining grasp
+    object_height: 2.0             # Main reward for lifting object
+    thumb_touching: 0.5            # Reward when thumb touches box (larger weight)
+    other_fingers_touching: 0.25    # Reward when any other finger touches box (smaller weight)
+    grasp_state: 2.0               # Reward when thumb + another finger touch box (much larger weight)
+    finger_to_object_height: 0.15  # Reward for getting fingers at same height as object (increased weight)
+    hand_to_object: 0.05            # Reward for getting hand close to object (smaller weight)
+    fingerpad_to_box_centroid: 0.75  # Reward for centering first 3 fingerpads around box centroid (increased weight)
+    grasp_duration: 20.0             # Reward for maintaining grasp
 
     # Termination rewards (one-time at episode end)
-    termination_success: 100.0       # Large bonus for successful grasp and lift
-    termination_failure_penalty: 100.0       # Penalty for failure (touching ground, etc.)
-    termination_timeout_penalty: 100.0       # Penalty for not completing task
+    termination_success: 2000.0       # Large bonus for successful grasp and lift
+    termination_failure_penalty: 200.0       # Penalty for failure (touching ground, etc.)
+    termination_timeout_penalty: 200.0       # Penalty for not completing task
 
     # Explicitly disable BaseTask rewards (set to 0.0)
     alive: 0.0                      # No alive bonus for BoxGrasping

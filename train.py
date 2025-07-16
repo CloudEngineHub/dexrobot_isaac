@@ -22,7 +22,11 @@ OmegaConf.register_new_resolver("if", lambda pred, a, b: a if pred else b)
 sys.path.append(str(Path(__file__).parent))
 
 # Import CLI utilities for preprocessing
-from dexhand_env.utils.cli_utils import preprocess_cli_args, show_cli_help  # noqa: E402
+from dexhand_env.utils.cli_utils import (  # noqa: E402
+    preprocess_cli_args,
+    show_cli_help,
+    CLIPreprocessor,
+)
 from dexhand_env.utils.config_utils import (  # noqa: E402
     validate_config,
     get_experiment_name,
@@ -454,8 +458,15 @@ def main(cfg: DictConfig):
         if cfg.train.checkpoint and getattr(cfg.train, "reloadInterval", 0) > 0:
             reload_interval = cfg.train.reloadInterval
             runner.configure_hot_reload(interval=reload_interval)
+
+            # Resolve experiment directory for hot-reload monitoring
+            preprocessor = CLIPreprocessor()
+            experiment_dir = preprocessor._resolve_experiment_dir(
+                cfg.train.checkpoint, cfg.task.name
+            )
+
             logger.info(
-                f"Hot-reload configured: {cfg.train.checkpoint} (interval: {reload_interval}s)"
+                f"Hot-reload configured: monitoring {experiment_dir} (interval: {reload_interval}s)"
             )
 
         logger.info("About to call runner.run() in test mode")
