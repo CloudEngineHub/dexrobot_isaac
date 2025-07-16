@@ -27,6 +27,11 @@ task:
   name: BoxGrasping
   episodeLength: 500  # 10 seconds at 50Hz
 
+  # Velocity limits
+  maxBaseLinearVelocity: 0.1
+  maxBaseAngularVelocity: 0.5
+  maxFingerJointVelocity: 0.5  # Reduced for more controlled movements
+
   # Policy observation keys - what the policy actually sees (blind policy design)
   policyObservationKeys:
     - base_dof_pos
