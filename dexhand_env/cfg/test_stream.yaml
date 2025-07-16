@@ -3,6 +3,7 @@
 
 defaults:
   - config             # Inherit from main config (includes training.checkpoint)
+  - base/test
   - base/video         # Add video configuration
   - /physics/fast  # Fast physics for smooth streaming
   - _self_
@@ -11,14 +12,3 @@ env:
   render: false        # Explicitly headless
   recordVideo: false   # Disable file recording
   streamVideo: true    # Enable HTTP streaming
-  numEnvs: 4           # Small number for testing
-
-training:
-  test: true           # Enable test mode
-  maxIterations: 10    # Short test sessions
-
-testing:
-  reloadInterval: 30   # Hot-reload for testing
-
-logging:
-  logLevel: "info"     # Standard logging level for tests

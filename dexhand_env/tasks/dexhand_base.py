@@ -1031,7 +1031,9 @@ class DexHandBase(VecTask):
                 return frame
 
         # Real-time synchronization at proper abstraction level
-        if self.viewer_controller and self.viewer_controller.viewer:
+        if (self.viewer_controller and self.viewer_controller.viewer) or (
+            self.http_streamer and self.http_streamer.is_streaming()
+        ):
             # Calculate expected simulation time based on control_dt
             control_dt = (
                 self.physics_manager.control_dt if self.physics_manager else None
