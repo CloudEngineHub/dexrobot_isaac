@@ -201,7 +201,7 @@ class GraphicsManager:
             return False
 
     def sync_frame_time(self):
-        """Synchronize to real-time."""
+        """Synchronize to real-time using Isaac Gym's sync mechanism."""
         try:
             self.gym.sync_frame_time(self.sim)
         except Exception as e:

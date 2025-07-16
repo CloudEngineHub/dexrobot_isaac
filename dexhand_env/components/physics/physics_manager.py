@@ -258,9 +258,15 @@ class PhysicsManager:
             # Set control_dt for the first time
             self.control_dt = self.physics_dt * self.physics_steps_per_control_step
 
+            expected_fps = 1.0 / self.control_dt if self.control_dt > 0 else 0
             logger.info(
                 f"Auto-detected physics_steps_per_control_step: {measured_steps}. "
-                f"control_dt = {self.control_dt:.6f}s"
+                f"control_dt = {self.control_dt:.6f}s ({expected_fps:.1f} FPS expected)"
+            )
+            logger.info(
+                f"[PHYSICS TIMING] physics_dt: {self.physics_dt:.6f}s, "
+                f"physics_steps_per_control: {measured_steps}, "
+                f"control_dt: {self.control_dt:.6f}s"
             )
 
     def refresh_tensors(self):

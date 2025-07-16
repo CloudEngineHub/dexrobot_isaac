@@ -8,6 +8,7 @@ to delegate functionality to specialized components.
 import os
 import sys
 import math
+import time
 import numpy as np
 from loguru import logger
 
@@ -220,6 +221,11 @@ class DexHandBase(VecTask):
 
         # Mark initialization as complete - video recording can now start
         self._initialization_complete = True
+
+        # Initialize timing tracking for render method
+        self._render_count = 0
+        self._simulation_start_time = time.time()
+
         logger.info("DexHandBase initialization complete.")
 
     # ============================================================================
@@ -982,6 +988,10 @@ class DexHandBase(VecTask):
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""
+        # Global clock synchronization
+        self._render_count += 1
+        current_time = time.time()
+
         # CRITICAL: Reset graphics state for new frame
         self.graphics_manager.reset_graphics_state()
 
@@ -1019,6 +1029,25 @@ class DexHandBase(VecTask):
                 if self.http_streamer and self.http_streamer.is_streaming():
                     self.http_streamer.add_frame(frame)
                 return frame
+
+        # Real-time synchronization at proper abstraction level
+        if self.viewer_controller and self.viewer_controller.viewer:
+            # Calculate expected simulation time based on control_dt
+            control_dt = (
+                self.physics_manager.control_dt if self.physics_manager else None
+            )
+            if control_dt:
+                expected_sim_time = self._render_count * control_dt
+                elapsed_real_time = current_time - self._simulation_start_time
+
+                # Calculate how much time we should have taken
+                if elapsed_real_time < expected_sim_time:
+                    # We're ahead - sleep to maintain real-time
+                    time_to_sleep = expected_sim_time - elapsed_real_time
+                    time.sleep(time_to_sleep)
+                else:
+                    # We're behind - just call Isaac Gym sync
+                    self.graphics_manager.sync_frame_time()
 
         # Return viewer result if available, otherwise None
         return result

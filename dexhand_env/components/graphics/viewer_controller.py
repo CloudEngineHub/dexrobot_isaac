@@ -616,9 +616,7 @@ class ViewerController:
         # Note: GraphicsManager.step_graphics() should be called by DexHandBase before this
         self.graphics_manager.update_viewer(self.viewer)
 
-        # Synchronize to real-time
-        self.graphics_manager.sync_frame_time()
-
         # ViewerController only handles on-screen display and interaction
         # Video capture is handled by VideoManager (unified path)
+        # Real-time synchronization is handled at DexHandBase level
         return None
