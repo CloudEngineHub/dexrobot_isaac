@@ -67,7 +67,7 @@ class InitializationManager:
         )
 
         # Initialize observation encoder now that we know the action space size
-        observation_keys = self.parent.cfg["env"].get(
+        observation_keys = self.parent.cfg.get(
             "policyObservationKeys",
             [
                 "base_dof_pos",

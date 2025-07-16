@@ -16,13 +16,13 @@ class CLIPreprocessor:
     # Mapping from short aliases to full Hydra paths
     ALIASES = {
         "numEnvs": "env.numEnvs",
-        "test": "training.test",
-        "checkpoint": "training.checkpoint",
-        "seed": "training.seed",
+        "test": "train.test",
+        "checkpoint": "train.checkpoint",
+        "seed": "train.seed",
         "render": "env.render",
         "device": "env.device",
-        "maxIter": "training.maxIterations",
-        "logLevel": "logging.logLevel",
+        "maxIter": "train.maxIterations",
+        "logLevel": "train.logging.logLevel",
     }
 
     def __init__(self):
@@ -67,9 +67,9 @@ class CLIPreprocessor:
                 logger.debug(f"Expanded alias: {args[args.index(arg)]} → {key}={value}")
 
             # Handle special checkpoint path resolution
-            if key in ["training.checkpoint", "checkpoint"]:
+            if key in ["train.checkpoint", "checkpoint"]:
                 if key == "checkpoint":
-                    key = "training.checkpoint"
+                    key = "train.checkpoint"
                 value = self._resolve_checkpoint_path(value, task_name)
 
             processed.append(f"{key}={value}")
@@ -280,7 +280,7 @@ class CLIPreprocessor:
         """Get usage examples for the CLI aliases."""
         examples = [
             "# Original syntax vs. simplified syntax:",
-            "python train.py --config-name=test_render env.num_envs=1 training.test=true",
+            "python train.py --config-name=test_render env.numEnvs=1 train.test=true",
             "python train.py config=test_render numEnvs=1 test=true",
             "",
             "# Smart checkpoint resolution:",

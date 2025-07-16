@@ -134,18 +134,18 @@ def get_config_overrides(cfg: DictConfig) -> List[str]:
         overrides.append(f"env.render={cfg.env.render}")
 
     # Check training overrides
-    if cfg.training.test:
-        overrides.append("training.test=true")
-    if cfg.training.checkpoint:
-        overrides.append(f"training.checkpoint={cfg.training.checkpoint}")
-    if cfg.training.seed != 42:  # Default from config.yaml
-        overrides.append(f"training.seed={cfg.training.seed}")
-    if cfg.training.maxIterations != 10000:  # Default from config.yaml
-        overrides.append(f"training.maxIterations={cfg.training.maxIterations}")
+    if cfg.train.test:
+        overrides.append("train.test=true")
+    if cfg.train.checkpoint:
+        overrides.append(f"train.checkpoint={cfg.train.checkpoint}")
+    if cfg.train.seed != 42:  # Default from config.yaml
+        overrides.append(f"train.seed={cfg.train.seed}")
+    if cfg.train.maxIterations != 10000:  # Default from config.yaml
+        overrides.append(f"train.maxIterations={cfg.train.maxIterations}")
 
     # Check logging overrides
-    if cfg.logging.logLevel != "info":  # Default from config.yaml
-        overrides.append(f"logging.logLevel={cfg.logging.logLevel}")
+    if cfg.train.logging.logLevel != "info":  # Default from config.yaml
+        overrides.append(f"train.logging.logLevel={cfg.train.logging.logLevel}")
 
     return overrides
 
@@ -182,16 +182,16 @@ def main(cfg: DictConfig):
     logger.remove()  # Remove default handler
     logger.add(
         sys.stderr,
-        level=cfg.logging.logLevel.upper(),
+        level=cfg.train.logging.logLevel.upper(),
         format="<green>{time:HH:mm:ss}</green> | <level>{level:8}</level> | <level>{message}</level>",
         colorize=True,
     )
 
     # Add file logging unless disabled
-    if not cfg.logging.noLogFile:
+    if not cfg.train.logging.noLogFile:
         logger.add(
             output_dir / "train.log",
-            level=cfg.logging.logLevel.upper(),
+            level=cfg.train.logging.logLevel.upper(),
             format="{time:YYYY-MM-DD HH:mm:ss} | {level:8} | {message}",
         )
 
@@ -289,11 +289,11 @@ def main(cfg: DictConfig):
     check_config_compatibility(cfg)
 
     # Validate checkpoint exists if specified
-    if not validate_checkpoint_exists(cfg.training.checkpoint):
+    if not validate_checkpoint_exists(cfg.train.checkpoint):
         return
 
     # Set seed
-    set_seed(cfg.training.seed, cfg.training.torchDeterministic)
+    set_seed(cfg.train.seed, cfg.train.torchDeterministic)
 
     # Resolve entire config with full context first, then extract sections
     # This allows interpolations like ${...env.numEnvs} to access the complete config hierarchy
@@ -301,19 +301,37 @@ def main(cfg: DictConfig):
     task_cfg = resolved_cfg["task"]
     train_cfg = resolved_cfg["train"]
 
+    # Ensure task_cfg has env section for RL framework compatibility
+    if "env" not in task_cfg:
+        task_cfg["env"] = resolved_cfg["env"].copy()
+
+    # Ensure task_cfg has sim section for DexHandBase compatibility
+    if "sim" not in task_cfg:
+        task_cfg["sim"] = resolved_cfg["sim"].copy()
+
+    # Add episodeLength to env section for VecTask compatibility
+    task_cfg["env"]["episodeLength"] = task_cfg["episodeLength"]
+
+    # Add physics_engine to root level for VecTask compatibility
+    task_cfg["physics_engine"] = task_cfg["sim"]["physics_engine"]
+
     # Pass logging level to environment (merge logLevel configurations)
-    task_cfg["env"]["logLevel"] = cfg.logging.logLevel
+    task_cfg["env"]["logLevel"] = cfg.train.logging.logLevel
 
     # Update training config with runtime parameters (only truly dynamic values)
-    train_cfg["params"]["config"]["full_experiment_name"] = experiment_name
+    train_cfg["config"]["full_experiment_name"] = experiment_name
 
     # Configure TensorBoard logging
-    if train_cfg["params"]["config"].get("use_tensorboard", False):
-        train_cfg["params"]["config"]["tensorboard_logdir"] = str(output_dir)
+    if train_cfg["config"].get("use_tensorboard", False):
+        train_cfg["config"]["tensorboard_logdir"] = str(output_dir)
 
-    # Checkpoint handling is now done via interpolation in BaseTaskPPO.yaml
-    # load_checkpoint: ${if:${...training.checkpoint},True,False}
-    # load_path: ${...training.checkpoint}
+    # Set checkpoint loading dynamically based on whether checkpoint is provided
+    if cfg.train.checkpoint:
+        train_cfg["load_checkpoint"] = True
+        train_cfg["load_path"] = cfg.train.checkpoint
+    else:
+        train_cfg["load_checkpoint"] = False
+        train_cfg["load_path"] = ""
 
     # Register DexHand environment with rl_games
     register_rlgames_env()
@@ -330,7 +348,7 @@ def main(cfg: DictConfig):
         should_render = cfg.env.render
     else:
         # Use new default logic: test mode renders by default, train mode is headless
-        should_render = cfg.training.test
+        should_render = cfg.train.test
 
     # Handle video recording in headless mode
     record_video = getattr(cfg.env, "recordVideo", False)
@@ -422,7 +440,7 @@ def main(cfg: DictConfig):
         num_envs=cfg.env.numEnvs,
         sim_device=cfg.env.device,
         rl_device=cfg.env.device,
-        graphics_device_id=cfg.env.graphicsDeviceId,
+        graphics_device_id=cfg.sim.graphicsDeviceId,
         headless=not should_render,
         virtual_screen_capture=virtual_screen_capture,
         force_render=force_render,
@@ -433,8 +451,13 @@ def main(cfg: DictConfig):
     env_configurations.configurations["rlgpu_dexhand"]["env_creator"] = env_creator
 
     # Build and run trainer
+    # RL Games expects config with 'params' wrapper, but we flattened it
+    # Create compatible structure for RL Games
+    rl_games_train_cfg = {"params": train_cfg}
     runner = build_runner(
-        train_cfg, env_creator, reward_log_interval=cfg.logging.rewardLogInterval
+        rl_games_train_cfg,
+        env_creator,
+        reward_log_interval=cfg.train.logging.rewardLogInterval,
     )
 
     # Save training config
@@ -442,15 +465,15 @@ def main(cfg: DictConfig):
         yaml.dump(train_cfg, f)
 
     # Run training or testing
-    if cfg.training.test:
+    if cfg.train.test:
         logger.info("Running in test mode")
 
         # Configure hot-reload if requested
-        if cfg.training.checkpoint and getattr(cfg.testing, "reloadInterval", 0) > 0:
-            reload_interval = cfg.testing.reloadInterval
+        if cfg.train.checkpoint and getattr(cfg.train, "reloadInterval", 0) > 0:
+            reload_interval = cfg.train.reloadInterval
             runner.configure_hot_reload(interval=reload_interval)
             logger.info(
-                f"Hot-reload configured: {cfg.training.checkpoint} (interval: {reload_interval}s)"
+                f"Hot-reload configured: {cfg.train.checkpoint} (interval: {reload_interval}s)"
             )
 
         logger.info("About to call runner.run() in test mode")
@@ -458,7 +481,7 @@ def main(cfg: DictConfig):
             {
                 "train": False,
                 "play": True,
-                "checkpoint": cfg.training.checkpoint,
+                "checkpoint": cfg.train.checkpoint,
                 "sigma": None,
             }
         )
@@ -470,7 +493,7 @@ def main(cfg: DictConfig):
             {
                 "train": True,
                 "play": False,
-                "checkpoint": cfg.training.checkpoint,
+                "checkpoint": cfg.train.checkpoint,
                 "sigma": None,
             }
         )

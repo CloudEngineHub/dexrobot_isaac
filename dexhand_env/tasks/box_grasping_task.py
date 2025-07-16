@@ -71,13 +71,14 @@ class BoxGraspingTask(DexTask):
         # Task configuration parameters (not weights)
 
         # Task-specific parameters from config
-        task_params = cfg["env"]["taskParams"]
-        self.height_threshold = task_params["success_height_threshold"]
-        self.contact_duration_threshold_seconds = task_params[
+        # Note: task parameters are at root level of passed config
+        task_config = cfg
+        self.height_threshold = task_config["success_height_threshold"]
+        self.contact_duration_threshold_seconds = task_config[
             "contact_duration_threshold"
         ]
-        self.min_fingers_for_grasp = task_params["min_fingers_for_grasp"]
-        self.max_box_distance = task_params["max_box_distance"]
+        self.min_fingers_for_grasp = task_config["min_fingers_for_grasp"]
+        self.max_box_distance = task_config["max_box_distance"]
 
         # Contact duration will be converted to steps after physics manager is initialized
         self.contact_duration_threshold_steps = None
@@ -501,9 +502,7 @@ class BoxGraspingTask(DexTask):
         box_force_magnitude = torch.norm(box_forces, dim=1)
 
         # Box has contact if force magnitude exceeds threshold
-        contact_threshold = self.parent_env.cfg["env"].get(
-            "contactBinaryThreshold", 1.0
-        )
+        contact_threshold = self.parent_env.cfg.get("contactBinaryThreshold", 1.0)
         box_has_contact = box_force_magnitude > contact_threshold
 
         # Get fingerpad positions from rigid body states

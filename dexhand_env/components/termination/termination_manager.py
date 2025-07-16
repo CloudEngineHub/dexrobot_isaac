@@ -44,7 +44,7 @@ class TerminationManager:
 
         # Active criteria lists - read from config, no hardcoded defaults
         # If not specified in config, use empty list (means use all available)
-        termination_cfg = cfg["env"].get("termination", {})
+        termination_cfg = cfg.get("termination", {})
         self.active_success_criteria = termination_cfg.get("activeSuccessCriteria", [])
         self.active_failure_criteria = termination_cfg.get("activeFailureCriteria", [])
 
@@ -53,10 +53,10 @@ class TerminationManager:
         self._initialize_reason_tracking()
 
         # Maximum episode length for timeout termination
-        self.max_episode_length = cfg["env"]["episodeLength"]
+        self.max_episode_length = cfg["episodeLength"]
 
         # Termination rewards - read from reward weights config
-        rewards_cfg = cfg["env"].get("rewardWeights", {})
+        rewards_cfg = cfg.get("rewardWeights", {})
         self.success_reward = rewards_cfg.get("termination_success", 10.0)
         self.failure_penalty = rewards_cfg.get("termination_failure_penalty", 5.0)
         self.timeout_penalty = rewards_cfg.get("termination_timeout_penalty", 0.0)
@@ -68,7 +68,7 @@ class TerminationManager:
 
         # Track consecutive successes for curriculum learning
         self.consecutive_successes = 0
-        self.max_consecutive_successes = cfg["env"].get("maxConsecutiveSuccesses", 50)
+        self.max_consecutive_successes = cfg.get("maxConsecutiveSuccesses", 50)
 
     @property
     def num_envs(self):

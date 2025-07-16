@@ -1,0 +1,20 @@
+# @package sim
+# Default physics configuration - balanced quality/performance
+substeps: 4                     # Standard physics substeps
+gravity: [0.0, 0.0, -9.81]
+num_client_threads: 0
+
+physx:
+  solver_type: 1                # TGS solver
+  num_position_iterations: 16   # Balanced precision
+  num_velocity_iterations: 0    # NVIDIA recommendation
+  contact_offset: 0.001         # High precision detection
+  rest_offset: 0.0005          # Stability maintenance
+  bounce_threshold_velocity: 0.15
+  max_depenetration_velocity: 0.2
+  default_buffer_size_multiplier: 4.0
+  num_subscenes: 0
+  contact_collection: 1
+  gpu_contact_pairs_per_env: 512
+  always_use_articulations: true
+  num_threads: 4

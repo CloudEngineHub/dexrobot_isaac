@@ -105,6 +105,26 @@ def load_config(config_path=None):
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
             "dexhand_env/cfg/task/BaseTask.yaml",
         )
+    else:
+        # If config_path doesn't exist as-is, try to resolve it as a config name
+        if not os.path.exists(config_path):
+            # Try in main cfg directory
+            resolved_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "dexhand_env/cfg",
+                f"{config_path}.yaml",
+            )
+            if os.path.exists(resolved_path):
+                config_path = resolved_path
+            else:
+                # Try in task directory
+                task_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "dexhand_env/cfg/task",
+                    f"{config_path}.yaml",
+                )
+                if os.path.exists(task_path):
+                    config_path = task_path
 
     logger.info(f"Loading config from {config_path}")
 
@@ -1266,7 +1286,7 @@ Examples:
             }
 
         env = create_dex_env(
-            task_name=cfg.get("name", "Base"),
+            task_name=cfg.get("task", {}).get("name", "BaseTask"),
             cfg=cfg,
             rl_device=rl_device,
             sim_device=sim_device,

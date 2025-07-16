@@ -138,7 +138,7 @@ class DexHandBase(VecTask):
         self.task.parent_env = self
 
         # Task specific parameters
-        self.max_episode_length = self.cfg["env"]["episodeLength"]
+        self.max_episode_length = self.cfg["episodeLength"]
 
         # Physics parameters
         self.physics_dt = self.cfg["sim"].get("dt", 0.01)  # Physics simulation timestep
@@ -253,7 +253,7 @@ class DexHandBase(VecTask):
 
     def _setup_default_action_rule(self):
         """Set up a default action rule based on control mode."""
-        control_mode = self.cfg["env"].get("controlMode", "position_delta")
+        control_mode = self.cfg.get("controlMode", "position_delta")
         DefaultActionRules.setup_default_action_rule(
             self.action_processor, control_mode
         )
@@ -349,9 +349,9 @@ class DexHandBase(VecTask):
             )
 
         # Set contact force bodies from config
-        if "contactForceBodies" in self.cfg["env"]:
+        if "contactForceBodies" in self.cfg:
             self.hand_initializer.set_contact_force_bodies(
-                self.cfg["env"]["contactForceBodies"]
+                self.cfg["contactForceBodies"]
             )
 
         # Load hand asset
@@ -447,28 +447,28 @@ class DexHandBase(VecTask):
         )
 
         # Initialize action processor with all configuration at once
-        if "controlMode" not in self.cfg["env"]:
+        if "controlMode" not in self.cfg:
             raise RuntimeError(
                 "controlMode not specified in config. Must be 'position' or 'position_delta'."
             )
 
         action_processor_config = {
-            "control_mode": self.cfg["env"]["controlMode"],
+            "control_mode": self.cfg["controlMode"],
             "num_dof": self.num_dof,
-            "policy_controls_hand_base": self.cfg["env"]["policyControlsHandBase"],
-            "policy_controls_fingers": self.cfg["env"]["policyControlsFingers"],
-            "finger_vel_limit": self.cfg["env"]["maxFingerJointVelocity"],
-            "base_lin_vel_limit": self.cfg["env"]["maxBaseLinearVelocity"],
-            "base_ang_vel_limit": self.cfg["env"]["maxBaseAngularVelocity"],
+            "policy_controls_hand_base": self.cfg["policyControlsHandBase"],
+            "policy_controls_fingers": self.cfg["policyControlsFingers"],
+            "finger_vel_limit": self.cfg["maxFingerJointVelocity"],
+            "base_lin_vel_limit": self.cfg["maxBaseLinearVelocity"],
+            "base_ang_vel_limit": self.cfg["maxBaseAngularVelocity"],
         }
 
         # Add optional default targets if present
-        if "defaultBaseTargets" in self.cfg["env"]:
-            action_processor_config["default_base_targets"] = self.cfg["env"][
+        if "defaultBaseTargets" in self.cfg:
+            action_processor_config["default_base_targets"] = self.cfg[
                 "defaultBaseTargets"
             ]
-        if "defaultFingerTargets" in self.cfg["env"]:
-            action_processor_config["default_finger_targets"] = self.cfg["env"][
+        if "defaultFingerTargets" in self.cfg:
+            action_processor_config["default_finger_targets"] = self.cfg[
                 "defaultFingerTargets"
             ]
 

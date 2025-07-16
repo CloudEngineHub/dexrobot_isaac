@@ -10,37 +10,36 @@ defaults:
 # Task and training configs will be loaded from task/ and train/ subdirectories
 # The following are runtime overrides
 
+# Simulation configuration
+sim:
+  graphicsDeviceId: 0      # Graphics device ID for rendering
+
 # Environment configuration
 env:
   numEnvs: 1024  # Basic config for training, can be overridden
   device: "cuda:0"
-  graphicsDeviceId: 0
   render: null  # null = use defaults (test=render, train=headless), true/false = explicit override
   recordVideo: false  # Enable video recording in headless mode
   streamVideo: false  # Enable HTTP video streaming
-  envName: "rlgpu_dexhand"  # RL Games environment name
 
-# Training configuration
-training:
+# Task configuration (RL task definition only)
+# Task-specific settings inherited from task/ configs
+
+# Training configuration (algorithm and training process)
+train:
   seed: 42
   torchDeterministic: false
-  checkpoint: null
-  test: false
   maxIterations: 10000
-
-# Testing configuration
-testing:
+  test: false
+  checkpoint: null
+  envName: "rlgpu_dexhand"  # RL Games environment name
   reloadInterval: 30  # Seconds between checkpoint reloads in test mode
-
-# Experiment management configuration
-experiment:
-  maxRecentRuns: 10      # Maximum number of recent experiments to show in runs/ (older ones archived to runs_all/)
-  useCleanWorkspace: true # Enable clean workspace management (symlinks recent runs, archives all runs)
-
-# Logging configuration
-logging:
-  experimentName: null  # Auto-generated if null
-  logInterval: 10
-  rewardLogInterval: 10
-  logLevel: "info"
-  noLogFile: false
+  logging:
+    experimentName: null  # Auto-generated if null
+    logInterval: 10
+    rewardLogInterval: 10
+    logLevel: "info"
+    noLogFile: false
+  experiment:
+    maxRecentRuns: 10      # Maximum number of recent experiments to show in runs/ (older ones archived to runs_all/)
+    useCleanWorkspace: true # Enable clean workspace management (symlinks recent runs, archives all runs)

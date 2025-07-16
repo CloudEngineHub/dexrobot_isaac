@@ -21,8 +21,8 @@ def get_experiment_name(cfg: DictConfig, timestamp: str) -> str:
     Returns:
         Generated experiment name (format: {task}_{train|test}_{YYMMDD_HHMMSS})
     """
-    if cfg.logging.experimentName is not None:
-        return cfg.logging.experimentName
+    if cfg.train.logging.experimentName is not None:
+        return cfg.train.logging.experimentName
 
     # Simplify timestamp from YYYYMMDD_HHMMSS to YYMMDD_HHMMSS
     if len(timestamp) >= 8 and timestamp.startswith("20"):
@@ -31,7 +31,7 @@ def get_experiment_name(cfg: DictConfig, timestamp: str) -> str:
         short_timestamp = timestamp
 
     # Simple naming: task + mode + timestamp
-    mode = "test" if cfg.training.test else "train"
+    mode = "test" if cfg.train.test else "train"
     return f"{cfg.task.name}_{mode}_{short_timestamp}"
 
 
@@ -48,12 +48,12 @@ def get_config_summary(cfg: DictConfig) -> Dict[str, Any]:
     return {
         "task": cfg.task.name,
         "num_envs": cfg.env.numEnvs,
-        "test_mode": cfg.training.test,
+        "test_mode": cfg.train.test,
         "render": cfg.env.render,
-        "checkpoint": cfg.training.checkpoint,
-        "seed": cfg.training.seed,
-        "max_iterations": cfg.training.maxIterations,
-        "physics_dt": getattr(cfg.task.sim, "dt", None),
+        "checkpoint": cfg.train.checkpoint,
+        "seed": cfg.train.seed,
+        "max_iterations": cfg.train.maxIterations,
+        "physics_dt": getattr(cfg.sim, "dt", None),
     }
 
 
@@ -152,7 +152,7 @@ def check_config_compatibility(cfg: DictConfig) -> bool:
     issues = []
 
     # Check for known problematic combinations
-    if cfg.env.numEnvs == 1 and not cfg.training.test:
+    if cfg.env.numEnvs == 1 and not cfg.train.test:
         issues.append(
             "Single environment training is very slow - consider test=true for single env"
         )
@@ -160,7 +160,7 @@ def check_config_compatibility(cfg: DictConfig) -> bool:
     if cfg.env.render and cfg.env.numEnvs > 16:
         issues.append(f"Rendering with {cfg.env.numEnvs} environments may be very slow")
 
-    if cfg.training.test and not cfg.training.checkpoint:
+    if cfg.train.test and not cfg.train.checkpoint:
         issues.append("Test mode without checkpoint - will use random policy")
 
     # Log issues

@@ -1,17 +1,31 @@
-# @package task
+# @package _global_
 # BoxGrasping task configuration - inherits from BaseTask
 defaults:
   - BaseTask
+  - /physics/accurate      # Override with accurate physics
   - _self_
 
-name: BoxGrasping
-
-# Override physics parameters for higher fidelity grasping
+# Override only RL environment timing
 sim:
-  dt: 0.01              # 100Hz physics / 2 physics steps per control step = 50Hz control
+  dt: 0.01                     # Task-specific 100Hz RL timing
+  # substeps + physx parameters inherited from physics/accurate.yaml
 
+# Environment and world setup
 env:
   numEnvs: ${env.numEnvs}
+  # Box properties
+  box:
+    size: 0.05  # 5cm cube
+    mass: 0.1   # 100g
+    friction: 1.0
+    restitution: 0.0
+    initial_position:
+      xy_range: 0.02    # ±2cm randomization
+      z: 0.025          # Fixed on table (box half-size)
+
+# Task configuration - all RL-related settings
+task:
+  name: BoxGrasping
   episodeLength: 500  # 10 seconds at 50Hz
 
   # Policy observation keys - what the policy actually sees (blind policy design)
@@ -32,16 +46,6 @@ env:
     # NO box observations - policy is blind!
     # grasp_duration is privileged info - not exposed to policy
 
-  # Box properties
-  box:
-    size: 0.05  # 5cm cube
-    mass: 0.1   # 100g
-    friction: 1.0
-    restitution: 0.0
-    initial_position:
-      xy_range: 0.02    # ±2cm randomization
-      z: 0.025          # Fixed on table (box half-size)
-
   # Termination criteria
   termination:
     # Specify which criteria are active (fail-fast if any are missing)
@@ -54,41 +58,37 @@ env:
       fingertip_threshold: 0.0
       fingerpad_threshold: 0.0
 
-  # Task-specific parameters
-  taskParams:
-    success_height_threshold: 0.2     # Object must be lifted above this height (meters)
-    contact_duration_threshold: 2.0   # Minimum contact duration for success (seconds)
-    min_fingers_for_grasp: 2          # Minimum number of fingers required for valid grasp
-    max_box_distance: 0.6             # Reset if box moves beyond this distance (meters)
+  # Task-specific parameters (flattened from taskParams)
+  success_height_threshold: 0.2     # Object must be lifted above this height (meters)
+  contact_duration_threshold: 2.0   # Minimum contact duration for success (seconds)
+  min_fingers_for_grasp: 2          # Minimum number of fingers required for valid grasp
+  max_box_distance: 0.6             # Reset if box moves beyond this distance (meters)
 
-# Reward weights configuration - override BaseTask completely
-rewardWeights:
-  _delete_: true  # Delete parent rewardWeights to ensure BoxGrasping has complete control
+  # Reward weights configuration - override BaseTask completely
+  rewardWeights:
+    _delete_: true  # Delete parent rewardWeights to ensure BoxGrasping has complete control
 
-  # Task-specific rewards only
-  object_height: 1.0             # Main reward for lifting object
-  single_finger_contact: 0.5      # Reward when exactly 1 finger touches box
-  multi_finger_contact: 2.0       # Reward when thumb + another finger touch box (larger reward)
-  finger_to_object: 0.05          # Reward for getting fingers close (reduced weight)
-  fingerpad_to_box_centroid: 1.0  # Reward for centering first 3 fingerpads around box centroid
-  grasp_duration: 10.0             # Reward for maintaining grasp
+    # Task-specific rewards only
+    object_height: 1.0             # Main reward for lifting object
+    single_finger_contact: 0.5      # Reward when exactly 1 finger touches box
+    multi_finger_contact: 2.0       # Reward when thumb + another finger touch box (larger reward)
+    finger_to_object: 0.05          # Reward for getting fingers close (reduced weight)
+    fingerpad_to_box_centroid: 1.0  # Reward for centering first 3 fingerpads around box centroid
+    grasp_duration: 10.0             # Reward for maintaining grasp
 
-  # Termination rewards (one-time at episode end)
-  termination_success: 100.0       # Large bonus for successful grasp and lift
-  termination_failure_penalty: 100.0       # Penalty for failure (touching ground, etc.)
-  termination_timeout_penalty: 100.0       # Penalty for not completing task
+    # Termination rewards (one-time at episode end)
+    termination_success: 100.0       # Large bonus for successful grasp and lift
+    termination_failure_penalty: 100.0       # Penalty for failure (touching ground, etc.)
+    termination_timeout_penalty: 100.0       # Penalty for not completing task
 
-  # Explicitly disable BaseTask rewards (set to 0.0)
-  alive: 0.0                      # No alive bonus for BoxGrasping
-  height_safety: 0.0              # No height safety penalty (handled by termination)
-  finger_velocity: 0.0            # No velocity penalties
-  hand_velocity: 0.0
-  hand_angular_velocity: 0.0
-  joint_limit: 0.0                # No joint limit penalties
-  finger_acceleration: 0.0        # No acceleration penalties
-  hand_acceleration: 0.0
-  hand_angular_acceleration: 0.0
-  contact_stability: 0.0          # No contact stability reward
-
-# Task configuration
-task: {}
+    # Explicitly disable BaseTask rewards (set to 0.0)
+    alive: 0.0                      # No alive bonus for BoxGrasping
+    height_safety: 0.0              # No height safety penalty (handled by termination)
+    finger_velocity: 0.0            # No velocity penalties
+    hand_velocity: 0.0
+    hand_angular_velocity: 0.0
+    joint_limit: 0.0                # No joint limit penalties
+    finger_acceleration: 0.0        # No acceleration penalties
+    hand_acceleration: 0.0
+    hand_angular_acceleration: 0.0
+    contact_stability: 0.0          # No contact stability reward

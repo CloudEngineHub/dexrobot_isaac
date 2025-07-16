@@ -703,7 +703,7 @@ class ObservationEncoder:
 
         # Binary contact indicators (touch/no-touch for each finger)
         # Reduces sim2real gap by abstracting exact force magnitudes
-        contact_binary_threshold = self.cfg["env"].get("contactBinaryThreshold", 1.0)
+        contact_binary_threshold = self.cfg.get("contactBinaryThreshold", 1.0)
         contact_binary = (
             contact_magnitudes > contact_binary_threshold
         )  # Shape: (num_envs, num_fingers)

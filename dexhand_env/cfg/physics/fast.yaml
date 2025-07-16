@@ -1,0 +1,16 @@
+# @package sim
+# Fast physics configuration - optimized for real-time visualization
+defaults:
+  - default    # Inherit from default.yaml
+  - _self_     # Override with fast-specific settings
+
+# Only override performance-specific parameters
+substeps: 2                     # Reduced substeps for speed
+
+physx:
+  num_position_iterations: 8    # Reduced for speed (50% fewer)
+  contact_offset: 0.002         # Slightly larger for speed
+  rest_offset: 0.001           # Maintain ratio
+  max_depenetration_velocity: 0.5  # Faster separation
+  default_buffer_size_multiplier: 2.0  # Reduced buffer
+  gpu_contact_pairs_per_env: 256    # Fewer contact pairs

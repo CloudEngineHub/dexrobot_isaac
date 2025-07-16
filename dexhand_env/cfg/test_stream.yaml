@@ -4,6 +4,7 @@
 defaults:
   - config             # Inherit from main config (includes training.checkpoint)
   - base/video         # Add video configuration
+  - /physics/fast  # Fast physics for smooth streaming
   - _self_
 
 env:

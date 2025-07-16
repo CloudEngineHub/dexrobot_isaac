@@ -4,6 +4,7 @@
 defaults:
   - config
   - base/test
+  - /physics/fast          # Fast physics for smooth rendering
   - _self_
 
 env:

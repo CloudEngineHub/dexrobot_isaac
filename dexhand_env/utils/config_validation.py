@@ -15,29 +15,28 @@ class ConfigValidator:
     # Required configuration fields
     REQUIRED_FIELDS = {
         "task.name": str,
-        "task.physics_engine": str,
         "env.numEnvs": int,
         "env.device": str,
-        "training.seed": int,
-        "training.test": bool,
-        "logging.logLevel": str,
+        "train.seed": int,
+        "train.test": bool,
+        "train.logging.logLevel": str,
     }
 
     # Valid values for enum-like fields
     VALID_VALUES = {
-        "task.physics_engine": ["physx", "bullet"],
         "env.device": ["cuda:0", "cpu"],
-        "logging.logLevel": ["debug", "info", "warning", "error", "critical"],
-        "env.controlMode": ["position", "position_delta"],
+        "train.logging.logLevel": ["debug", "info", "warning", "error", "critical"],
+        "task.controlMode": ["position", "position_delta"],
     }
 
     # Reasonable ranges for numeric fields
     NUMERIC_RANGES = {
         "env.numEnvs": (1, 16384),
-        "training.seed": (0, 2**31 - 1),
-        "training.maxIterations": (1, 1000000),
+        "train.seed": (0, 2**31 - 1),
+        "train.maxIterations": (1, 1000000),
         "sim.dt": (0.001, 0.1),
-        "env.episodeLength": (10, 10000),
+        "task.episodeLength": (10, 10000),
+        "sim.graphicsDeviceId": (0, 8),
     }
 
     def __init__(self):
@@ -132,12 +131,12 @@ class ConfigValidator:
 
         if task_name == "BoxGrasping":
             # BoxGrasping specific validations
-            box_size = self._get_nested_value(cfg, "task.env.box.size")
+            box_size = self._get_nested_value(cfg, "env.box.size")
             if box_size is not None and box_size <= 0:
                 self.errors.append("BoxGrasping task requires positive box size")
 
             # Check if required observation keys are present
-            obs_keys = self._get_nested_value(cfg, "task.env.policyObservationKeys")
+            obs_keys = self._get_nested_value(cfg, "task.policyObservationKeys")
             if obs_keys is not None:
                 required_obs = ["contact_binary", "hand_pose"]
                 missing_obs = [key for key in required_obs if key not in obs_keys]
@@ -149,22 +148,22 @@ class ConfigValidator:
     def _validate_consistency(self, cfg: DictConfig):
         """Validate consistency between related configuration values."""
         # Check test mode consistency
-        is_test = self._get_nested_value(cfg, "training.test")
-        checkpoint = self._get_nested_value(cfg, "training.checkpoint")
+        is_test = self._get_nested_value(cfg, "train.test")
+        checkpoint = self._get_nested_value(cfg, "train.checkpoint")
 
         if is_test and not checkpoint:
             self.warnings.append("Test mode enabled but no checkpoint specified")
 
         # Check environment consistency
-        num_envs = self._get_nested_value(cfg, "env.num_envs")
+        num_envs = self._get_nested_value(cfg, "env.numEnvs")
         render = self._get_nested_value(cfg, "env.render")
 
         if num_envs and num_envs > 1 and render:
             self.warnings.append(f"Rendering with {num_envs} environments may be slow")
 
         # Check physics consistency
-        dt = self._get_nested_value(cfg, "task.sim.dt")
-        substeps = self._get_nested_value(cfg, "task.sim.substeps")
+        dt = self._get_nested_value(cfg, "sim.dt")
+        substeps = self._get_nested_value(cfg, "sim.substeps")
 
         if dt and substeps:
             physics_dt = dt / substeps
