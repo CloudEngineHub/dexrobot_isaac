@@ -20,7 +20,7 @@ This directory contains modular physics configurations that can be mixed and mat
 ### `accurate.yaml`
 - **Purpose**: Maximum precision for training and research
 - **Settings**: 16 substeps, 32 position iterations, 0.001 contact_offset
-- **Use case**: BoxGrasping training for penetration mitigation
+- **Use case**: Training and research requiring high precision
 - **Performance**: ~2-3x slower than default
 - **Trade-off**: Highest physics quality for computational cost
 
@@ -72,7 +72,7 @@ defaults:
 
 Before:
 ```yaml
-# BoxGrasping.yaml
+# MyTask.yaml
 sim:
   dt: 0.01
   substeps: 16
@@ -83,7 +83,7 @@ sim:
 
 After:
 ```yaml
-# BoxGrasping.yaml
+# Example: Custom task with accurate physics
 defaults:
   - BaseTask
   - /physics/accurate    # Inherits all physics params

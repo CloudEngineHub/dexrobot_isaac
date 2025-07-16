@@ -221,7 +221,7 @@ physx:
 Override physics in task files:
 
 ```yaml
-# dexhand_env/cfg/task/BoxGrasping.yaml
+# Example: Custom task with high-precision physics
 defaults:
   - BaseTask
   - /physics/accurate      # Use high-precision physics
@@ -317,8 +317,8 @@ python train.py logLevel=debug            # → train.logging.logLevel=debug
 # Select physics config via defaults override
 python train.py +defaults=[config,/physics/fast]
 
-# Or override in task config files directly
-python train.py task=BoxGrasping  # Uses /physics/accurate from BoxGrasping.yaml
+# Or specify physics config with task explicitly
+python train.py task=BoxGrasping +defaults=[config,/physics/accurate]
 ```
 
 #### 3. Runtime Configuration Composition
@@ -341,7 +341,7 @@ python train.py env.device="cuda:${oc.env:CUDA_DEVICE}"
 #### High-Performance Training
 ```bash
 # Maximum environments with accurate physics
-python train.py task=BoxGrasping numEnvs=4096 physics=accurate
+python train.py task=BoxGrasping numEnvs=4096 +defaults=[config,/physics/accurate]
 ```
 
 #### Debugging with Visualization

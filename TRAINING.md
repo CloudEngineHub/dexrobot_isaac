@@ -109,7 +109,7 @@ Choose physics configuration based on your use case:
 
 ```bash
 # High precision training (slower but more accurate)
-python train.py task=BoxGrasping  # Uses /physics/accurate automatically
+python train.py task=BoxGrasping +defaults=[config,/physics/accurate]
 
 # Fast physics for visualization (faster but less precise)
 python train.py -cn test_render   # Uses /physics/fast automatically
@@ -162,7 +162,7 @@ python train.py +defaults=[config,/physics/fast] render=true
 
 ```bash
 # Training examples with different physics configs
-python train.py task=BoxGrasping                    # Uses accurate physics (default)
+python train.py task=BoxGrasping +defaults=[config,/physics/accurate]  # Explicit accurate physics
 python train.py task=BaseTask                       # Uses default physics
 python train.py +defaults=[config,/physics/fast]   # Override with fast physics
 

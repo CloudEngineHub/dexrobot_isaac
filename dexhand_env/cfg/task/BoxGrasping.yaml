@@ -2,7 +2,6 @@
 # BoxGrasping task configuration - inherits from BaseTask
 defaults:
   - BaseTask
-  - /physics/accurate      # Override with accurate physics
   - _self_
 
 # Override only RL environment timing

@@ -64,13 +64,13 @@ physx:
   num_position_iterations: 32   # High iteration count for precision
 ```
 
-**Use cases:** BoxGrasping training, complex contact scenarios (~2-3x slower but higher quality)
+**Use cases:** Complex contact scenarios requiring high precision (~2-3x slower but higher quality)
 
 ### Selecting Physics Configurations
 
 #### In Task Files
 ```yaml
-# dexhand_env/cfg/task/BoxGrasping.yaml
+# Example: Custom task with high-precision physics
 defaults:
   - BaseTask
   - /physics/accurate      # Use high-precision physics
