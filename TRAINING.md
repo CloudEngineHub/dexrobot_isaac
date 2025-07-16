@@ -4,6 +4,7 @@ This document describes how to train reinforcement learning policies for the Dex
 
 **Related Documentation:**
 - [Getting Started](docs/GETTING_STARTED.md) - Quick setup and first training run
+- [Configuration System Guide](docs/guide-configuration-system.md) - 4-section hierarchy and physics configs
 - [System Architecture](docs/ARCHITECTURE.md) - Design principles and component structure
 - [Task Creation Guide](docs/guide-task-creation.md) - Creating custom manipulation tasks
 - [DOF and Action Control API](docs/reference-dof-control-api.md) - Understanding action spaces
@@ -91,13 +92,35 @@ checkpoint=runs/experiment_dir       # Auto-finds .pth file in directory
 
 ## Configuration Structure
 
+The DexHand system uses a clean 4-section configuration hierarchy. See the [Configuration System Guide](docs/guide-configuration-system.md) for detailed information.
+
 ### Main Configuration Sections
 
-- **task**: Task-specific settings (loaded from `dexhand_env/cfg/task/`)
-- **train**: Training algorithm configuration (loaded from `dexhand_env/cfg/train/`)
-- **env**: Environment settings (num_envs, device, render, record_video)
-- **training**: Training parameters (seed, checkpoint, test mode, max_iterations)
-- **logging**: Logging configuration (experiment_name, log_level, intervals)
+- **`sim`**: Physics simulation parameters (dt, substeps, PhysX settings)
+- **`env`**: Environment setup (numEnvs, device, render, task objects)
+- **`task`**: RL task definition (episodes, observations, rewards, termination)
+- **`train`**: Training algorithm configuration (rl_games parameters, logging)
+
+### Physics Configuration Selection
+
+Choose physics configuration based on your use case:
+
+```bash
+# High precision training (slower but more accurate)
+python train.py task=BoxGrasping  # Uses /physics/accurate automatically
+
+# Fast physics for visualization (faster but less precise)
+python train.py -cn test_render   # Uses /physics/fast automatically
+
+# Custom physics selection
+python train.py +defaults=[config,/physics/accurate]
+python train.py +defaults=[config,/physics/fast] render=true
+```
+
+**Available Physics Configs:**
+- `physics/default`: Balanced quality/performance for BaseTask
+- `physics/fast`: ~2-3x faster for real-time visualization
+- `physics/accurate`: ~2-3x slower but higher precision for training
 
 ### Available Tasks
 
@@ -131,7 +154,43 @@ checkpoint=runs/experiment_dir       # Auto-finds .pth file in directory
 - `logging.experiment_name`: Name for the experiment (auto-generated if null)
 - `logging.log_interval`: Logging interval in episodes (default: 10)
 
-## Examples
+## Configuration Examples
+
+### Physics Configuration Override
+
+```bash
+# Training examples with different physics configs
+python train.py task=BoxGrasping                    # Uses accurate physics (default)
+python train.py task=BaseTask                       # Uses default physics
+python train.py +defaults=[config,/physics/fast]   # Override with fast physics
+
+# Test mode with visualization
+python train.py test=true render=true -cn test_render  # Uses fast physics automatically
+
+# Custom physics + other overrides
+python train.py task=BoxGrasping numEnvs=512 +defaults=[config,/physics/accurate]
+```
+
+### Configuration Hierarchy Overrides
+
+```bash
+# Override sim section (physics)
+python train.py sim.dt=0.01 sim.substeps=8
+
+# Override env section (environment)
+python train.py env.numEnvs=2048 env.render=true
+
+# Override task section (RL parameters)
+python train.py task.episodeLength=300 task.rewardWeights.object_height=2.0
+
+# Override train section (training algorithm)
+python train.py train.seed=123 train.maxIterations=5000
+
+# Complex override example
+python train.py task=BoxGrasping env.numEnvs=1024 sim.dt=0.005 task.episodeLength=400
+```
+
+## Training Examples
 
 ### Resume Training from Checkpoint
 

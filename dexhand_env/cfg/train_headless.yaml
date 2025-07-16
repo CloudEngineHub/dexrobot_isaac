@@ -4,6 +4,7 @@
 defaults:
   - config
   - _self_
+  - /physics/accurate  # Accurate physics for reducing penetration
 
 env:
   render: false

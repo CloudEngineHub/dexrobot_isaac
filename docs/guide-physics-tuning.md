@@ -2,6 +2,10 @@
 
 This guide explains how to tune physics parameters for stable simulation, particularly for GPU pipeline with rendering.
 
+**Related Documentation:**
+- [Configuration System Guide](guide-configuration-system.md) - Modular physics configuration system
+- [System Architecture](ARCHITECTURE.md) - Overall system design principles
+
 ## Problem Symptoms
 
 ### Drift Issues
@@ -14,30 +18,87 @@ This guide explains how to tune physics parameters for stable simulation, partic
 - CUDA memory errors
 - Unstable contact behavior
 
-## Starting Configuration
+## Modular Physics Configuration System
 
-### Current Default Settings (Optimized for Performance)
-Location: `dexhand_env/cfg/task/BaseTask.yaml`
+The DexHand system uses modular physics configurations that can be selected based on your use case:
 
+### Available Physics Configurations
+
+**Location:** `dexhand_env/cfg/physics/`
+
+#### `default.yaml` - Balanced Performance
 ```yaml
-sim:
-  dt: 0.005                       # 200 Hz - high-fidelity physics for optimal performance
-  substeps: 1                     # Reduced due to higher frequency
-  physx:
-    solver_type: 1                # TGS solver
-    num_position_iterations: 6    # Optimized for smaller timestep
-    num_velocity_iterations: 0    # NVIDIA recommended
-    contact_offset: 0.001         # Contact detection distance
-    rest_offset: 0.0005          # Must be < contact_offset for stability
-    contact_collection: 1         # CC_LAST_SUBSTEP (GPU critical)
-    default_buffer_size_multiplier: 4.0  # Optimized for performance
-    gpu_contact_pairs_per_env: 512  # Auto-scaled by num_envs
-    always_use_articulations: true
-    bounce_threshold_velocity: 0.15  # Moderate value for 200 Hz
-    max_depenetration_velocity: 8.0  # Optimized for faster corrections
+# @package sim
+substeps: 4                     # Standard physics substeps
+gravity: [0.0, 0.0, -9.81]
+physx:
+  solver_type: 1                # TGS solver
+  num_position_iterations: 16   # Balanced precision
+  contact_offset: 0.001         # High precision detection
+  rest_offset: 0.0005          # Stability maintenance
+  # ... additional parameters
 ```
 
-**Performance**: These settings provide **6x performance improvement** over previous defaults while maintaining excellent stability for dexterous manipulation tasks.
+**Use cases:** BaseTask, general development, balanced quality/performance
+
+#### `fast.yaml` - Real-time Visualization
+```yaml
+# Inherits from default.yaml and overrides for speed
+defaults: [default, _self_]
+
+substeps: 2                     # Reduced substeps for speed
+physx:
+  num_position_iterations: 8    # Fewer iterations for speed
+  contact_offset: 0.002         # Slightly relaxed precision
+```
+
+**Use cases:** `test_render`, `test_stream`, interactive debugging (~2-3x faster)
+
+#### `accurate.yaml` - High Precision Training
+```yaml
+# Inherits from default.yaml and overrides for precision
+defaults: [default, _self_]
+
+substeps: 16                    # Many substeps for stability
+physx:
+  num_position_iterations: 32   # High iteration count for precision
+```
+
+**Use cases:** BoxGrasping training, complex contact scenarios (~2-3x slower but higher quality)
+
+### Selecting Physics Configurations
+
+#### In Task Files
+```yaml
+# dexhand_env/cfg/task/BoxGrasping.yaml
+defaults:
+  - BaseTask
+  - /physics/accurate      # Use high-precision physics
+  - _self_
+
+# Override timing for task-specific needs
+sim:
+  dt: 0.01                 # Task-specific control frequency
+```
+
+#### In Test Configurations
+```yaml
+# dexhand_env/cfg/test_render.yaml
+defaults:
+  - config
+  - base/test
+  - /physics/fast          # Fast physics for smooth rendering
+  - _self_
+```
+
+#### Via CLI Override
+```bash
+# Select physics configuration at runtime
+python train.py +defaults=[config,/physics/accurate]
+python train.py +defaults=[config,/physics/fast] render=true
+```
+
+See the [Configuration System Guide](guide-configuration-system.md) for detailed customization patterns.
 
 ## Key Parameters Explained
 

@@ -15,6 +15,7 @@ For new users getting started with the DexHand environment:
 
 For developers working with the DexHand environment:
 
+- **[Configuration System](guide-configuration-system.md)** - 4-section hierarchy, physics configs, and customization
 - **[Task Creation Guide](guide-task-creation.md)** - Creating custom manipulation tasks
 - **[Component Initialization](guide-component-initialization.md)** - Understanding the two-stage initialization pattern
 - **[Action Pipeline](guide-action-pipeline.md)** - Action processing and rule-based control
@@ -45,9 +46,10 @@ Documentation organized by system component:
 - **Reset Management**: [Component Initialization](guide-component-initialization.md)
 
 ### Configuration
+- **Configuration System**: [Configuration Guide](guide-configuration-system.md)
 - **Hydra Configuration**: [Training Guide](../TRAINING.md)
 - **CLI Aliases**: [Training Guide](../TRAINING.md)
-- **Configuration Files**: [System Architecture](ARCHITECTURE.md)
+- **Physics Configurations**: [Configuration Guide](guide-configuration-system.md)
 
 ## By Use Case
 
@@ -85,6 +87,7 @@ docs/
 ├── TROUBLESHOOTING.md                 # Common issues and solutions
 ├── git-submodule-setup.md             # Submodule setup and troubleshooting
 ├── GLOSSARY.md                        # Terminology reference
+├── guide-configuration-system.md      # Configuration system guide
 ├── guide-task-creation.md             # Task development guide
 ├── guide-component-initialization.md  # Component setup guide
 ├── guide-action-pipeline.md           # Action processing guide

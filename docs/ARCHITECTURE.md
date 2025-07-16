@@ -45,6 +45,16 @@ Code is optimized for mathematical computation and research workflows:
 - Precomputed indices and transforms
 - Pure functional reward computations
 
+### 5. 4-Section Configuration Hierarchy
+Configuration is organized into four logical sections for clear separation of concerns:
+
+- **`sim`**: Physics simulation parameters (dt, substeps, PhysX settings)
+- **`env`**: Environment setup (numEnvs, task objects, rendering)
+- **`task`**: RL task definition (episodes, observations, rewards, termination)
+- **`train`**: Training algorithm configuration (rl_games parameters, logging)
+
+This hierarchy enables modular physics configurations, task composition, and clear override patterns. See the [Configuration System Guide](guide-configuration-system.md) for detailed usage.
+
 ## System Architecture
 
 ```
