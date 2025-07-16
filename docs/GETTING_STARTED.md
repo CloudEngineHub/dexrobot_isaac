@@ -93,7 +93,7 @@ Navigate to `http://localhost:6006` to see training curves.
 
 ### 3. Test Your Trained Policy
 ```bash
-# Test with visualization (finds latest checkpoint automatically)
+# Test with visualization (finds latest training checkpoint automatically)
 python train.py task=BaseTask test=true checkpoint=latest render=true numEnvs=4
 ```
 
@@ -124,7 +124,7 @@ The BaseTask teaches the hand basic movement and stability without a specific ma
 # Train on box grasping (more complex)
 python train.py task=BoxGrasping numEnvs=1024
 
-# Test the grasping policy
+# Test the grasping policy (latest training checkpoint)
 python train.py task=BoxGrasping test=true checkpoint=latest render=true
 ```
 

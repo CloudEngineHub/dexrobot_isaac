@@ -41,5 +41,5 @@ train:
     logLevel: "info"
     noLogFile: false
   experiment:
-    maxRecentRuns: 10      # Maximum number of recent experiments to show in runs/ (older ones archived to runs_all/)
-    useCleanWorkspace: true # Enable clean workspace management (symlinks recent runs, archives all runs)
+    maxTrainRuns: 10       # Maximum number of recent training runs to keep in workspace
+    maxTestRuns: 10        # Maximum number of recent testing runs to keep in workspace

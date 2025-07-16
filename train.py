@@ -160,22 +160,7 @@ def main(cfg: DictConfig):
     # Create experiment manager and output directory
     experiment_manager = create_experiment_manager(cfg)
     output_dir = experiment_manager.create_experiment_directory(experiment_name)
-
-    # Log experiment management status
-    status = experiment_manager.get_status_summary()
-    if status["clean_workspace_enabled"]:
-        logger.debug(
-            f"Experiment directory created: {output_dir} (workspace management enabled)"
-        )
-        logger.debug(
-            f"Status: {status['total_archived_experiments']} archived, {status['recent_workspace_experiments']} recent, {status['pinned_experiments']} pinned"
-        )
-    else:
-        logger.debug(f"Experiment directory created: {output_dir} (legacy mode)")
-
-    # Run one-time migration if this is first use of new system
-    if status["clean_workspace_enabled"] and status["total_archived_experiments"] == 1:
-        experiment_manager.migrate_existing_runs()
+    logger.debug(f"Experiment directory created: {output_dir}")
 
     # Configure logging level
     logger.remove()  # Remove default handler

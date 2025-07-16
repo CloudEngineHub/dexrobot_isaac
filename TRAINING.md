@@ -86,7 +86,9 @@ python train.py logLevel=warning  # Only show warnings and errors
 python train.py task=BoxGrasping env.numEnvs=1024 env.render=true
 
 # Smart checkpoint resolution:
-checkpoint=latest                    # Auto-finds latest experiment (any task)
+checkpoint=latest                    # Auto-finds latest training experiment
+checkpoint=latest_train              # Explicit latest training experiment
+checkpoint=latest_test               # Explicit latest testing experiment
 checkpoint=runs/experiment_dir       # Auto-finds .pth file in directory
 ```
 
@@ -270,22 +272,21 @@ runs_all/                   # Permanent archive (all experiments)
 └── BoxGrasping_20240102_150000/
     └── ...
 
-runs/                      # Clean workspace (10 most recent + pinned)
-├── BaseTask_20240101_120000/     # symlink → runs_all/BaseTask_20240101_120000/
-├── BoxGrasping_20240102_150000/  # symlink → runs_all/BoxGrasping_20240102_150000/
-├── ... (8 more recent symlinks)
-└── pinned/                       # User favorites (real directories)
-    ├── .gitkeep
-    ├── best_grasping_model/      # Your favorite experiment
-    └── production_baseline/      # Another favorite
+runs/                      # Clean workspace (recent experiments + latest symlinks)
+├── BaseTask_train_20240101_120000/     # symlink → runs_all/BaseTask_train_20240101_120000/
+├── BoxGrasping_test_20240102_150000/   # symlink → runs_all/BoxGrasping_test_20240102_150000/
+├── ... (more recent symlinks)
+├── latest_train                        # symlink → latest training experiment
+└── latest_test                         # symlink → latest testing experiment
 ```
 
 ### Workspace Management Features
 
-- **Clean workspace**: `runs/` shows only your 10 most recent experiments plus pinned favorites
+- **Clean workspace**: `runs/` shows recent training and testing experiments as symlinks
 - **Full archive**: `runs_all/` contains all experiments permanently (never auto-deleted)
-- **Pinning favorites**: Move important experiments to `runs/pinned/` to keep them always visible
-- **Automatic cleanup**: Old symlinks are removed automatically to keep workspace tidy
+- **Separate limits**: Configurable limits for training runs (`maxTrainRuns`) and testing runs (`maxTestRuns`)
+- **Latest symlinks**: `runs/latest_train` and `runs/latest_test` always point to most recent experiments
+- **Automatic cleanup**: Old symlinks are removed automatically to maintain configured limits
 - **Smart checkpoint resolution**: CLI tools find checkpoints in both locations automatically
 
 ## Monitoring Training
