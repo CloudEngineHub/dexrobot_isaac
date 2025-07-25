@@ -13,7 +13,6 @@ With critical RL penetration issue resolved, focusing on architectural improveme
 
 #### Core Architecture Fixes (`refactor_*`)
 Code quality improvements and architectural enhancements.
-- [ ] `refactor-002-graphics-manager-in-parent.md` - Align GraphicsManager with component architecture patterns
 - [ ] `refactor-001-episode-length.md` - Determine optimal config location for `episode_length` (env vs task)
 
 ### Medium Priority Tasks
@@ -57,6 +56,13 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **refactor-002-graphics-manager-in-parent.md** (2025-07-25) - **MAJOR** - Graphics component architecture alignment
+  - Refactored VideoManager and ViewerController to follow established component architecture pattern
+  - Removed direct sibling dependencies from constructors (graphics_manager, gym, sim, env_handles)
+  - Added property decorators for accessing dependencies via parent references
+  - Updated DexHandBase instantiation calls to pass only parent references
+  - Achieved architectural consistency with ActionProcessor, RewardCalculator, and other components
+  - Maintained exact functionality while improving fail-fast behavior and maintainability
 - ✅ **refactor-006-action-processing.md** (2025-07-25) - **MAJOR** - Action processing timing refactoring
   - Split action processing into pre-action (post_physics) and post-action (pre_physics) phases
   - Moved observation computation from DexHandBase.pre_physics_step to StepProcessor.process_physics_step
@@ -82,8 +88,7 @@ Project organization, tooling, and workflow improvements.
 ## Strategic Development Plan
 
 ### Phase 1: Core Architecture (Current Priority)
-1. **refactor-002-graphics-manager-in-parent.md** - Component pattern alignment (highest priority)
-2. **refactor-001-episode-length.md** - Config structure cleanup
+1. **refactor-001-episode-length.md** - Config structure cleanup (highest priority)
 
 ### Phase 2: System Stability (Short-term)
 3. **fix-000-tb-metrics.md** - Essential debugging capability
@@ -102,8 +107,8 @@ Project organization, tooling, and workflow improvements.
 14. **doc-***: Documentation improvements and illustrations
 
 ### Task Complexity Assessment
-- **High complexity**: refactor-002 (graphics architecture)
-- **Medium complexity**: fix-000 (tensorboard metrics), refactor-007-step-architecture (architecture investigation)
+- **High complexity**: refactor-007-step-architecture (architecture investigation)
+- **Medium complexity**: fix-000 (tensorboard metrics), refactor-001 (episode-length config structure)
 - **Low complexity**: Most feat-* tasks, config cleanups, import organization, doc-* tasks
 
 ---
