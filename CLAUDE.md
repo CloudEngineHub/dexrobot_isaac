@@ -185,6 +185,69 @@ Before implementing:
 2. Ensure changes align with the component's purpose
 3. If unsure, study how existing features use the abstraction
 
+## AI Development Workflow
+
+This project uses a structured 3-phase workflow for managing development tasks, with all todo items organized in the `@prompts/` directory and tracked in `@ROADMAP.md`.
+
+### Task Organization
+
+**Task Categories (by prefix):**
+- `meta_*`: Workflow, tooling, and project organization
+- `refactor_*`: Code quality improvements and architectural enhancements
+- `feat_*`: New functionality and API enhancements
+- `fix_*`: Bug fixes and issue resolution
+- `rl_*`: Research tasks - policy tuning, physics, reward engineering
+
+**File Structure:**
+```
+@prompts/
+├── meta-001-programming-guideline.md
+├── refactor-001-episode-length.md
+├── rl-000-penetration.md
+└── ...
+```
+
+### 3-Phase Development Process
+
+**Phase 1: Ultrathink & Context Gathering**
+- Read todo item from `@prompts/`
+- Use sequential thinking to understand problem context and scope
+- Consider architectural constraints (two-stage init, component boundaries, fail-fast philosophy)
+- For RL tasks: analyze physics implications and policy behavior
+- Expand brief todo into detailed PRD/architecture document
+
+**Phase 2: Implementation Planning**
+- Create detailed step-by-step implementation plan
+- Identify which components will be modified
+- Check for architectural principle violations
+- Plan testing approach using existing test commands
+- Request explicit user approval before proceeding
+
+**Phase 3: Implementation & Validation**
+- Execute plan methodically using TodoWrite for progress tracking
+- Maintain component responsibility separation
+- Follow single source of truth principles
+- Test thoroughly with project's test commands
+- Request user review and explicit confirmation of issue resolution
+- Update `@ROADMAP.md` with completion status
+
+### Workflow Rules
+
+1. **One item per session**: Focus on single todo item for quality
+2. **No premature resolution claims**: Always request user confirmation
+3. **Respect architectural constraints**: Two-stage init, component boundaries, fail-fast
+4. **Test thoroughly**: Use existing test commands before claiming completion
+5. **Update tracking**: Mark todos complete and update @ROADMAP.md
+
+### Quality Gates
+
+- All code must pass existing test commands
+- Component responsibilities must be respected
+- Two-stage initialization must be maintained
+- No defensive programming allowed (fail fast principle)
+- User must explicitly confirm issue resolution
+- Git commits must reflect ALL changes made
+
 ## Component Architecture
 
 ### Two-Stage Initialization Pattern
@@ -408,7 +471,7 @@ When asked to "optimize without changing logic":
 
 ## Project Status
 
-See [`ROADMAP.md`](ROADMAP.md) for detailed project status, completed features, and future development plans.
+See [`@ROADMAP.md`](@ROADMAP.md) for detailed project status, completed features, and future development plans.
 
 ## Essential Documentation
 - **Critical Caveats**: [`docs/design_decisions.md`](docs/design_decisions.md) - READ FIRST!
