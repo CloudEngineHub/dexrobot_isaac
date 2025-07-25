@@ -181,6 +181,18 @@ class BoxGraspingTask(DexTask):
         self.fingerpad_proximity_decay = reward_calc["fingerpad_proximity_decay"]
         self.base_stability_decay = reward_calc["base_stability_decay"]
 
+        # Load penetration prevention parameters
+        penetration_cfg = task_config.get("penetrationPrevention", {})
+        self.geometric_penetration_factor = penetration_cfg.get(
+            "geometricPenetrationFactor", 1.0
+        )
+        self.proximity_min_distance_factor = penetration_cfg.get(
+            "proximityMinDistanceFactor", 1.0
+        )
+        self.penetration_depth_scale = penetration_cfg.get(
+            "penetrationDepthScale", 100.0
+        )
+
         # Quality evaluation thresholds
         quality_thresh = task_config["quality_thresholds"]
         self.height_tolerance = quality_thresh["height_tolerance"]
@@ -1037,6 +1049,9 @@ class BoxGraspingTask(DexTask):
         )
         rewards["s2_completion"] = stage2_transition_successful.float()
 
+        # Penetration prevention penalty (applies to all stages)
+        rewards["penetration_penalty"] = self._compute_penetration_penalty(obs_dict)
+
         return rewards
 
     def _compute_stage1_rewards(self, obs_dict, stage1_mask):
@@ -1114,9 +1129,14 @@ class BoxGraspingTask(DexTask):
         )
         rewards["s2_grasp_achievement"] = grasp_state.float() * stage2_mask.float()
 
-        # Fingerpad proximity reward - encourage getting closer to object
-        avg_distance = obs_dict["avg_finger_to_object_distance"]
-        proximity_reward = torch.exp(-self.fingerpad_proximity_decay * avg_distance)
+        # Fingerpad proximity reward with penetration protection
+        _, min_distances = self._detect_geometric_penetration(obs_dict)
+        min_box_half_size = self.box_size / 2.0
+
+        # Clamp minimum distance to prevent penetration exploitation
+        min_reward_distance = min_box_half_size * self.proximity_min_distance_factor
+        safe_distances = torch.clamp(min_distances, min=min_reward_distance)
+        proximity_reward = torch.exp(-self.fingerpad_proximity_decay * safe_distances)
         rewards["s2_fingerpad_proximity"] = proximity_reward * stage2_mask.float()
 
         # Hand base stability reward - encourage smooth base motion during contact establishment
@@ -1156,6 +1176,38 @@ class BoxGraspingTask(DexTask):
         rewards["s3_grasp_duration"] = grasp_duration_reward * stage3_mask.float()
 
         return rewards
+
+    def _detect_geometric_penetration(self, obs_dict):
+        """Detect fingertip penetration inside box volume."""
+        fingertip_positions = obs_dict["fingertip_poses_world"].view(-1, 5, 7)[:, :, :3]
+        box_positions_expanded = self.box_positions.unsqueeze(1)  # (num_envs, 1, 3)
+
+        # Calculate distance from each fingertip to box center
+        distances = torch.norm(fingertip_positions - box_positions_expanded, dim=-1)
+        min_distances = distances.min(dim=1)[0]  # Closest fingertip per env
+
+        # Configurable geometric penetration threshold
+        penetration_threshold = (
+            self.box_size / 2.0
+        ) * self.geometric_penetration_factor
+        penetration_detected = min_distances < penetration_threshold
+        return penetration_detected, min_distances
+
+    def _compute_penetration_penalty(self, obs_dict):
+        """Continuous penalty proportional to penetration depth."""
+        geometric_penetration, min_distances = self._detect_geometric_penetration(
+            obs_dict
+        )
+
+        # Calculate penetration depth (how far inside the box)
+        penetration_threshold = (
+            self.box_size / 2.0
+        ) * self.geometric_penetration_factor
+        penetration_depth = torch.clamp(penetration_threshold - min_distances, min=0.0)
+
+        # Continuous penalty: larger penetration = larger penalty
+        penalty = penetration_depth * self.penetration_depth_scale
+        return penalty
 
     def check_task_success_criteria(
         self, obs_dict: Optional[Dict[str, torch.Tensor]] = None

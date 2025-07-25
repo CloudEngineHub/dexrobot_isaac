@@ -23,9 +23,6 @@ env:
       xy_range: 0.02    # ±2cm randomization
       z: 0.025          # Fixed on table (box half-size)
 
-training:
-  maxIterations: 30000
-
 # Task configuration - all RL-related settings
 task:
   name: BoxGrasping
@@ -37,6 +34,12 @@ task:
 
   # Contact detection
   contactBinaryThreshold: 0.1
+
+  # Penetration prevention parameters
+  penetrationPrevention:
+    geometricPenetrationFactor: 1.0         # Fraction of half box size for detection
+    proximityMinDistanceFactor: 1.0         # Minimum distance clamp for proximity reward
+    penetrationDepthScale: 100.0            # Scaling factor for continuous penetration penalty
 
   # Policy observation keys - what the policy actually sees (blind policy design)
   policyObservationKeys:
@@ -143,6 +146,9 @@ task:
     # Stage completion bonuses (one-time when transitioning)
     s1_completion: 500.0            # Bonus for completing stage 1 (pre-grasp)
     s2_completion: 1000.0           # Bonus for completing stage 2 (grasp)
+
+    # Penetration prevention
+    penetration_penalty: -100.0     # Strong penalty for penetration behavior
 
     # Termination rewards (one-time at episode end)
     termination_success: 2000.0       # Large bonus for successful grasp and lift
