@@ -161,8 +161,11 @@ class ResetManager:
                 actor_index=self.hand_local_actor_index,
             )
 
-            # Reset action processor targets to avoid jumps after reset
-            self.action_processor.reset_targets(env_ids)
+            # Reset action processor targets to match current DOF positions
+            # This ensures that any DOF position changes made by the task
+            # have corresponding target updates to prevent PD control conflicts
+            current_dof_positions = self.dof_state[env_ids, :, 0]  # Position column
+            self.action_processor.reset_targets(env_ids, current_dof_positions)
 
             # Run a physics step to integrate the DOF changes
             # This is critical to ensure rigid body positions are updated to match DOF states

@@ -483,11 +483,26 @@ class ActionProcessor:
             coupling_scales_list, dtype=torch.float32, device=self.device
         )
 
-        # Find middle finger spread index
-        if "r_f_joint3_1" in dof_name_to_idx:
-            self.middle_finger_spread_idx = dof_name_to_idx["r_f_joint3_1"]
-        else:
-            raise RuntimeError("Middle finger spread joint 'r_f_joint3_1' not found")
+        # Find middle finger spread index - fail fast if missing
+        if "r_f_joint3_1" not in dof_name_to_idx:
+            raise RuntimeError(
+                "r_f_joint3_1 (middle finger spread) not found in DOF names - this indicates initialization bug"
+            )
+        self.middle_finger_spread_idx = dof_name_to_idx["r_f_joint3_1"]
+
+        # Pre-compute inverse mapping for efficient extract_active_targets_from_full_dof
+        # Map from DOF indices to finger control indices and scales
+        self.inverse_dof_to_finger = torch.full(
+            (self.num_dof,), -1, dtype=torch.long, device=self.device
+        )
+        self.inverse_dof_scales = torch.ones(
+            self.num_dof, dtype=torch.float32, device=self.device
+        )
+
+        # Populate inverse mapping using existing coupling data
+        for i, (finger_idx, dof_idx) in enumerate(self.coupling_indices):
+            self.inverse_dof_to_finger[dof_idx] = finger_idx
+            self.inverse_dof_scales[dof_idx] = self.coupling_scales[i]
 
     @initialization_only
     def _precompute_action_mask(self):
@@ -508,29 +523,46 @@ class ActionProcessor:
         if self.policy_controls_fingers:
             self.active_target_mask[self.NUM_BASE_DOFS :] = True
 
-    def reset_targets(self, env_ids=None):
+    def reset_targets(self, env_ids=None, dof_positions=None):
         """
-        Reset previous targets to match current DOF positions.
+        Reset targets to specified DOF positions or zero.
         Should be called after environment reset to avoid jumps.
 
         Args:
             env_ids: Optional tensor of environment IDs to reset. If None, reset all.
+            dof_positions: Optional tensor of DOF positions to set targets to.
+                          If None, targets are set to zero (default behavior).
+                          Shape: (len(env_ids), num_dofs) or (num_envs, num_dofs) if env_ids is None.
         """
-        if env_ids is None:
-            # Reset all environments
-            self.active_prev_targets.zero_()
-        else:
-            # Reset specific environments
-            self.active_prev_targets[env_ids] = 0.0
-
-        # Also reset full targets to ensure consistency
         if self.full_dof_targets is None:
             raise RuntimeError("full_dof_targets is None - initialization failed")
 
-        if env_ids is None:
-            self.full_dof_targets.zero_()
+        if dof_positions is not None:
+            # Set targets to match provided DOF positions
+            if env_ids is None:
+                # Reset all environments with provided positions
+                active_targets = self.extract_active_targets_from_full_dof(
+                    dof_positions
+                )
+                self.active_prev_targets[:] = active_targets
+                self.full_dof_targets[:] = dof_positions
+            else:
+                # Reset specific environments with provided positions
+                active_targets = self.extract_active_targets_from_full_dof(
+                    dof_positions
+                )
+                self.active_prev_targets[env_ids, :] = active_targets
+                self.full_dof_targets[env_ids, :] = dof_positions
         else:
-            self.full_dof_targets[env_ids] = 0.0
+            # Default behavior: set targets to zero
+            if env_ids is None:
+                # Reset all environments
+                self.active_prev_targets.zero_()
+                self.full_dof_targets.zero_()
+            else:
+                # Reset specific environments
+                self.active_prev_targets[env_ids] = 0.0
+                self.full_dof_targets[env_ids] = 0.0
 
         # Apply the reset targets to the simulation to ensure DOFs move to reset position
         self.gym.set_dof_position_target_tensor(
@@ -579,10 +611,61 @@ class ActionProcessor:
         full_targets[batch_indices, dof_indices] = scaled_values
 
         # Set middle finger spread to 0
-        if self.middle_finger_spread_idx is not None:
-            full_targets[:, self.middle_finger_spread_idx] = 0.0
+        full_targets[:, self.middle_finger_spread_idx] = 0.0
 
         return full_targets
+
+    def extract_active_targets_from_full_dof(self, full_dof_positions):
+        """
+        Extract active targets (18D) from full DOF positions (26D).
+        This is the inverse of apply_coupling() operation.
+        Uses precomputed inverse mapping for efficient vectorized operation.
+
+        Args:
+            full_dof_positions: Full DOF positions (batch_size, 26)
+
+        Returns:
+            Active targets (batch_size, 18) - 6 base + 12 finger controls
+        """
+        # Ensure inverse mapping is available (set during initialize_from_config)
+        if self.inverse_dof_to_finger is None:
+            raise RuntimeError(
+                "Inverse mapping not available. Cannot extract active targets."
+            )
+
+        batch_size = full_dof_positions.shape[0]
+        active_targets = torch.zeros(
+            (batch_size, self.NUM_BASE_DOFS + self.NUM_ACTIVE_FINGER_DOFS),
+            device=self.device,
+        )
+
+        # Extract base targets directly (1:1 mapping)
+        active_targets[:, : self.NUM_BASE_DOFS] = full_dof_positions[
+            :, : self.NUM_BASE_DOFS
+        ]
+
+        # Extract finger targets using precomputed inverse mapping (vectorized)
+        finger_dof_start = self.NUM_BASE_DOFS
+        finger_dof_positions = full_dof_positions[:, finger_dof_start:]
+        finger_indices = self.inverse_dof_to_finger[finger_dof_start:]
+        scales = self.inverse_dof_scales[finger_dof_start:]
+
+        # Create mask for valid mappings (finger_indices >= 0)
+        valid_mask = finger_indices >= 0
+
+        if valid_mask.any():
+            # Vectorized extraction: divide by scales and assign to correct finger indices
+            valid_dof_positions = finger_dof_positions[:, valid_mask]
+            valid_finger_indices = finger_indices[valid_mask]
+            valid_scales = scales[valid_mask]
+
+            # Scale the DOF positions and scatter to finger targets
+            scaled_positions = valid_dof_positions / valid_scales.unsqueeze(0)
+            active_targets[
+                :, self.NUM_BASE_DOFS + valid_finger_indices
+            ] = scaled_positions
+
+        return active_targets
 
     # ============================================================================
     # Public API for Rule Registration (delegates to ActionRules)

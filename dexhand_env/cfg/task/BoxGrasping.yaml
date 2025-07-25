@@ -6,12 +6,13 @@ defaults:
 
 # Override only RL environment timing
 sim:
-  dt: 0.01                     # Task-specific 100Hz RL timing
+  dt: 0.01                     # Task-specific 100Hz physics timing
   # substeps + physx parameters inherited from physics/accurate.yaml
 
 # Environment and world setup
 env:
   numEnvs: ${env.numEnvs}
+  episodeLength: 500  # 10 seconds at 50Hz
   # Box properties
   box:
     size: 0.05  # 5cm cube
@@ -25,7 +26,6 @@ env:
 # Task configuration - all RL-related settings
 task:
   name: BoxGrasping
-  episodeLength: 500  # 10 seconds at 50Hz
 
   # Velocity limits
   maxBaseLinearVelocity: 0.1
@@ -50,6 +50,9 @@ task:
     - first_three_fingerpad_centroid  # Centroid of first 3 fingerpads for spatial awareness
     - episode_time       # Episode progress
     - fingerpad_distances # Pairwise distances between fingerpads
+    - current_stage      # Stage state machine (0=pre-grasp, 1=grasp, 2=lift)
+    - time_in_stage      # Time spent in current stage (seconds)
+    - stage_progress     # Progress through current stage (0.0-1.0)
     # NO box observations - policy is blind!
     # grasp_duration is privileged info - not exposed to policy
 
@@ -57,7 +60,7 @@ task:
   termination:
     # Specify which criteria are active (fail-fast if any are missing)
     activeSuccessCriteria: ["grasp_lift_success"]
-    activeFailureCriteria: ["hitting_ground", "box_too_far"]
+    activeFailureCriteria: ["hitting_ground", "box_too_far", "stage1_pregrasp_failed", "stage2_contact_failed", "stage3_grasp_lost"]
 
     # Height thresholds for ground collision detection
     height_safety:
@@ -69,21 +72,74 @@ task:
   success_height_threshold: 0.2     # Object must be lifted above this height (meters)
   contact_duration_threshold: 2.0   # Minimum contact duration for success (seconds)
   min_fingers_for_grasp: 2          # Minimum number of fingers required for valid grasp
-  max_box_distance: 0.6             # Reset if box moves beyond this distance (meters)
+  max_box_distance: 0.8             # Reset if box moves beyond this distance (meters)
+
+  # Stage timing parameters for multi-stage approach
+  stage1_duration: 4.0               # Pre-grasp stage duration (seconds)
+  stage2_duration: 3.0               # Grasp stage max duration before timeout (seconds)
+  # Stage 3 (lift) has no duration limit - ends with success/failure
+
+  # Hand randomization parameters
+  hand_translation_range: 0.2        # ±0.2m randomization for ARTx, ARTy, ARTz
+  hand_rotation_range: 0.785         # ±45° (π/4 radians) for ARRx, ARRy, ARRz
+
+  # Finger randomization parameters
+  finger_randomization:
+    thumb_rotation_range: 1.571     # 0-90 degrees (π/2 radians) for r_f_joint1_1
+    other_finger_range: 0.524       # 0-30 degrees (π/6 radians) for other finger DOFs
+
+  # Stage evaluation parameters
+  stage_evaluation:
+    stage2_contact_success_threshold: 0.5      # Contact duration for stage 2 success
+
+  # Reward calculation parameters
+  reward_calculation:
+    height_alignment_decay: 5.0                # Exponential decay factor for height alignment
+    centroid_positioning_decay: 5.0           # Exponential decay factor for centroid positioning
+    object_stability_decay: 100.0              # Exponential decay factor for object stability
+    first_three_height_consistency_decay: 50.0 # Exponential decay factor for first three fingerpad height consistency
+    fingerpad_proximity_decay: 10.0            # Exponential decay factor for Stage 2 fingerpad proximity to object
+    base_stability_decay: 20.0                # Exponential decay factor for hand base stability during Stage 2
+
+  # Quality evaluation thresholds
+  quality_thresholds:
+    height_tolerance: 0.03                     # Height tolerance for pregrasp quality (meters)
+    centroid_tolerance: 0.08                   # Centroid distance tolerance (meters)
+    position_drift_tolerance: 0.01            # Position drift tolerance (meters)
+    velocity_tolerance: 0.005                  # Velocity magnitude tolerance (m/s)
+
+
+  # Visual settings
+  visualization:
+    box_color: [0.5, 0.8, 1.0]                # RGB color for box (light blue)
 
   # Reward weights configuration - override BaseTask completely
   rewardWeights:
     _delete_: true  # Delete parent rewardWeights to ensure BoxGrasping has complete control
 
-    # Task-specific rewards only
-    object_height: 2.0             # Main reward for lifting object
-    thumb_touching: 0.5            # Reward when thumb touches box (larger weight)
-    other_fingers_touching: 0.25    # Reward when any other finger touches box (smaller weight)
-    grasp_state: 2.0               # Reward when thumb + another finger touch box (much larger weight)
-    finger_to_object_height: 0.15  # Reward for getting fingers at same height as object (increased weight)
-    hand_to_object: 0.05            # Reward for getting hand close to object (smaller weight)
-    fingerpad_to_box_centroid: 0.75  # Reward for centering first 3 fingerpads around box centroid (increased weight)
-    grasp_duration: 20.0             # Reward for maintaining grasp
+    # Unified stage-based reward system (removes redundancy)
+    # Stage 1: Pre-grasp rewards
+    s1_height_alignment: 0.3      # Height alignment reward
+    s1_centroid_positioning: 1.0  # Centroid positioning reward
+    s1_object_stability: 0.2               # Object stability reward
+    s1_finger_height_consistency: 0.4  # Height consistency reward for first three fingerpads
+    s1_thumb_rotation: 0.3   # Reward for thumb rotation near 90° during Stage 1
+
+    # Stage 2: Contact establishment
+    s2_thumb_contact: 0.3           # Reward for thumb contact specifically
+    s2_other_fingers_contact: 0.2   # Reward for other finger contact
+    s2_grasp_achievement: 1.0              # Grasp formation reward
+    s2_fingerpad_proximity: 0.5     # Reward for fingerpads approaching object during Stage 2
+    s2_base_stability: 0.4          # Reward for stable hand base during contact establishment
+
+    # Stage 3: Lifting rewards
+    s3_object_height: 5.0                  # Main reward for lifting object
+    s3_grasp_maintenance: 5.0              # Reward for maintaining grasp during lift
+    s3_grasp_duration: 1.0                 # Reward for maintaining grasp duration
+
+    # Stage completion bonuses (one-time when transitioning)
+    s1_completion: 500.0            # Bonus for completing stage 1 (pre-grasp)
+    s2_completion: 1000.0           # Bonus for completing stage 2 (grasp)
 
     # Termination rewards (one-time at episode end)
     termination_success: 2000.0       # Large bonus for successful grasp and lift

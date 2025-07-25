@@ -221,7 +221,9 @@ class ObservationEncoder:
                 total_dim += dim
                 logger.debug(f"  {key}: {dim}")
             else:
-                logger.warning(f"  {key}: MISSING")
+                raise RuntimeError(
+                    f"Observation key '{key}' MISSING during initialization - fail fast"
+                )
 
         test_obs_tensor = self._concat_selected_observations(merged_obs_dict)
 
@@ -274,6 +276,11 @@ class ObservationEncoder:
     def cfg(self):
         """Access configuration from parent (single source of truth)."""
         return self.parent.cfg
+
+    @property
+    def task_cfg(self):
+        """Access task configuration from parent (single source of truth)."""
+        return self.parent.task_cfg
 
     # set_control_dt method removed - control_dt now accessed via property decorator from physics_manager
 
@@ -372,9 +379,8 @@ class ObservationEncoder:
         if self.prev_actions is not None:
             self.prev_actions[env_ids] = 0
 
-        # Reset task states
-        for state_name, state_tensor in self.task_states.items():
-            state_tensor[env_ids] = 0
+        # Task states are managed by the task's reset_task_state() method
+        # Don't reset them here to avoid overriding task-specific initialization
 
     def register_task_state(
         self, name: str, shape: Tuple[int, ...], dtype: torch.dtype = torch.float32
@@ -703,7 +709,7 @@ class ObservationEncoder:
 
         # Binary contact indicators (touch/no-touch for each finger)
         # Reduces sim2real gap by abstracting exact force magnitudes
-        contact_binary_threshold = self.cfg.get("contactBinaryThreshold", 1.0)
+        contact_binary_threshold = self.task_cfg.get("contactBinaryThreshold", 1.0)
         contact_binary = (
             contact_magnitudes > contact_binary_threshold
         )  # Shape: (num_envs, num_fingers)
@@ -813,8 +819,8 @@ class ObservationEncoder:
 
                 obs_tensors.append(tensor)
             else:
-                logger.warning(
-                    f"Observation key '{key}' not found in observation dictionary"
+                raise RuntimeError(
+                    f"Observation key '{key}' not found in observation dictionary - fail fast"
                 )
 
         if obs_tensors:

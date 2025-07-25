@@ -281,28 +281,16 @@ def main(cfg: DictConfig):
     # Set seed
     set_seed(cfg.train.seed, cfg.train.torchDeterministic)
 
-    # Resolve entire config with full context first, then extract sections
+    # Resolve entire config with full context
     # This allows interpolations like ${...env.numEnvs} to access the complete config hierarchy
     resolved_cfg = resolve_config_safely(cfg)
-    task_cfg = resolved_cfg["task"]
     train_cfg = resolved_cfg["train"]
 
-    # Ensure task_cfg has env section for RL framework compatibility
-    if "env" not in task_cfg:
-        task_cfg["env"] = resolved_cfg["env"].copy()
+    # Add physics_engine to root level for VecTask compatibility (only needed addition)
+    resolved_cfg["physics_engine"] = resolved_cfg["sim"]["physics_engine"]
 
-    # Ensure task_cfg has sim section for DexHandBase compatibility
-    if "sim" not in task_cfg:
-        task_cfg["sim"] = resolved_cfg["sim"].copy()
-
-    # Add episodeLength to env section for VecTask compatibility
-    task_cfg["env"]["episodeLength"] = task_cfg["episodeLength"]
-
-    # Add physics_engine to root level for VecTask compatibility
-    task_cfg["physics_engine"] = task_cfg["sim"]["physics_engine"]
-
-    # Pass logging level to environment (merge logLevel configurations)
-    task_cfg["env"]["logLevel"] = cfg.train.logging.logLevel
+    # Pass logging level to environment
+    resolved_cfg["env"]["logLevel"] = cfg.train.logging.logLevel
 
     # Update training config with runtime parameters (only truly dynamic values)
     train_cfg["config"]["full_experiment_name"] = experiment_name
@@ -422,7 +410,7 @@ def main(cfg: DictConfig):
     # Create environment creator function
     env_creator = create_env_fn(
         task_name=cfg.task.name,
-        cfg=task_cfg,
+        cfg=resolved_cfg,
         num_envs=cfg.env.numEnvs,
         sim_device=cfg.env.device,
         rl_device=cfg.env.device,

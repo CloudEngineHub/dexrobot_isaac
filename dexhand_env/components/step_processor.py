@@ -103,8 +103,8 @@ class StepProcessor:
         task_failure = {}
 
         # Implement ground collision detection
-        if "height_safety" in self.parent.cfg["termination"]:
-            height_thresholds = self.parent.cfg["termination"]["height_safety"]
+        if "height_safety" in self.parent.cfg["task"]["termination"]:
+            height_thresholds = self.parent.cfg["task"]["termination"]["height_safety"]
 
             # Check hand base height
             hand_base_z = self.parent.rigid_body_states[
@@ -129,8 +129,12 @@ class StepProcessor:
             )
 
         # Get task-specific success/failure criteria
-        task_success = self.parent.task.check_task_success_criteria()
-        task_failure = self.parent.task.check_task_failure_criteria()
+        task_success = self.parent.task.check_task_success_criteria(
+            self.parent.obs_dict
+        )
+        task_failure = self.parent.task.check_task_failure_criteria(
+            self.parent.obs_dict
+        )
 
         # Evaluate termination conditions
         return self.parent.termination_manager.evaluate(

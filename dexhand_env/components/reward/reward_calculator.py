@@ -22,18 +22,19 @@ class RewardCalculator:
     - Combine task-specific and common rewards
     """
 
-    def __init__(self, parent, cfg):
+    def __init__(self, parent, task_cfg):
         """
         Initialize the reward calculator.
 
         Args:
             parent: Parent DexHandBase instance
-            cfg: Configuration dictionary
+            task_cfg: Task-specific configuration dictionary
         """
         self.parent = parent
+        self.task_cfg = task_cfg
 
         # Initialize reward weights from config
-        self.reward_weights = cfg.get("rewardWeights", {})
+        self.reward_weights = task_cfg.get("rewardWeights", {})
 
         # Import loguru for debug logging
         from loguru import logger

@@ -23,16 +23,16 @@ class TerminationManager:
     - Timeout: Episode reached max length (neutral reward)
     """
 
-    def __init__(self, parent, cfg):
+    def __init__(self, parent, task_cfg):
         """
         Initialize the termination manager.
 
         Args:
             parent: Parent object (typically DexHandBase) that provides shared properties
-            cfg: Configuration dictionary containing termination settings
+            task_cfg: Task-specific configuration dictionary
         """
         self.parent = parent
-        self.cfg = cfg
+        self.task_cfg = task_cfg
 
         # Episode status tracking
         self.episode_success = torch.zeros(
@@ -44,7 +44,7 @@ class TerminationManager:
 
         # Active criteria lists - read from config, no hardcoded defaults
         # If not specified in config, use empty list (means use all available)
-        termination_cfg = cfg.get("termination", {})
+        termination_cfg = task_cfg.get("termination", {})
         self.active_success_criteria = termination_cfg.get("activeSuccessCriteria", [])
         self.active_failure_criteria = termination_cfg.get("activeFailureCriteria", [])
 
@@ -53,13 +53,18 @@ class TerminationManager:
         self._initialize_reason_tracking()
 
         # Maximum episode length for timeout termination
-        self.max_episode_length = cfg["episodeLength"]
+        self.max_episode_length = parent.env_cfg["episodeLength"]
 
         # Termination rewards - read from reward weights config
-        rewards_cfg = cfg.get("rewardWeights", {})
-        self.success_reward = rewards_cfg.get("termination_success", 10.0)
-        self.failure_penalty = rewards_cfg.get("termination_failure_penalty", 5.0)
-        self.timeout_penalty = rewards_cfg.get("termination_timeout_penalty", 0.0)
+        self.success_reward = task_cfg.get("rewardWeights", {}).get(
+            "termination_success", 10.0
+        )
+        self.failure_penalty = task_cfg.get("rewardWeights", {}).get(
+            "termination_failure_penalty", 5.0
+        )
+        self.timeout_penalty = task_cfg.get("rewardWeights", {}).get(
+            "termination_timeout_penalty", 0.0
+        )
 
         # Raw values for unweighted tracking (before scaling)
         self.RAW_SUCCESS = 1.0
@@ -68,7 +73,7 @@ class TerminationManager:
 
         # Track consecutive successes for curriculum learning
         self.consecutive_successes = 0
-        self.max_consecutive_successes = cfg.get("maxConsecutiveSuccesses", 50)
+        self.max_consecutive_successes = task_cfg.get("maxConsecutiveSuccesses", 50)
 
     @property
     def num_envs(self):
@@ -293,27 +298,24 @@ class TerminationManager:
         # Success rewards
         success_reward = torch.zeros(self.num_envs, device=self.device)
         success_raw = torch.zeros(self.num_envs, device=self.device)
-        if torch.any(success_termination):
-            success_reward[success_termination] = self.success_reward
-            success_raw[success_termination] = self.RAW_SUCCESS
+        success_reward[success_termination] = self.success_reward
+        success_raw[success_termination] = self.RAW_SUCCESS
         rewards["success"] = success_reward
         raw_rewards["success"] = success_raw
 
         # Failure penalties (note: stored as positive in config, applied as negative)
         failure_penalty = torch.zeros(self.num_envs, device=self.device)
         failure_raw = torch.zeros(self.num_envs, device=self.device)
-        if torch.any(failure_termination):
-            failure_penalty[failure_termination] = -self.failure_penalty
-            failure_raw[failure_termination] = self.RAW_FAILURE
+        failure_penalty[failure_termination] = -self.failure_penalty
+        failure_raw[failure_termination] = self.RAW_FAILURE
         rewards["failure_penalty"] = failure_penalty
         raw_rewards["failure_penalty"] = failure_raw
 
         # Timeout penalties (note: stored as positive in config, applied as negative)
         timeout_penalty = torch.zeros(self.num_envs, device=self.device)
         timeout_raw = torch.zeros(self.num_envs, device=self.device)
-        if torch.any(timeout_termination):
-            timeout_penalty[timeout_termination] = -self.timeout_penalty
-            timeout_raw[timeout_termination] = self.RAW_TIMEOUT
+        timeout_penalty[timeout_termination] = -self.timeout_penalty
+        timeout_raw[timeout_termination] = self.RAW_TIMEOUT
         rewards["timeout_penalty"] = timeout_penalty
         raw_rewards["timeout_penalty"] = timeout_raw
 

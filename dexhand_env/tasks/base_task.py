@@ -62,9 +62,15 @@ class BaseTask(DexTask):
         """
         return {}
 
-    def check_task_success_criteria(self) -> Dict[str, torch.Tensor]:
+    def check_task_success_criteria(
+        self, obs_dict: Optional[Dict[str, torch.Tensor]] = None
+    ) -> Dict[str, torch.Tensor]:
         """
         Check task-specific success criteria.
+
+        Args:
+            obs_dict: Optional dictionary of observations. If provided, can be used
+                     for efficiency to avoid recomputing observations.
 
         The base task doesn't define any success criteria.
 
@@ -73,9 +79,15 @@ class BaseTask(DexTask):
         """
         return {}
 
-    def check_task_failure_criteria(self) -> Dict[str, torch.Tensor]:
+    def check_task_failure_criteria(
+        self, obs_dict: Optional[Dict[str, torch.Tensor]] = None
+    ) -> Dict[str, torch.Tensor]:
         """
         Check task-specific failure criteria.
+
+        Args:
+            obs_dict: Optional dictionary of observations. If provided, can be used
+                     for efficiency to avoid recomputing observations.
 
         The base task doesn't define any failure criteria.
 

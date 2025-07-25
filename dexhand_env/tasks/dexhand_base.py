@@ -116,6 +116,12 @@ class DexHandBase(VecTask):
 
         # Core initialization variables
         self.cfg = cfg
+
+        # Create section references to avoid repeated nested access
+        self.env_cfg = self.cfg["env"]
+        self.task_cfg = self.cfg["task"]
+        self.sim_cfg = self.cfg["sim"]
+
         self.video_config = video_config
 
         # Configure logging based on user preferences
@@ -138,11 +144,11 @@ class DexHandBase(VecTask):
         # Set parent environment reference for reward computation
         self.task.parent_env = self
 
-        # Task specific parameters
-        self.max_episode_length = self.cfg["episodeLength"]
+        # Task specific parameters - episodeLength is now in env section
+        self.max_episode_length = self.env_cfg["episodeLength"]
 
         # Physics parameters
-        self.physics_dt = self.cfg["sim"].get("dt", 0.01)  # Physics simulation timestep
+        self.physics_dt = self.sim_cfg.get("dt", 0.01)  # Physics simulation timestep
         self.physics_steps_per_control_step = (
             1  # Will be auto-detected by PhysicsManager
         )
@@ -183,7 +189,7 @@ class DexHandBase(VecTask):
         logger.info("VecTask parent class initialized, creating simulation...")
 
         # After parent initialization, use_gpu_pipeline is available
-        self.use_gpu_pipeline = self.cfg["sim"]["use_gpu_pipeline"]
+        self.use_gpu_pipeline = self.sim_cfg["use_gpu_pipeline"]
         logger.info(
             f"GPU Pipeline: {'enabled' if self.use_gpu_pipeline else 'disabled'}"
         )
@@ -259,7 +265,7 @@ class DexHandBase(VecTask):
 
     def _setup_default_action_rule(self):
         """Set up a default action rule based on control mode."""
-        control_mode = self.cfg.get("controlMode", "position_delta")
+        control_mode = self.task_cfg["controlMode"]
         DefaultActionRules.setup_default_action_rule(
             self.action_processor, control_mode
         )
@@ -348,16 +354,16 @@ class DexHandBase(VecTask):
         # Joint properties (stiffness/damping) now loaded from MJCF model
 
         # Set initial pose from config
-        if "initialHandPos" in self.cfg["env"]:
+        if "initialHandPos" in self.env_cfg:
             self.hand_initializer.set_initial_pose(
-                pos=self.cfg["env"].get("initialHandPos", [0.0, 0.0, 0.5]),
-                rot=self.cfg["env"].get("initialHandRot", [0.0, 0.0, 0.0, 1.0]),
+                pos=self.env_cfg.get("initialHandPos", [0.0, 0.0, 0.5]),
+                rot=self.env_cfg.get("initialHandRot", [0.0, 0.0, 0.0, 1.0]),
             )
 
         # Set contact force bodies from config
-        if "contactForceBodies" in self.cfg:
+        if "contactForceBodies" in self.task_cfg:
             self.hand_initializer.set_contact_force_bodies(
-                self.cfg["contactForceBodies"]
+                self.task_cfg["contactForceBodies"]
             )
 
         # Load hand asset
@@ -453,28 +459,28 @@ class DexHandBase(VecTask):
         )
 
         # Initialize action processor with all configuration at once
-        if "controlMode" not in self.cfg:
+        if "controlMode" not in self.task_cfg:
             raise RuntimeError(
                 "controlMode not specified in config. Must be 'position' or 'position_delta'."
             )
 
         action_processor_config = {
-            "control_mode": self.cfg["controlMode"],
+            "control_mode": self.task_cfg["controlMode"],
             "num_dof": self.num_dof,
-            "policy_controls_hand_base": self.cfg["policyControlsHandBase"],
-            "policy_controls_fingers": self.cfg["policyControlsFingers"],
-            "finger_vel_limit": self.cfg["maxFingerJointVelocity"],
-            "base_lin_vel_limit": self.cfg["maxBaseLinearVelocity"],
-            "base_ang_vel_limit": self.cfg["maxBaseAngularVelocity"],
+            "policy_controls_hand_base": self.task_cfg["policyControlsHandBase"],
+            "policy_controls_fingers": self.task_cfg["policyControlsFingers"],
+            "finger_vel_limit": self.task_cfg["maxFingerJointVelocity"],
+            "base_lin_vel_limit": self.task_cfg["maxBaseLinearVelocity"],
+            "base_ang_vel_limit": self.task_cfg["maxBaseAngularVelocity"],
         }
 
         # Add optional default targets if present
-        if "defaultBaseTargets" in self.cfg:
-            action_processor_config["default_base_targets"] = self.cfg[
+        if "defaultBaseTargets" in self.task_cfg:
+            action_processor_config["default_base_targets"] = self.task_cfg[
                 "defaultBaseTargets"
             ]
-        if "defaultFingerTargets" in self.cfg:
-            action_processor_config["default_finger_targets"] = self.cfg[
+        if "defaultFingerTargets" in self.task_cfg:
+            action_processor_config["default_finger_targets"] = self.task_cfg[
                 "defaultFingerTargets"
             ]
 
@@ -514,10 +520,12 @@ class DexHandBase(VecTask):
         )
 
         # Create termination manager
-        self.termination_manager = TerminationManager(parent=self, cfg=self.cfg)
+        self.termination_manager = TerminationManager(
+            parent=self, task_cfg=self.task_cfg
+        )
 
         # Create reward calculator
-        self.reward_calculator = RewardCalculator(parent=self, cfg=self.cfg)
+        self.reward_calculator = RewardCalculator(parent=self, task_cfg=self.task_cfg)
 
         # Create initialization manager
         self.initialization_manager = InitializationManager(parent=self)
@@ -606,7 +614,7 @@ class DexHandBase(VecTask):
         logger.info("Creating environments and actors...")
 
         # Define environment spacing (configurable)
-        env_spacing = self.cfg["env"].get(
+        env_spacing = self.env_cfg.get(
             "envSpacing", 2.0
         )  # Default 2.0m if not specified
         half_spacing = env_spacing / 2.0
@@ -1092,11 +1100,9 @@ class DexHandBase(VecTask):
         existing_handlers = len(logger._core.handlers)
 
         # Get logging preferences from config (now passed from logging.logLevel)
-        log_level = self.cfg.get("env", {}).get("logLevel", "INFO").upper()
-        enable_debug_logs = self.cfg.get("env", {}).get(
-            "enableComponentDebugLogs", False
-        )
-        force_config_logging = self.cfg.get("env", {}).get("forceConfigLogging", False)
+        log_level = self.env_cfg.get("logLevel", "INFO").upper()
+        enable_debug_logs = self.env_cfg.get("enableComponentDebugLogs", False)
+        force_config_logging = self.env_cfg.get("forceConfigLogging", False)
 
         # Only configure if no handlers exist or explicitly forced via config
         if existing_handlers == 0 or force_config_logging:

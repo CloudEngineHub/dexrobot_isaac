@@ -20,6 +20,69 @@ class DexTask(ABC):
     and failure criteria, and resetting task-specific state.
     """
 
+    @property
+    def task_states(self):
+        """Direct access to task states dict for all tasks."""
+        if self.parent_env is None:
+            raise RuntimeError("parent_env is None - initialization failed")
+        return self.parent_env.observation_encoder.task_states
+
+    def register_task_state(self, name: str, shape: tuple, dtype=torch.float32):
+        """
+        Register a task state with the observation encoder.
+
+        Provides clean access to task state registration without exposing
+        internal observation encoder structure to task implementations.
+
+        Args:
+            name: Name of the task state
+            shape: Shape tuple for the state tensor (e.g., (num_envs,))
+            dtype: PyTorch data type (default: torch.float32)
+
+        Returns:
+            The registered task state tensor
+
+        Example:
+            ```python
+            # Register boolean transition flags
+            self.register_task_state("just_transitioned", (self.num_envs,), dtype=torch.bool)
+
+            # Register float timer states
+            self.register_task_state("stage_timer", (self.num_envs,), dtype=torch.float32)
+            ```
+        """
+        if self.parent_env is None:
+            raise RuntimeError("parent_env is None - initialization failed")
+        return self.parent_env.observation_encoder.register_task_state(
+            name, shape, dtype=dtype
+        )
+
+    @property
+    def observation_encoder(self):
+        """
+        Access observation encoder for DOF operations and state queries.
+
+        Provides clean access to observation encoder functionality without exposing
+        internal parent environment structure to task implementations.
+
+        Returns:
+            ObservationEncoder instance
+
+        Example:
+            ```python
+            # Get DOF value by name
+            thumb_rotation = self.observation_encoder.get_raw_finger_dof(
+                "r_f_joint1_1", "pos", obs_dict
+            )
+
+            # Access DOF name mappings
+            dof_idx = self.observation_encoder.raw_dof_name_to_index["r_f_joint1_1"]
+            ```
+        """
+        if self.parent_env is None:
+            raise RuntimeError("parent_env is None - initialization failed")
+        return self.parent_env.observation_encoder
+
     @abstractmethod
     def compute_task_reward_terms(
         self, obs_dict: Dict[str, torch.Tensor]
@@ -36,9 +99,15 @@ class DexTask(ABC):
         pass
 
     @abstractmethod
-    def check_task_success_criteria(self) -> Dict[str, torch.Tensor]:
+    def check_task_success_criteria(
+        self, obs_dict: Optional[Dict[str, torch.Tensor]] = None
+    ) -> Dict[str, torch.Tensor]:
         """
         Check task-specific success criteria.
+
+        Args:
+            obs_dict: Optional dictionary of observations. If provided, can be used
+                     for efficiency to avoid recomputing observations.
 
         Returns:
             Dictionary of task-specific success criteria (name -> boolean tensor)
@@ -46,9 +115,15 @@ class DexTask(ABC):
         pass
 
     @abstractmethod
-    def check_task_failure_criteria(self) -> Dict[str, torch.Tensor]:
+    def check_task_failure_criteria(
+        self, obs_dict: Optional[Dict[str, torch.Tensor]] = None
+    ) -> Dict[str, torch.Tensor]:
         """
         Check task-specific failure criteria.
+
+        Args:
+            obs_dict: Optional dictionary of observations. If provided, can be used
+                     for efficiency to avoid recomputing observations.
 
         Returns:
             Dictionary of task-specific failure criteria (name -> boolean tensor)

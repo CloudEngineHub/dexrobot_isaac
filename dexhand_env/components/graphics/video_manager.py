@@ -99,7 +99,7 @@ class VideoManager:
         """Position the camera to look at the hand via GraphicsManager."""
         # Calculate first environment position for camera targeting
         # Isaac Gym positions environments in a grid starting from origin
-        env_spacing = self.parent.cfg["env"].get("envSpacing", 2.0)
+        env_spacing = self.parent.env_cfg.get("envSpacing", 2.0)
 
         # Environment 0 position (row=0, col=0) - Isaac Gym grid logic
         env0_x = 0.0
@@ -114,13 +114,13 @@ class VideoManager:
         )  # Behind environment 0, much lower
 
         # Camera target: look at actual hand initial position in first environment
-        hand_height = self.parent.cfg["env"]["initialHandPos"][
+        hand_height = self.parent.env_cfg["initialHandPos"][
             2
         ]  # Use actual configured height
         # Debugging: Log the actual hand height being used
         logger.info(f"[DEBUG] Hand height from config: {hand_height}")
         logger.info(
-            f"[DEBUG] Config initialHandPos: {self.parent.cfg['env']['initialHandPos']}"
+            f"[DEBUG] Config initialHandPos: {self.parent.env_cfg['initialHandPos']}"
         )
         # Force to 0.15 for test script compatibility
         actual_height = 0.15  # Force to known test script value
