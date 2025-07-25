@@ -23,6 +23,9 @@ env:
       xy_range: 0.02    # ±2cm randomization
       z: 0.025          # Fixed on table (box half-size)
 
+training:
+  maxIterations: 30000
+
 # Task configuration - all RL-related settings
 task:
   name: BoxGrasping

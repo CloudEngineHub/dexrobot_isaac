@@ -1,0 +1,4 @@
+- Ensure that the test script can work with the base class.
+- Simplify arguments for the test script.
+- Does it look good under examples/ ?
+- Make sure training can work with both "base" and BoxGrasping task
