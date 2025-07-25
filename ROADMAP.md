@@ -23,12 +23,14 @@ Code quality improvements and architectural enhancements.
 Issue resolution and bug fixes.
 - [ ] `fix-000-tb-metrics.md` - Fix tensorboard curve display in long experiment runs
 - [ ] `fix-001-contact-viz.md` - Fix contact visualization config and rendering
+- [ ] `fix-003-max-iterations.md` - Fix maxIterations config override and train.py cleanup
 
 #### Code Quality (`refactor_*`)
 - [ ] `refactor-005-default-values.md` - Move hardcoded defaults to config files
 - [ ] `refactor-004-render.md` - Clarify render option semantics (viewer vs background rendering)
 - [ ] `refactor-003-imports.md` - Clean up mid-file imports for opencv and flask
 - [ ] `refactor-007-blind-grasping.md` - A renaming task
+- [ ] `refactor-008-config-key-casing.md` - Unify config key naming to lower_case under task section
 
 ### Low Priority Tasks
 
@@ -72,12 +74,15 @@ Project organization, tooling, and workflow improvements.
 ### Phase 2: System Stability (Short-term)
 4. **fix-000-tb-metrics.md** - Essential debugging capability
 5. **fix-001-contact-viz.md** - Contact visualization fixes
-6. **refactor-005-default-values.md** - Move hardcoded defaults to config
+6. **fix-003-max-iterations.md** - Config override fixes and train.py cleanup
+7. **refactor-005-default-values.md** - Move hardcoded defaults to config
+8. **refactor-008-config-key-casing.md** - Unify config key naming conventions
 
 ### Phase 3: Polish & Enhancement (Medium-term)
-7. **refactor-004-render.md** - Render option semantics clarification
-8. **refactor-003-imports.md** - Clean up mid-file imports
-9. **feat-***: Feature enhancements (streaming, video, testing modes)
+9. **refactor-004-render.md** - Render option semantics clarification
+10. **refactor-003-imports.md** - Clean up mid-file imports
+11. **refactor-007-blind-grasping.md** - Renaming task
+12. **feat-***: Feature enhancements (streaming, video, testing modes)
 
 ### Task Complexity Assessment
 - **High complexity**: refactor-006 (action processing timing)
