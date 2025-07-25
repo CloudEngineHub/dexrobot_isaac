@@ -32,6 +32,7 @@ Issue resolution and bug fixes.
 - [ ] `refactor-005-default-values.md` - Move hardcoded defaults to config files
 - [ ] `refactor-004-render.md` - Clarify render option semantics (viewer vs background rendering)
 - [ ] `refactor-003-imports.md` - Clean up mid-file imports for opencv and flask
+- [ ] `refactor-007-blind-grasping.md` - A renaming task
 
 ### Low Priority Tasks
 
