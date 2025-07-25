@@ -332,9 +332,7 @@ class DexHandBase(VecTask):
         logger.debug("GraphicsManager created")
 
         # Create video manager with graphics manager dependency
-        self.video_manager = VideoManager(
-            parent=self, graphics_manager=self.graphics_manager
-        )
+        self.video_manager = VideoManager(parent=self)
 
         # Update task with sim and gym instances early
         self.task.sim = self.sim
@@ -510,14 +508,7 @@ class DexHandBase(VecTask):
         )
 
         # Create viewer controller with graphics manager dependency
-        self.viewer_controller = ViewerController(
-            parent=self,
-            gym=self.gym,
-            sim=self.sim,
-            env_handles=self.envs,
-            headless=self.headless,
-            graphics_manager=self.graphics_manager,
-        )
+        self.viewer_controller = ViewerController(parent=self, headless=self.headless)
 
         # Create termination manager
         self.termination_manager = TerminationManager(

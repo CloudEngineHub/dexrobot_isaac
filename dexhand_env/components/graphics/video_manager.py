@@ -19,10 +19,9 @@ class VideoManager:
     - Camera state management via GraphicsManager
     """
 
-    def __init__(self, parent, graphics_manager):
-        """Initialize VideoManager with parent environment and graphics manager."""
+    def __init__(self, parent):
+        """Initialize VideoManager with parent environment."""
         self.parent = parent
-        self.graphics_manager = graphics_manager
 
         # Video camera configuration
         self.video_camera_name = "video_camera"
@@ -36,6 +35,11 @@ class VideoManager:
     def device(self):
         """Access device from parent (single source of truth)."""
         return self.parent.device
+
+    @property
+    def graphics_manager(self):
+        """Access graphics_manager from parent (single source of truth)."""
+        return self.parent.graphics_manager
 
     def setup_video_camera(self, video_config, envs):
         """Store video config and create camera immediately (after gym.prepare_sim())."""

@@ -38,24 +38,16 @@ class ViewerController:
     - Update camera position based on the current mode
     """
 
-    def __init__(self, parent, gym, sim, env_handles, headless, graphics_manager):
+    def __init__(self, parent, headless):
         """
         Initialize the viewer controller and create the viewer.
 
         Args:
             parent: Parent object (typically DexHandBase) that provides shared properties
-            gym: IsaacGym instance
-            sim: Simulation instance
-            env_handles: List of environment handles for camera targeting
             headless: Whether running in headless mode
-            graphics_manager: GraphicsManager for coordinated graphics operations
         """
         self.parent = parent
-        self.gym = gym
-        self.sim = sim
-        self.env_handles = env_handles
         self.headless = headless
-        self.graphics_manager = graphics_manager
 
         # Create viewer if not in headless mode
         if not self.headless:
@@ -138,9 +130,24 @@ class ViewerController:
         return viewer
 
     @property
+    def gym(self):
+        """Access gym from parent (single source of truth)."""
+        return self.parent.gym
+
+    @property
+    def sim(self):
+        """Access sim from parent (single source of truth)."""
+        return self.parent.sim
+
+    @property
     def envs(self):
         """Get environments from parent."""
         return self.parent.envs
+
+    @property
+    def graphics_manager(self):
+        """Access graphics_manager from parent (single source of truth)."""
+        return self.parent.graphics_manager
 
     @property
     def num_envs(self):
@@ -419,10 +426,10 @@ class ViewerController:
             cam_target = gymapi.Vec3(target_pos[0], target_pos[1], target_pos[2])
 
             # Determine which environment to use for camera coordinate system
-            if self.camera_follow_mode == "single" and self.env_handles:
+            if self.camera_follow_mode == "single" and self.envs:
                 # Use the specific environment we're following
-                safe_index = min(self.follow_robot_index, len(self.env_handles) - 1)
-                env_handle = self.env_handles[safe_index]
+                safe_index = min(self.follow_robot_index, len(self.envs) - 1)
+                env_handle = self.envs[safe_index]
 
                 # Debug: Log camera positioning for environment switching
                 from loguru import logger
