@@ -4,16 +4,12 @@ Task tracking and project status for the DexRobot Isaac development. See @CLAUDE
 
 ## Active Sprint
 
-Sprint focus: **Foundation & Critical Issues**
-Prioritizing architectural consistency and RL stability.
+Sprint focus: **Architecture Consistency & Core Fixes**
+With critical RL penetration issue resolved, focusing on architectural improvements and core system stability.
 
 ## Backlog
 
 ### High Priority Tasks
-
-#### Critical RL Issues (`rl_*`)
-Machine learning research, policy tuning, physics, and reward engineering.
-- [ ] `rl-000-penetration.md` - **URGENT** - Prevent policy from exploiting penetration in physics simulation
 
 #### Core Architecture Fixes (`refactor_*`)
 Code quality improvements and architectural enhancements.
@@ -50,6 +46,12 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **rl-000-penetration.md** (2025-07-25) - **CRITICAL** - Penetration prevention system implementation
+  - Implemented continuous geometric penetration detection using fingertip-to-box-center distance
+  - Added penetration penalty proportional to penetration depth for smooth gradients
+  - Modified s2_fingerpad_proximity reward to prevent exploitation via distance clamping
+  - Added configurable penetrationPrevention parameters to BoxGrasping.yaml
+  - Prevents RL policies from exploiting physics simulation artifacts for realistic training
 - ✅ **meta-000-workflow-setup.md** (2025-01-25) - AI development workflow implementation
   - Created structured 3-phase workflow process
   - Established task organization system
@@ -62,23 +64,25 @@ Project organization, tooling, and workflow improvements.
 
 ## Strategic Development Plan
 
-### Phase 1: Critical Foundation (Immediate)
-1. **rl-000-penetration.md** - Fix physics exploitation (blocks RL training)
-2. **refactor-006-action-processing.md** - Core action timing architecture
+### Phase 1: Core Architecture (Current Priority)
+1. **refactor-006-action-processing.md** - Core action timing architecture (highest priority)
+2. **refactor-002-graphics-manager-in-parent.md** - Component pattern alignment
+3. **refactor-001-episode-length.md** - Config structure cleanup
 
-### Phase 2: Architecture Consistency (Short-term)
-3. **refactor-002-graphics-manager-in-parent.md** - Component pattern alignment
+### Phase 2: System Stability (Short-term)
 4. **fix-000-tb-metrics.md** - Essential debugging capability
-5. **refactor-001-episode-length.md** - Config structure cleanup
+5. **fix-001-contact-viz.md** - Contact visualization fixes
+6. **refactor-005-default-values.md** - Move hardcoded defaults to config
 
 ### Phase 3: Polish & Enhancement (Medium-term)
-6. Remaining refactor tasks (defaults, imports, render semantics)
-7. Feature enhancements (streaming, video, testing modes)
+7. **refactor-004-render.md** - Render option semantics clarification
+8. **refactor-003-imports.md** - Clean up mid-file imports
+9. **feat-***: Feature enhancements (streaming, video, testing modes)
 
 ### Task Complexity Assessment
 - **High complexity**: refactor-006 (action processing timing)
-- **Medium complexity**: rl-000 (physics penetration), refactor-002 (graphics architecture)
-- **Low complexity**: Most feat-* tasks, config cleanups
+- **Medium complexity**: refactor-002 (graphics architecture), fix-000 (tensorboard metrics)
+- **Low complexity**: Most feat-* tasks, config cleanups, import organization
 
 ---
 
