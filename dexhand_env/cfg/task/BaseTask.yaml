@@ -16,12 +16,12 @@ env:
   # Initial pose
   initialHandPos: [0.0, 0.0, 0.5] # Initial hand position
   initialHandRot: [0.0, 0.0, 0.0, 1.0]  # Initial hand rotation (quaternion)
+  episodeLength: 300              # Maximum number of steps per episode
 
 # Task configuration - all RL-related settings
 task:
   name: BaseTask
   # Task parameters
-  episodeLength: 300              # Maximum number of steps per episode
 
   # Action space configuration
   controlMode: "position_delta"   # position or position_delta

@@ -4,8 +4,8 @@ Task tracking and project status for the DexRobot Isaac development. See @CLAUDE
 
 ## Active Sprint
 
-Sprint focus: **Architecture Consistency & Core Fixes**
-With critical RL penetration issue resolved, focusing on architectural improvements and core system stability.
+Sprint focus: **System Stability & Bug Fixes**
+With major architectural improvements complete (episode length config, graphics component alignment, action processing timing), focusing on core system stability and essential debugging capabilities.
 
 ## Backlog
 
@@ -13,7 +13,6 @@ With critical RL penetration issue resolved, focusing on architectural improveme
 
 #### Core Architecture Fixes (`refactor_*`)
 Code quality improvements and architectural enhancements.
-- [ ] `refactor-001-episode-length.md` - Determine optimal config location for `episode_length` (env vs task)
 
 ### Medium Priority Tasks
 
@@ -30,9 +29,13 @@ Issue resolution and bug fixes.
 - [ ] `refactor-003-imports.md` - Clean up mid-file imports for opencv and flask
 - [ ] `refactor-007-blind-grasping.md` - Rename BoxGrasping to BlindGrasping task
 - [ ] `refactor-007-step-architecture.md` - Investigate step processing architecture consistency
-- [ ] `refactor-008-config-key-casing.md` - Unify config key naming to lower_case under task section
+- [ ] `refactor-008-config-key-casing.md` - Unify config key naming to lower_case under task section (file currently has typo: rafactor-008-config-key-casing.md)
 
 ### Low Priority Tasks
+
+#### Research Tasks (`rl_*`)
+Policy tuning, physics improvements, and reward engineering.
+- [ ] `rl-001-blind-grasping-task.md` - Break down blind grasping training difficulties into specific fixes
 
 #### Feature Enhancements (`feat_*`)
 New functionality and API enhancements.
@@ -56,6 +59,12 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **refactor-001-episode-length.md** (2025-07-28) - **MAJOR** - Episode length configuration architectural fix
+  - Resolved inconsistency where episodeLength was placed in different config sections (task vs env)
+  - Moved episodeLength from task to env section in BaseTask.yaml to align with DexHandBase expectations
+  - Maintained CLI override functionality (--episode-length) and BoxGrasping.yaml compatibility
+  - Fixed potential runtime failures when BaseTask was used directly
+  - Single line configuration change with comprehensive testing validation
 - ✅ **refactor-002-graphics-manager-in-parent.md** (2025-07-25) - **MAJOR** - Graphics component architecture alignment
   - Refactored VideoManager and ViewerController to follow established component architecture pattern
   - Removed direct sibling dependencies from constructors (graphics_manager, gym, sim, env_handles)
@@ -88,27 +97,27 @@ Project organization, tooling, and workflow improvements.
 ## Strategic Development Plan
 
 ### Phase 1: Core Architecture (Current Priority)
-1. **refactor-001-episode-length.md** - Config structure cleanup (highest priority)
+With refactor-001-episode-length.md completed, focus shifts to next high priority architectural tasks.
 
 ### Phase 2: System Stability (Short-term)
-3. **fix-000-tb-metrics.md** - Essential debugging capability
-4. **fix-001-contact-viz.md** - Contact visualization fixes
-5. **fix-002-consistency.md** - Fix consistency issues
-6. **fix-003-max-iterations.md** - Config override fixes and train.py cleanup
-7. **refactor-005-default-values.md** - Move hardcoded defaults to config
-8. **refactor-008-config-key-casing.md** - Unify config key naming conventions
+1. **fix-000-tb-metrics.md** - Essential debugging capability
+2. **fix-001-contact-viz.md** - Contact visualization fixes
+3. **fix-002-consistency.md** - Fix consistency issues
+4. **fix-003-max-iterations.md** - Config override fixes and train.py cleanup
+5. **refactor-005-default-values.md** - Move hardcoded defaults to config
+6. **refactor-008-config-key-casing.md** - Unify config key naming conventions
 
 ### Phase 3: Polish & Enhancement (Medium-term)
-9. **refactor-004-render.md** - Render option semantics clarification
-10. **refactor-003-imports.md** - Clean up mid-file imports
-11. **refactor-007-blind-grasping.md** - Rename BoxGrasping to BlindGrasping task
-12. **refactor-007-step-architecture.md** - Investigate step processing architecture consistency
-13. **feat-***: Feature enhancements (streaming, video, testing modes)
-14. **doc-***: Documentation improvements and illustrations
+7. **refactor-004-render.md** - Render option semantics clarification
+8. **refactor-003-imports.md** - Clean up mid-file imports
+9. **refactor-007-blind-grasping.md** - Rename BoxGrasping to BlindGrasping task
+10. **refactor-007-step-architecture.md** - Investigate step processing architecture consistency
+11. **feat-***: Feature enhancements (streaming, video, testing modes)
+12. **doc-***: Documentation improvements and illustrations
 
 ### Task Complexity Assessment
 - **High complexity**: refactor-007-step-architecture (architecture investigation)
-- **Medium complexity**: fix-000 (tensorboard metrics), refactor-001 (episode-length config structure)
+- **Medium complexity**: fix-000 (tensorboard metrics), fix-003 (maxIterations config override)
 - **Low complexity**: Most feat-* tasks, config cleanups, import organization, doc-* tasks
 
 ---

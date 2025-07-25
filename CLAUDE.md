@@ -187,7 +187,7 @@ Before implementing:
 
 ## AI Development Workflow
 
-This project uses a structured 3-phase workflow for managing development tasks, with all todo items organized in the `@prompts/` directory and tracked in `@ROADMAP.md`.
+This project uses a structured 3-phase workflow for managing development tasks, with all todo items organized in the @prompts/ directory and tracked in @ROADMAP.md.
 
 ### Task Organization
 
@@ -200,7 +200,7 @@ This project uses a structured 3-phase workflow for managing development tasks, 
 
 **File Structure:**
 ```
-@prompts/
+prompts/
 ├── meta-001-programming-guideline.md
 ├── refactor-001-episode-length.md
 ├── rl-000-penetration.md
@@ -471,7 +471,7 @@ When asked to "optimize without changing logic":
 
 ## Project Status
 
-See [`@ROADMAP.md`](@ROADMAP.md) for detailed project status, completed features, and future development plans.
+See [ROADMAP.md](ROADMAP.md) for detailed project status, completed features, and future development plans.
 
 ## Essential Documentation
 - **Critical Caveats**: [`docs/design_decisions.md`](docs/design_decisions.md) - READ FIRST!
