@@ -13,7 +13,6 @@ With critical RL penetration issue resolved, focusing on architectural improveme
 
 #### Core Architecture Fixes (`refactor_*`)
 Code quality improvements and architectural enhancements.
-- [ ] `refactor-006-action-processing.md` - **MAJOR** - Refactor action processing timing and coordination
 - [ ] `refactor-002-graphics-manager-in-parent.md` - Align GraphicsManager with component architecture patterns
 - [ ] `refactor-001-episode-length.md` - Determine optimal config location for `episode_length` (env vs task)
 
@@ -48,6 +47,12 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **refactor-006-action-processing.md** (2025-07-25) - **MAJOR** - Action processing timing refactoring
+  - Split action processing into pre-action (post_physics) and post-action (pre_physics) phases
+  - Moved observation computation from DexHandBase.pre_physics_step to StepProcessor.process_physics_step
+  - Aligned with RL rollout patterns where observations for step N are computed in step N-1
+  - Improved clarity by separating pre-action computation from post-action processing
+  - Maintains identical behavior while improving timing coherence and architectural consistency
 - ✅ **rl-000-penetration.md** (2025-07-25) - **CRITICAL** - Penetration prevention system implementation
   - Implemented continuous geometric penetration detection using fingertip-to-box-center distance
   - Added penetration penalty proportional to penetration depth for smooth gradients
