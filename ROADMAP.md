@@ -22,13 +22,15 @@ Code quality improvements and architectural enhancements.
 Issue resolution and bug fixes.
 - [ ] `fix-000-tb-metrics.md` - Fix tensorboard curve display in long experiment runs
 - [ ] `fix-001-contact-viz.md` - Fix contact visualization config and rendering
+- [ ] `fix-002-consistency.md` - Fix consistency issues
 - [ ] `fix-003-max-iterations.md` - Fix maxIterations config override and train.py cleanup
 
 #### Code Quality (`refactor_*`)
 - [ ] `refactor-005-default-values.md` - Move hardcoded defaults to config files
 - [ ] `refactor-004-render.md` - Clarify render option semantics (viewer vs background rendering)
 - [ ] `refactor-003-imports.md` - Clean up mid-file imports for opencv and flask
-- [ ] `refactor-007-blind-grasping.md` - A renaming task
+- [ ] `refactor-007-blind-grasping.md` - Rename BoxGrasping to BlindGrasping task
+- [ ] `refactor-007-step-architecture.md` - Investigate step processing architecture consistency
 - [ ] `refactor-008-config-key-casing.md` - Unify config key naming to lower_case under task section
 
 ### Low Priority Tasks
@@ -38,6 +40,14 @@ New functionality and API enhancements.
 - [ ] `feat-000-streaming-port.md` - Improve port management and binding options
 - [ ] `feat-001-video-fps-control.md` - Implement FPS-aware video saving
 - [ ] `feat-002-indefinite-testing.md` - Enable indefinite testing mode
+- [ ] `feat-004-action-rule-example.md` - Action rule example implementation
+
+#### Documentation Tasks (`doc_*`)
+Documentation improvements and illustrations.
+- [ ] `doc-000-cp.md` - Documentation task
+- [ ] `doc-001-video.md` - Video documentation
+- [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
+- [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 
 #### Completed Meta Tasks (`meta_*`)
 Project organization, tooling, and workflow improvements.
@@ -72,13 +82,13 @@ Project organization, tooling, and workflow improvements.
 ## Strategic Development Plan
 
 ### Phase 1: Core Architecture (Current Priority)
-1. **refactor-006-action-processing.md** - Core action timing architecture (highest priority)
-2. **refactor-002-graphics-manager-in-parent.md** - Component pattern alignment
-3. **refactor-001-episode-length.md** - Config structure cleanup
+1. **refactor-002-graphics-manager-in-parent.md** - Component pattern alignment (highest priority)
+2. **refactor-001-episode-length.md** - Config structure cleanup
 
 ### Phase 2: System Stability (Short-term)
-4. **fix-000-tb-metrics.md** - Essential debugging capability
-5. **fix-001-contact-viz.md** - Contact visualization fixes
+3. **fix-000-tb-metrics.md** - Essential debugging capability
+4. **fix-001-contact-viz.md** - Contact visualization fixes
+5. **fix-002-consistency.md** - Fix consistency issues
 6. **fix-003-max-iterations.md** - Config override fixes and train.py cleanup
 7. **refactor-005-default-values.md** - Move hardcoded defaults to config
 8. **refactor-008-config-key-casing.md** - Unify config key naming conventions
@@ -86,13 +96,15 @@ Project organization, tooling, and workflow improvements.
 ### Phase 3: Polish & Enhancement (Medium-term)
 9. **refactor-004-render.md** - Render option semantics clarification
 10. **refactor-003-imports.md** - Clean up mid-file imports
-11. **refactor-007-blind-grasping.md** - Renaming task
-12. **feat-***: Feature enhancements (streaming, video, testing modes)
+11. **refactor-007-blind-grasping.md** - Rename BoxGrasping to BlindGrasping task
+12. **refactor-007-step-architecture.md** - Investigate step processing architecture consistency
+13. **feat-***: Feature enhancements (streaming, video, testing modes)
+14. **doc-***: Documentation improvements and illustrations
 
 ### Task Complexity Assessment
-- **High complexity**: refactor-006 (action processing timing)
-- **Medium complexity**: refactor-002 (graphics architecture), fix-000 (tensorboard metrics)
-- **Low complexity**: Most feat-* tasks, config cleanups, import organization
+- **High complexity**: refactor-002 (graphics architecture)
+- **Medium complexity**: fix-000 (tensorboard metrics), refactor-007-step-architecture (architecture investigation)
+- **Low complexity**: Most feat-* tasks, config cleanups, import organization, doc-* tasks
 
 ---
 
