@@ -37,9 +37,33 @@ class StepProcessor:
                 self.parent.contact_force_local_body_indices
             )
 
-            # Observations were already computed in pre_physics_step
-            # We just need to return them here
-            # The obs_buf and obs_dict are already set from pre_physics_step
+            # Compute observations for the NEXT step (step N+1)
+            # This aligns with RL rollout patterns where observations for step N+1
+            # are computed in step N's post_physics processing
+            try:
+                # Stage 1: Compute partial observations (exclude active_rule_targets)
+                obs_dict = self.parent.observation_encoder.compute_observations(
+                    exclude_components=["active_rule_targets"]
+                )
+            except Exception as e:
+                logger.error(f"ERROR in compute_observations: {e}")
+                import traceback
+
+                traceback.print_exc()
+                raise
+
+            # Stage 2: Apply pre-action rule with partial observations
+            state = {"obs_dict": obs_dict, "env": self.parent}
+            active_rule_targets = self.parent.action_processor.apply_pre_action_rule(
+                self.parent.action_processor.active_prev_targets, state
+            )
+
+            # Stage 3: Update observation with rule targets
+            obs_dict["active_rule_targets"] = active_rule_targets
+            self.parent.obs_buf = (
+                self.parent.observation_encoder.concatenate_observations(obs_dict)
+            )
+            self.parent.obs_dict = obs_dict
 
             # Update episode progress directly first
             self.parent.episode_step_count += 1

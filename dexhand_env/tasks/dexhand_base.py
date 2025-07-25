@@ -810,10 +810,29 @@ class DexHandBase(VecTask):
         env_ids = torch.arange(self.num_envs, device=self.device)
         self.reset_idx(env_ids)
 
-        # Compute observations after reset
-        # This ensures obs_dict is populated before computing rewards
-        obs_buf, obs_dict = self.observation_encoder.compute_observations()
-        self.obs_buf = obs_buf
+        # Compute observations after reset including pre-action rule
+        # This ensures obs_dict is populated with active_rule_targets before first step
+        try:
+            # Stage 1: Compute partial observations (exclude active_rule_targets)
+            obs_dict = self.observation_encoder.compute_observations(
+                exclude_components=["active_rule_targets"]
+            )
+        except Exception as e:
+            logger.error(f"ERROR in compute_observations during reset: {e}")
+            import traceback
+
+            traceback.print_exc()
+            raise
+
+        # Stage 2: Apply pre-action rule with partial observations
+        state = {"obs_dict": obs_dict, "env": self}
+        active_rule_targets = self.action_processor.apply_pre_action_rule(
+            self.action_processor.active_prev_targets, state
+        )
+
+        # Stage 3: Update observation with rule targets
+        obs_dict["active_rule_targets"] = active_rule_targets
+        self.obs_buf = self.observation_encoder.concatenate_observations(obs_dict)
         self.obs_dict = obs_dict
 
         # Call post_physics_step to compute initial rewards
@@ -838,34 +857,13 @@ class DexHandBase(VecTask):
                 )
             self.actions = random_actions
 
-        # Stage 1: Compute partial observations (exclude active_rule_targets)
-        try:
-            # This will be implemented in observation_encoder
-            obs_dict = self.observation_encoder.compute_observations(
-                exclude_components=["active_rule_targets"]
-            )
-        except Exception as e:
-            logger.error(f"ERROR in compute_observations: {e}")
-            import traceback
-
-            traceback.print_exc()
-            raise
-
-        # Stage 2: Apply pre-action rule with partial observations
-        state = {"obs_dict": obs_dict, "env": self}
-        active_rule_targets = self.action_processor.apply_pre_action_rule(
-            self.action_processor.active_prev_targets, state
-        )
-
-        # Stage 3: Update observation with rule targets
-        obs_dict["active_rule_targets"] = active_rule_targets
-        self.obs_buf = self.observation_encoder.concatenate_observations(obs_dict)
-        self.obs_dict = obs_dict
-
-        # Stage 4: Process actions (action rule + post filters + coupling)
+        # Apply policy actions (action rule + post filters + coupling)
+        # Note: Observations and pre-action rule are now computed in post_physics_step
+        # to align with RL rollout patterns where observations for step N are computed in step N-1
         try:
             self.action_processor.process_actions(
-                actions=self.actions, active_rule_targets=active_rule_targets
+                actions=self.actions,
+                active_rule_targets=self.obs_dict["active_rule_targets"],
             )
         except Exception as e:
             logger.error(f"ERROR in action_processor.process_actions: {e}")
