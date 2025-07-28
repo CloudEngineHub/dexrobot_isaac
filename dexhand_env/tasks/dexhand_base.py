@@ -1011,7 +1011,9 @@ class DexHandBase(VecTask):
 
             # Delegate rendering to viewer controller with reset callback
             result = self.viewer_controller.render(
-                mode, reset_callback=lambda env_ids: self.reset_idx(env_ids)
+                mode,
+                reset_callback=lambda env_ids: self.reset_idx(env_ids),
+                obs_dict=self.obs_dict,
             )
 
         # Unified video capture using VideoManager (works with or without viewer)

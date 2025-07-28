@@ -499,6 +499,12 @@ class HandInitializer:
             hand_base_global_idx = self.gym.find_actor_rigid_body_index(
                 env0, hand0, "right_hand_base", gymapi.DOMAIN_SIM
             )
+            if hand_base_global_idx == -1:
+                raise RuntimeError(
+                    f"Failed to find hand base rigid body 'right_hand_base'. "
+                    f"Available rigid bodies: {list(self.local_rigid_body_index_to_name.values())}. "
+                    f"Check that the hand base body exists in the MJCF model."
+                )
             self.hand_local_rigid_body_index = (
                 hand_base_global_idx - self._env0_first_body_global_idx
             )
@@ -512,6 +518,12 @@ class HandInitializer:
                 global_idx = self.gym.find_actor_rigid_body_index(
                     env0, hand0, name, gymapi.DOMAIN_SIM
                 )
+                if global_idx == -1:
+                    raise RuntimeError(
+                        f"Failed to find fingertip rigid body '{name}'. "
+                        f"Available rigid bodies: {list(self.local_rigid_body_index_to_name.values())}. "
+                        f"Check that the body name exists in the MJCF model."
+                    )
                 local_idx = global_idx - self._env0_first_body_global_idx
                 self.fingertip_local_indices.append(local_idx)
             logger.debug(f"Fingertip local indices: {self.fingertip_local_indices}")
@@ -522,6 +534,12 @@ class HandInitializer:
                 global_idx = self.gym.find_actor_rigid_body_index(
                     env0, hand0, name, gymapi.DOMAIN_SIM
                 )
+                if global_idx == -1:
+                    raise RuntimeError(
+                        f"Failed to find fingerpad rigid body '{name}'. "
+                        f"Available rigid bodies: {list(self.local_rigid_body_index_to_name.values())}. "
+                        f"Check that the body name exists in the MJCF model."
+                    )
                 local_idx = global_idx - self._env0_first_body_global_idx
                 self.fingerpad_local_indices.append(local_idx)
             logger.debug(f"Fingerpad local indices: {self.fingerpad_local_indices}")
@@ -532,6 +550,12 @@ class HandInitializer:
                 global_idx = self.gym.find_actor_rigid_body_index(
                     env0, hand0, name, gymapi.DOMAIN_SIM
                 )
+                if global_idx == -1:
+                    raise RuntimeError(
+                        f"Failed to find contact force rigid body '{name}'. "
+                        f"Available rigid bodies: {list(self.local_rigid_body_index_to_name.values())}. "
+                        f"Check that the body name exists in the MJCF model and is correctly specified in contactForceBodies config."
+                    )
                 local_idx = global_idx - self._env0_first_body_global_idx
                 self.contact_force_local_body_indices.append(local_idx)
             logger.debug(

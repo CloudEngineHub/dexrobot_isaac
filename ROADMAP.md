@@ -18,7 +18,6 @@ Code quality improvements and architectural enhancements.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
-- [ ] `fix-001-contact-viz.md` - Fix contact visualization config and rendering
 - [ ] `fix-002-consistency.md` - Fix consistency issues
 - [ ] `fix-003-max-iterations.md` - Fix maxIterations config override and train.py cleanup
 
@@ -58,6 +57,13 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-001-contact-viz.md** (2025-07-28) - **ESSENTIAL** - Contact visualization NameError fix
+  - Fixed NameError in ViewerController.update_contact_force_colors() where contact_forces.device was referenced after parameter rename
+  - Corrected tensor indexing to handle subset of contact bodies with valid indices
+  - Fixed color comparison logic using torch.isclose instead of torch.allclose for proper tensor dimensions
+  - Updated dimension handling for color update operations
+  - Contact visualization now works correctly with 'C' key toggle, displaying red intensity based on contact force magnitude
+  - Minimal code changes with immediate impact on debugging and visualization capabilities
 - ✅ **fix-001-reward-logging-logic.md** (2025-07-28) - **CRITICAL** - RewardComponentObserver windowed statistics fix
   - Fixed RewardComponentObserver logging cumulative averages instead of windowed statistics
   - Added reset logic in _log_to_tensorboard() to clear cumulative_sums after each logging interval
@@ -111,23 +117,22 @@ Project organization, tooling, and workflow improvements.
 With refactor-001-episode-length.md completed, focus shifts to next high priority architectural tasks.
 
 ### Phase 2: System Stability (Short-term)
-1. **fix-001-contact-viz.md** - Contact visualization fixes
-2. **fix-002-consistency.md** - Fix consistency issues
-3. **fix-003-max-iterations.md** - Config override fixes and train.py cleanup
-4. **refactor-005-default-values.md** - Move hardcoded defaults to config
-5. **refactor-008-config-key-casing.md** - Unify config key naming conventions
+1. **fix-002-consistency.md** - Fix consistency issues
+2. **fix-003-max-iterations.md** - Config override fixes and train.py cleanup
+3. **refactor-005-default-values.md** - Move hardcoded defaults to config
+4. **refactor-008-config-key-casing.md** - Unify config key naming conventions
 
 ### Phase 3: Polish & Enhancement (Medium-term)
-6. **refactor-004-render.md** - Render option semantics clarification
-7. **refactor-003-imports.md** - Clean up mid-file imports
-8. **refactor-007-blind-grasping.md** - Rename BoxGrasping to BlindGrasping task
-9. **refactor-007-step-architecture.md** - Investigate step processing architecture consistency
-10. **feat-***: Feature enhancements (streaming, video, testing modes)
-11. **doc-***: Documentation improvements and illustrations
+5. **refactor-004-render.md** - Render option semantics clarification
+6. **refactor-003-imports.md** - Clean up mid-file imports
+7. **refactor-007-blind-grasping.md** - Rename BoxGrasping to BlindGrasping task
+8. **refactor-007-step-architecture.md** - Investigate step processing architecture consistency
+9. **feat-***: Feature enhancements (streaming, video, testing modes)
+10. **doc-***: Documentation improvements and illustrations
 
 ### Task Complexity Assessment
 - **High complexity**: refactor-007-step-architecture (architecture investigation)
-- **Medium complexity**: fix-003 (maxIterations config override), fix-001 (contact visualization fixes)
+- **Medium complexity**: fix-003 (maxIterations config override), fix-002 (consistency issues)
 - **Low complexity**: Most feat-* tasks, config cleanups, import organization, doc-* tasks
 
 ---

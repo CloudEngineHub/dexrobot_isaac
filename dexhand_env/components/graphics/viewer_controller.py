@@ -169,11 +169,6 @@ class ViewerController:
         """Access rigid body states from parent (single source of truth)."""
         return self.parent.rigid_body_states
 
-    @property
-    def contact_forces(self):
-        """Access contact forces from parent (single source of truth)."""
-        return self.parent.contact_forces
-
     def subscribe_keyboard_events(self):
         """
         Subscribe to keyboard events for interactive control in the viewer.
@@ -453,15 +448,15 @@ class ViewerController:
             # Handle exceptions silently - this can happen during initialization
             return False
 
-    def update_contact_force_colors(self, contact_forces):
+    def update_contact_force_colors(self, contact_force_magnitudes):
         """
-        Update body colors based on contact forces.
+        Update body colors based on contact force magnitudes.
 
         Colors bodies red with intensity proportional to contact force magnitude.
         Bodies with forces below threshold return to default color.
 
         Args:
-            contact_forces: Tensor of contact forces [num_envs, num_bodies, 3]
+            contact_force_magnitudes: Tensor of contact force magnitudes [num_envs, num_bodies]
 
         Returns:
             Boolean indicating whether colors were updated
@@ -477,8 +472,17 @@ class ViewerController:
         # Get number of bodies per environment for global index computation
         num_bodies_per_env = self.rigid_body_states.shape[1]
 
-        # Calculate contact force magnitudes
-        force_magnitudes = torch.norm(contact_forces, dim=2)  # [num_envs, num_bodies]
+        # Expect pre-computed force magnitudes - fail fast if wrong format
+        if contact_force_magnitudes.dim() != 2:
+            raise RuntimeError(
+                f"Expected contact_force_magnitudes tensor with 2 dimensions [num_envs, num_bodies], got shape: {contact_force_magnitudes.shape}"
+            )
+
+        # Extract force magnitudes only for bodies with valid indices
+        # contact_body_local_indices contains only bodies that resolved to valid indices
+        force_magnitudes = contact_force_magnitudes[
+            :, : len(contact_body_local_indices)
+        ]
         has_contact = force_magnitudes > self.contact_force_threshold
 
         # Early exit if no contacts
@@ -508,7 +512,7 @@ class ViewerController:
         # Shape: [num_envs, num_bodies, 3]
         all_colors = torch.zeros(
             (self.num_envs, len(contact_body_local_indices), 3),
-            device=contact_forces.device,
+            device=contact_force_magnitudes.device,
         )
 
         # Set default colors
@@ -517,9 +521,12 @@ class ViewerController:
         all_colors[:, :, 2] = self.default_body_color.z
 
         # Update colors where there's contact
-        all_colors[has_contact, 0] += color_diff_r * normalized_forces[has_contact]
-        all_colors[has_contact, 1] += color_diff_g * normalized_forces[has_contact]
-        all_colors[has_contact, 2] += color_diff_b * normalized_forces[has_contact]
+        # has_contact and normalized_forces are [num_envs, num_bodies]
+        # all_colors is [num_envs, num_bodies, 3]
+        # Use proper tensor indexing to update RGB channels
+        all_colors[:, :, 0] += has_contact * color_diff_r * normalized_forces
+        all_colors[:, :, 1] += has_contact * color_diff_g * normalized_forces
+        all_colors[:, :, 2] += has_contact * color_diff_b * normalized_forces
 
         # Track which bodies need color updates to minimize API calls
         if self._prev_colors is None:
@@ -528,7 +535,9 @@ class ViewerController:
             )  # Initialize with invalid color
 
         # Find which colors have changed
-        color_changed = ~torch.allclose(all_colors, self._prev_colors, atol=0.01)
+        color_changed = ~torch.isclose(all_colors, self._prev_colors, atol=0.01).all(
+            dim=-1
+        )
         if not color_changed.any():
             return True  # No color changes needed
 
@@ -543,7 +552,7 @@ class ViewerController:
         color_values = colors_flat.numpy()  # Single CPU transfer
 
         # Update colors only for bodies that changed
-        bodies_to_update = torch.nonzero(color_changed.any(dim=2)).cpu().numpy()
+        bodies_to_update = torch.nonzero(color_changed).cpu().numpy()
 
         for update_idx in range(len(bodies_to_update)):
             env_idx = bodies_to_update[update_idx, 0]
@@ -587,13 +596,14 @@ class ViewerController:
                     self.default_body_color,
                 )
 
-    def render(self, mode="rgb_array", reset_callback=None):
+    def render(self, mode="rgb_array", reset_callback=None, obs_dict=None):
         """
         Handle viewer rendering and keyboard events.
 
         Args:
             mode: Rendering mode (currently only supports "rgb_array")
             reset_callback: Callback function to reset environments, takes env_ids as argument
+            obs_dict: Observation dictionary containing contact force data
 
         Returns:
             None or image array if in rgb_array mode
@@ -617,7 +627,16 @@ class ViewerController:
 
         # Update contact force visualization if enabled
         if self.enable_contact_visualization:
-            self.update_contact_force_colors(self.contact_forces)
+            if obs_dict is None:
+                raise RuntimeError(
+                    "obs_dict is None - contact visualization requires observation data"
+                )
+            if "contact_force_magnitude" not in obs_dict:
+                raise RuntimeError(
+                    "contact_force_magnitude missing from obs_dict - observation system initialization failed"
+                )
+            # Use pre-computed contact force magnitudes from obs_dict
+            self.update_contact_force_colors(obs_dict["contact_force_magnitude"])
 
         # Update viewer via GraphicsManager
         # Note: GraphicsManager.step_graphics() should be called by DexHandBase before this
