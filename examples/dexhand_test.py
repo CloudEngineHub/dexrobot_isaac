@@ -9,10 +9,10 @@ and runs a simple test to verify hand movement and control.
 import os
 import sys
 import time
-import argparse
-import yaml
 import numpy as np
 import math
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -96,61 +96,6 @@ def setup_logging(level):
             level="INFO",
             format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
         )
-
-
-def load_config(config_path=None):
-    """Load config from YAML file or use default path."""
-    if config_path is None:
-        config_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "dexhand_env/cfg/task/BaseTask.yaml",
-        )
-    else:
-        # If config_path doesn't exist as-is, try to resolve it as a config name
-        if not os.path.exists(config_path):
-            # Try in main cfg directory
-            resolved_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                "dexhand_env/cfg",
-                f"{config_path}.yaml",
-            )
-            if os.path.exists(resolved_path):
-                config_path = resolved_path
-            else:
-                # Try in task directory
-                task_path = os.path.join(
-                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "dexhand_env/cfg/task",
-                    f"{config_path}.yaml",
-                )
-                if os.path.exists(task_path):
-                    config_path = task_path
-
-    logger.info(f"Loading config from {config_path}")
-
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with open(config_path, "r") as f:
-        cfg_yaml = yaml.safe_load(f)
-
-    # Convert to the expected structure
-    cfg = {
-        "env": cfg_yaml.get("env", {}),
-        "sim": cfg_yaml.get("sim", {}),
-        "task": cfg_yaml.get("task", {}),
-        "physics_engine": "physx",
-        "name": cfg_yaml.get("name", "Base"),  # Add task name
-    }
-
-    # Add required sim parameters that are not in YAML
-    if "gravity" not in cfg["sim"]:
-        cfg["sim"]["gravity"] = [0.0, 0.0, -9.81]
-
-    if "up_axis" not in cfg["sim"]:
-        cfg["sim"]["up_axis"] = "z"
-
-    return cfg
 
 
 def create_rule_based_base_controller():
@@ -674,14 +619,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
             arr_integrated_pos = np.array([0.0, 0.0, 0.0])
             arr_initial_pos = None
             # Get physics_dt from config with fallback
-            if isinstance(cfg, dict):
-                physics_dt = cfg.get("sim", {}).get("dt", 0.0083)
-            else:
-                physics_dt = (
-                    getattr(cfg, "sim", {}).get("dt", 0.0083)
-                    if hasattr(cfg, "sim")
-                    else 0.0083
-                )
+            physics_dt = cfg.sim.get("dt", 0.0083) if "sim" in cfg else 0.0083
             if just_reset:
                 logger.debug(
                     f"Reset ARR integration tracking due to environment reset (episode_step={episode_step})"
@@ -1077,193 +1015,74 @@ def _patched_create_task_objects(self, gym, sim, env_ptr, env_id):
 BaseTask.create_task_objects = _patched_create_task_objects
 
 
-def main():
-    """Main function to test the DexHand environment."""
-    # Parse command line arguments with organized groups
-    parser = argparse.ArgumentParser(
-        description="Test DexHand environment with comprehensive debugging and validation",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  %(prog)s                                    # Basic test with default settings
-  %(prog)s --headless --steps 500            # Headless test for 500 steps
-  %(prog)s --control-mode position_delta     # Test with delta control mode
-  %(prog)s --enable-plotting --record-video  # Test with visualization and recording
-        """,
-    )
+@hydra.main(
+    config_path="../dexhand_env/cfg", config_name="test_render", version_base=None
+)
+def main(cfg: DictConfig):
+    """Main function to test the DexHand environment using Hydra configuration.
 
-    # Environment Configuration
-    env_group = parser.add_argument_group("Environment Configuration")
-    env_group.add_argument(
-        "--config",
-        type=str,
-        default=None,
-        help="Path to config YAML file (default: auto-detect)",
-    )
-    env_group.add_argument(
-        "--num-envs",
-        type=int,
-        default=1,
-        help="Number of parallel environments (default: 1)",
-    )
-    env_group.add_argument(
-        "--episode-length",
-        type=int,
-        default=1200,
-        help="Maximum episode length before reset (default: 1200)",
-    )
-    env_group.add_argument(
-        "--device",
-        type=str,
-        default="cuda:0",
-        help="Device for simulation and RL (default: cuda:0)",
-    )
-
-    # Action Control
-    action_group = parser.add_argument_group("Action Control")
-    action_group.add_argument(
-        "--control-mode",
-        type=str,
-        default="position",
-        choices=["position", "position_delta"],
-        help="Control mode: position (absolute) or position_delta (incremental) (default: position)",
-    )
-    action_group.add_argument(
-        "--policy-controls-base",
-        type=str,
-        default="false",
-        choices=["true", "false"],
-        help="Include hand base in policy action space (default: false)",
-    )
-    action_group.add_argument(
-        "--policy-controls-fingers",
-        type=str,
-        default="true",
-        choices=["true", "false"],
-        help="Include fingers in policy action space (default: true)",
-    )
-
-    # Execution Parameters
-    exec_group = parser.add_argument_group("Execution Parameters")
-    exec_group.add_argument(
-        "--steps",
-        type=int,
-        default=1200,
-        help="Total number of test steps to run (default: 1200)",
-    )
-    exec_group.add_argument(
-        "--sleep",
-        type=float,
-        default=0.01,
-        help="Sleep time between steps in seconds (default: 0.01)",
-    )
-
-    # Output & Debugging
-    debug_group = parser.add_argument_group("Output & Debugging")
-    debug_group.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run without GUI visualization (default: False)",
-    )
-    debug_group.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug output and additional logging (default: False)",
-    )
-    debug_group.add_argument(
-        "--log-level",
-        type=str,
-        default="info",
-        choices=["debug", "info", "warning", "error"],
-        help="Set logging verbosity level (default: info)",
-    )
-    debug_group.add_argument(
-        "--profile",
-        action="store_true",
-        help="Enable detailed performance profiling with timing breakdown (default: False)",
-    )
-
-    # Visualization & Recording
-    viz_group = parser.add_argument_group("Visualization & Recording")
-    viz_group.add_argument(
-        "--enable-plotting",
-        action="store_true",
-        help="Enable real-time plotting with Rerun (default: False)",
-    )
-    viz_group.add_argument(
-        "--plot-env-idx",
-        type=int,
-        default=0,
-        help="Environment index to plot (default: 0)",
-    )
-    viz_group.add_argument(
-        "--record-video",
-        action="store_true",
-        help="Enable video recording (works in headless mode too) (default: False)",
-    )
-
-    args = parser.parse_args()
-
-    # Validate argument combinations
-    if args.enable_plotting and args.plot_env_idx >= args.num_envs:
-        parser.error(
-            f"--plot-env-idx ({args.plot_env_idx}) must be less than --num-envs ({args.num_envs})"
-        )
+    Usage examples:
+      python dexhand_test.py                                   # Basic test with default settings
+      python dexhand_test.py headless=true steps=500          # Headless test for 500 steps
+      python dexhand_test.py env.controlMode=position_delta   # Test with delta control mode
+      python dexhand_test.py task=BoxGrasping                  # Test BoxGrasping task
+      python dexhand_test.py enablePlotting=true recordVideo=true  # Test with visualization and recording
+      python dexhand_test.py env.numEnvs=4 device=cuda:1      # Use 4 environments on GPU 1
+    """
 
     # Set up logging
-    setup_logging(args.log_level)
+    log_level = cfg.get("log_level", "info")
+    setup_logging(log_level)
 
     logger.info("Starting DexHand test script...")
 
     # Initialize plotting if requested
     plotting_enabled = False
-    if args.enable_plotting:
+    enable_plotting = cfg.get("enablePlotting", False)
+    if enable_plotting:
         plotting_enabled = setup_rerun_logging()
         if plotting_enabled:
+            plot_env_idx = cfg.get("plotEnvIdx", 0)
             logger.info(
-                f"Real-time plotting enabled for environment index {args.plot_env_idx}"
+                f"Real-time plotting enabled for environment index {plot_env_idx}"
             )
         else:
             logger.warning("Plotting requested but Rerun not available")
 
-    # Load configuration
-    cfg = load_config(args.config)
+    # Validate argument combinations
+    if enable_plotting and cfg.get("plotEnvIdx", 0) >= cfg.env.get("numEnvs", 1):
+        raise ValueError(
+            f"plotEnvIdx ({cfg.get('plotEnvIdx', 0)}) must be less than numEnvs ({cfg.env.get('numEnvs', 1)})"
+        )
 
-    # Override with command line arguments
-    cfg["env"]["numEnvs"] = args.num_envs
-    cfg["env"]["episodeLength"] = args.episode_length
-
-    # Apply action mode configuration
-    cfg["env"]["controlMode"] = args.control_mode
-    cfg["env"]["policyControlsHandBase"] = args.policy_controls_base.lower() == "true"
-    cfg["env"]["policyControlsFingers"] = args.policy_controls_fingers.lower() == "true"
-
-    # Apply performance profiling configuration
-    cfg["env"]["enablePerformanceProfiling"] = args.profile
+    # Make config flexible for setting new keys
+    OmegaConf.set_struct(cfg, False)
 
     # Override initial hand position for contact testing
+    if "env" not in cfg:
+        cfg["env"] = {}
     cfg["env"]["initialHandPos"] = [0.0, 0.0, 0.15]  # Lower position for easier contact
 
-    # GPU pipeline is now automatically determined from sim_device
-    # No need to set it in config
-
-    if args.debug:
+    debug = cfg.get("debug", False)
+    if debug:
         logger.debug("Configuration loaded:")
-        logger.debug(yaml.dump(cfg))
+        logger.debug(OmegaConf.to_yaml(cfg))
 
     # Create the environment
     logger.info("Creating environment...")
 
-    # Set simulation device based on command line arguments
-    sim_device = args.device
-    rl_device = args.device
+    # Set simulation device based on configuration
+    sim_device = cfg.get("device", "cuda:0")
+    rl_device = cfg.get("device", "cuda:0")
 
     # Use -1 for graphics_device_id only if headless AND not recording video
     # Camera recording requires graphics device even in headless mode
-    graphics_device_id = -1 if (args.headless and not args.record_video) else 0
+    headless = cfg.get("headless", False)
+    record_video = cfg.get("recordVideo", False)
+    graphics_device_id = -1 if (headless and not record_video) else 0
 
     # Add debug information if requested
-    if args.debug:
+    if debug:
         logger.debug(f"Simulation device: {sim_device}")
         logger.debug(f"RL device: {rl_device}")
         logger.debug(f"Graphics device ID: {graphics_device_id}")
@@ -1277,7 +1096,7 @@ Examples:
     try:
         # Configure video recording if requested
         video_config = None
-        if args.record_video:
+        if record_video:
             video_config = {
                 "enabled": True,
                 "output_dir": "/tmp/dexhand_videos",
@@ -1286,14 +1105,14 @@ Examples:
             }
 
         env = create_dex_env(
-            task_name=cfg.get("task", {}).get("name", "BaseTask"),
+            task_name=cfg.task.get("name", "BaseTask"),
             cfg=cfg,
             rl_device=rl_device,
             sim_device=sim_device,
             graphics_device_id=graphics_device_id,
-            headless=args.headless,
-            force_render=not args.headless or args.record_video,
-            virtual_screen_capture=args.record_video and args.headless,
+            headless=headless,
+            force_render=not headless or record_video,
+            virtual_screen_capture=record_video and headless,
             video_config=video_config,
         )
         logger.info("Environment created successfully!")
@@ -1312,7 +1131,7 @@ Examples:
     logger.info(f"Policy controls fingers: {env.policy_controls_fingers}")
 
     # Display keyboard shortcuts if not headless
-    if not args.headless:
+    if not headless:
         logger.info("\nKeyboard shortcuts:")
         logger.info("  SPACE - Toggle random actions mode")
         logger.info("  E     - Reset current environment")
@@ -1332,11 +1151,15 @@ Examples:
         logger.error(f"Expected {expected_actions} actions, got {env.num_actions}")
         return
 
-    if env.action_control_mode != args.control_mode:
+    # Validate control mode - accept both position and position_delta as valid
+    valid_control_modes = ["position", "position_delta"]
+    if env.action_control_mode not in valid_control_modes:
         logger.error(
-            f"Expected {args.control_mode} control mode, got {env.action_control_mode}"
+            f"Invalid control mode: {env.action_control_mode}. Supported modes: {valid_control_modes}"
         )
         return
+
+    logger.info(f"Using control mode: {env.action_control_mode}")
 
     # First, set up the action rule based on control mode
     # This must be done before any actions are processed
@@ -1611,17 +1434,18 @@ Examples:
         total_actions = env.action_processor.NUM_ACTIVE_FINGER_DOFS
 
     total_steps = total_actions * steps_per_action
-    action_cycles = (args.steps + total_steps - 1) // total_steps  # Ceiling division
+    steps = cfg.get("steps", 1200)
+    action_cycles = (steps + total_steps - 1) // total_steps  # Ceiling division
 
     logger.info("\nStarting sequential action test:")
-    logger.info(f"User requested steps: {args.steps}")
+    logger.info(f"User requested steps: {steps}")
     logger.info(f"Actions to test: {total_actions}")
     logger.info(f"Steps per action: {steps_per_action}")
     logger.info(f"One complete action cycle: {total_steps} steps")
     logger.info(f"Action cycles to complete: {action_cycles}")
     logger.info("=" * 60)
 
-    for step in range(args.steps):
+    for step in range(steps):
         # Initialize policy actions with proper defaults:
         # - Base DOFs: 0.0 (middle of range, neutral position)
         # - Finger DOFs: -1.0 (minimum of range, closed/contracted position)
@@ -1763,12 +1587,13 @@ Examples:
         # Log observation data for plotting
         if plotting_enabled:
             rr.set_time_sequence("step", step)
-            log_observation_data(env, step, cfg, args.plot_env_idx)
+            plot_env_idx = cfg.get("plotEnvIdx", 0)
+            log_observation_data(env, step, cfg, plot_env_idx)
 
             # Log reward data
             # Get reward components from info if available
             reward_components = info.get("reward_components", {}) if info else {}
-            log_reward_data(env, rewards, reward_components, step, args.plot_env_idx)
+            log_reward_data(env, rewards, reward_components, step, plot_env_idx)
 
         # Print progress every 25 steps and at key transitions
         if step_in_action % 25 == 0 or step_in_action == 49 or step_in_action == 99:
@@ -1906,7 +1731,8 @@ Examples:
                         else:
                             logger.warning("    ⚠ Spread coupling issue")
 
-        time.sleep(args.sleep)
+        sleep_time = cfg.get("sleep", 0.01)
+        time.sleep(sleep_time)
 
     logger.info("\nSequential action test completed!")
     logger.info("All 12 actions have been tested with the -1 → 1 → -1 pattern.")

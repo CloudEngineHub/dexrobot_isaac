@@ -1,6 +1,8 @@
-# Main Hydra configuration for DexHand training
-# Use: python train.py
-# Override: python train.py task=BoxGrasping env.num_envs=2048
+# Main Hydra configuration for DexHand training and testing
+# Training: python train.py
+# Testing: python examples/dexhand_test.py
+# Override: python train.py task=BoxGrasping env.numEnvs=2048
+# Override: python examples/dexhand_test.py task=BoxGrasping headless=true steps=500
 
 defaults:
   - task: BaseTask
@@ -10,8 +12,40 @@ defaults:
 # Task and training configs will be loaded from task/ and train/ subdirectories
 # The following are runtime overrides
 
+# Test script settings (for examples/dexhand_test.py)
+steps: 1200            # Total number of test steps to run
+sleep: 0.01            # Sleep time between steps in seconds
+device: "cuda:0"       # Device for simulation and RL
+headless: false        # Run without GUI visualization
+debug: false           # Enable debug output and additional logging
+log_level: "info"      # Set logging verbosity level
+recordVideo: false     # Enable video recording
+enablePlotting: false  # Enable real-time plotting with Rerun
+plotEnvIdx: 0          # Environment index to plot
+
+# Physics engine at root level (required by VecTask)
+physics_engine: physx
+
 # Simulation configuration
 sim:
+  substeps: 4
+  gravity: [0.0, 0.0, -9.81]
+  num_client_threads: 0
+  physx:
+    solver_type: 1
+    num_position_iterations: 16
+    num_velocity_iterations: 0
+    contact_offset: 0.001
+    rest_offset: 0.0005
+    bounce_threshold_velocity: 0.15
+    max_depenetration_velocity: 0.2
+    default_buffer_size_multiplier: 4.0
+    num_subscenes: 0
+    contact_collection: 1
+    gpu_contact_pairs_per_env: 512
+    always_use_articulations: true
+    num_threads: 4
+  dt: 0.005
   graphicsDeviceId: 0      # Graphics device ID for rendering
 
 # Environment configuration
@@ -21,6 +55,8 @@ env:
   render: null  # null = use defaults (test=render, train=headless), true/false = explicit override
   recordVideo: false  # Enable video recording in headless mode
   streamVideo: false  # Enable HTTP video streaming
+  controlMode: "position"  # Control mode (position/position_delta) - can be overridden by tasks
+
 
 # Task configuration (RL task definition only)
 # Task-specific settings inherited from task/ configs

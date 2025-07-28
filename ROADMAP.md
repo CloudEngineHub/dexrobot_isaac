@@ -18,7 +18,6 @@ Code quality improvements and architectural enhancements.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
-- [ ] `fix-002-consistency.md` - Fix consistency issues
 - [ ] `fix-003-max-iterations.md` - Fix maxIterations config override and train.py cleanup
 
 #### Code Quality (`refactor_*`)
@@ -57,6 +56,13 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-002-consistency.md** (2025-07-28) - **CRITICAL** - Test script and training consistency fixes
+  - Fixed test script environment count issue by switching to existing test_render.yaml configuration (4 environments vs 1024)
+  - Updated control mode validation to accept both position and position_delta modes, resolving BoxGrasping compatibility
+  - Leveraged existing test configuration infrastructure instead of creating new files
+  - Verified both BaseTask and BoxGrasping work properly with Hydra inheritance and CLI overrides
+  - Achieved full consistency between test and train scripts using identical Hydra configuration system
+  - Minimal code changes with maximum reuse of existing well-designed test configurations
 - ✅ **fix-001-contact-viz.md** (2025-07-28) - **ESSENTIAL** - Contact visualization NameError fix
   - Fixed NameError in ViewerController.update_contact_force_colors() where contact_forces.device was referenced after parameter rename
   - Corrected tensor indexing to handle subset of contact bodies with valid indices
