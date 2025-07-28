@@ -18,6 +18,7 @@ Code quality improvements and architectural enhancements.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
+- [ ] `fix-004-dexhand-test-scope.md` - Fix dexhand_test script scope, position control mode, and logging issues
 - [ ] `fix-003-max-iterations.md` - Fix maxIterations config override and train.py cleanup
 
 #### Code Quality (`refactor_*`)
