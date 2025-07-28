@@ -331,6 +331,14 @@ class RewardComponentObserver(AlgoObserver):
                     f"training/termination_rates/{term_type}", rate, frame
                 )
 
+        # Reset cumulative sums for next window
+        for term_type in self.cumulative_sums:
+            for component_name in self.cumulative_sums[term_type]:
+                self.cumulative_sums[term_type][component_name] = {
+                    "rewards": 0.0,
+                    "steps": 0,
+                }
+
     def after_clear_stats(self):
         """
         Called when stats are cleared.

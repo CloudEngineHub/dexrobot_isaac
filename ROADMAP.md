@@ -18,10 +18,9 @@ Code quality improvements and architectural enhancements.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
-- [ ] `fix-001-reward-logging-logic.md` - Fix RewardComponentObserver logging cumulative averages instead of windowed statistics
-- [ ] `fix-002-contact-viz.md` - Fix contact visualization config and rendering
-- [ ] `fix-003-consistency.md` - Fix consistency issues
-- [ ] `fix-004-max-iterations.md` - Fix maxIterations config override and train.py cleanup
+- [ ] `fix-001-contact-viz.md` - Fix contact visualization config and rendering
+- [ ] `fix-002-consistency.md` - Fix consistency issues
+- [ ] `fix-003-max-iterations.md` - Fix maxIterations config override and train.py cleanup
 
 #### Code Quality (`refactor_*`)
 - [ ] `refactor-005-default-values.md` - Move hardcoded defaults to config files
@@ -59,6 +58,12 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-001-reward-logging-logic.md** (2025-07-28) - **CRITICAL** - RewardComponentObserver windowed statistics fix
+  - Fixed RewardComponentObserver logging cumulative averages instead of windowed statistics
+  - Added reset logic in _log_to_tensorboard() to clear cumulative_sums after each logging interval
+  - Converts step-level logging from "average since training start" to meaningful windowed statistics
+  - Enables better training insights by showing recent performance trends instead of slowly-changing overall averages
+  - Minimal code change with significant impact on TensorBoard reward component trending visibility
 - ✅ **fix-000-tb-metrics.md** (2025-07-28) - **ESSENTIAL** - TensorBoard data retention fix
   - Changed rewardLogInterval from 10 to 100 episodes in config.yaml
   - Added clarifying comment explaining TensorBoard 1000-point sampling limit prevention
@@ -106,24 +111,23 @@ Project organization, tooling, and workflow improvements.
 With refactor-001-episode-length.md completed, focus shifts to next high priority architectural tasks.
 
 ### Phase 2: System Stability (Short-term)
-1. **fix-001-reward-logging-logic.md** - Fix reward component logging logic
-2. **fix-002-contact-viz.md** - Contact visualization fixes
-3. **fix-003-consistency.md** - Fix consistency issues
-4. **fix-004-max-iterations.md** - Config override fixes and train.py cleanup
-5. **refactor-005-default-values.md** - Move hardcoded defaults to config
-6. **refactor-008-config-key-casing.md** - Unify config key naming conventions
+1. **fix-001-contact-viz.md** - Contact visualization fixes
+2. **fix-002-consistency.md** - Fix consistency issues
+3. **fix-003-max-iterations.md** - Config override fixes and train.py cleanup
+4. **refactor-005-default-values.md** - Move hardcoded defaults to config
+5. **refactor-008-config-key-casing.md** - Unify config key naming conventions
 
 ### Phase 3: Polish & Enhancement (Medium-term)
-7. **refactor-004-render.md** - Render option semantics clarification
-8. **refactor-003-imports.md** - Clean up mid-file imports
-9. **refactor-007-blind-grasping.md** - Rename BoxGrasping to BlindGrasping task
-10. **refactor-007-step-architecture.md** - Investigate step processing architecture consistency
-11. **feat-***: Feature enhancements (streaming, video, testing modes)
-12. **doc-***: Documentation improvements and illustrations
+6. **refactor-004-render.md** - Render option semantics clarification
+7. **refactor-003-imports.md** - Clean up mid-file imports
+8. **refactor-007-blind-grasping.md** - Rename BoxGrasping to BlindGrasping task
+9. **refactor-007-step-architecture.md** - Investigate step processing architecture consistency
+10. **feat-***: Feature enhancements (streaming, video, testing modes)
+11. **doc-***: Documentation improvements and illustrations
 
 ### Task Complexity Assessment
 - **High complexity**: refactor-007-step-architecture (architecture investigation)
-- **Medium complexity**: fix-001 (reward logging logic), fix-004 (maxIterations config override)
+- **Medium complexity**: fix-003 (maxIterations config override), fix-001 (contact visualization fixes)
 - **Low complexity**: Most feat-* tasks, config cleanups, import organization, doc-* tasks
 
 ---
