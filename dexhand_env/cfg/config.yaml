@@ -37,7 +37,7 @@ train:
   logging:
     experimentName: null  # Auto-generated if null
     logInterval: 10
-    rewardLogInterval: 10
+    rewardLogInterval: 100  # Log reward breakdown every N finished episodes (prevents TensorBoard 1000-point sampling limit)
     logLevel: "info"
     noLogFile: false
   experiment:

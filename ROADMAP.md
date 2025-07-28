@@ -18,7 +18,6 @@ Code quality improvements and architectural enhancements.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
-- [ ] `fix-000-tb-metrics.md` - Fix TensorBoard data point sampling limit causing old reward breakdown data to disappear in long runs
 - [ ] `fix-001-reward-logging-logic.md` - Fix RewardComponentObserver logging cumulative averages instead of windowed statistics
 - [ ] `fix-002-contact-viz.md` - Fix contact visualization config and rendering
 - [ ] `fix-003-consistency.md` - Fix consistency issues
@@ -60,6 +59,12 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-000-tb-metrics.md** (2025-07-28) - **ESSENTIAL** - TensorBoard data retention fix
+  - Changed rewardLogInterval from 10 to 100 episodes in config.yaml
+  - Added clarifying comment explaining TensorBoard 1000-point sampling limit prevention
+  - Reduces logging frequency by 10x, extending visible reward breakdown history from ~780.5M to ~7.8B+ steps
+  - RewardComponentObserver operations confirmed to be well-vectorized for scalability
+  - Single configuration change with immediate impact on long training runs
 - ✅ **refactor-001-episode-length.md** (2025-07-28) - **MAJOR** - Episode length configuration architectural fix
   - Resolved inconsistency where episodeLength was placed in different config sections (task vs env)
   - Moved episodeLength from task to env section in BaseTask.yaml to align with DexHandBase expectations
@@ -101,25 +106,24 @@ Project organization, tooling, and workflow improvements.
 With refactor-001-episode-length.md completed, focus shifts to next high priority architectural tasks.
 
 ### Phase 2: System Stability (Short-term)
-1. **fix-000-tb-metrics.md** - Essential debugging capability
-2. **fix-001-reward-logging-logic.md** - Fix reward component logging logic
-3. **fix-002-contact-viz.md** - Contact visualization fixes
-4. **fix-003-consistency.md** - Fix consistency issues
-5. **fix-004-max-iterations.md** - Config override fixes and train.py cleanup
-6. **refactor-005-default-values.md** - Move hardcoded defaults to config
-7. **refactor-008-config-key-casing.md** - Unify config key naming conventions
+1. **fix-001-reward-logging-logic.md** - Fix reward component logging logic
+2. **fix-002-contact-viz.md** - Contact visualization fixes
+3. **fix-003-consistency.md** - Fix consistency issues
+4. **fix-004-max-iterations.md** - Config override fixes and train.py cleanup
+5. **refactor-005-default-values.md** - Move hardcoded defaults to config
+6. **refactor-008-config-key-casing.md** - Unify config key naming conventions
 
 ### Phase 3: Polish & Enhancement (Medium-term)
-8. **refactor-004-render.md** - Render option semantics clarification
-9. **refactor-003-imports.md** - Clean up mid-file imports
-10. **refactor-007-blind-grasping.md** - Rename BoxGrasping to BlindGrasping task
-11. **refactor-007-step-architecture.md** - Investigate step processing architecture consistency
-12. **feat-***: Feature enhancements (streaming, video, testing modes)
-13. **doc-***: Documentation improvements and illustrations
+7. **refactor-004-render.md** - Render option semantics clarification
+8. **refactor-003-imports.md** - Clean up mid-file imports
+9. **refactor-007-blind-grasping.md** - Rename BoxGrasping to BlindGrasping task
+10. **refactor-007-step-architecture.md** - Investigate step processing architecture consistency
+11. **feat-***: Feature enhancements (streaming, video, testing modes)
+12. **doc-***: Documentation improvements and illustrations
 
 ### Task Complexity Assessment
 - **High complexity**: refactor-007-step-architecture (architecture investigation)
-- **Medium complexity**: fix-000 (tensorboard metrics), fix-001 (reward logging logic), fix-004 (maxIterations config override)
+- **Medium complexity**: fix-001 (reward logging logic), fix-004 (maxIterations config override)
 - **Low complexity**: Most feat-* tasks, config cleanups, import organization, doc-* tasks
 
 ---
