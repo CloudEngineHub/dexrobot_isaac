@@ -719,3 +719,39 @@ class ActionProcessor:
             filter_fn: Function (active_prev_targets, active_rule_targets, active_targets) -> filtered_targets
         """
         self.action_rules.register_post_action_filter(name, filter_fn)
+
+    @post_initialization_only
+    def unscale_actions(self, actions: torch.Tensor) -> torch.Tensor:
+        """
+        Convert actions from normalized space [-1, +1] to physical units.
+
+        This method reverses the scaling applied during action processing to show
+        what physical values the normalized actions represent. Useful for debugging
+        and visualization purposes.
+
+        Args:
+            actions: Normalized actions in range [-1, +1], shape (num_envs, num_actions)
+
+        Returns:
+            torch.Tensor: Actions in physical units (meters for base translation,
+                         radians for base rotation and finger joints)
+        """
+        if actions is None or actions.numel() == 0:
+            return (
+                torch.zeros_like(actions)
+                if actions is not None
+                else torch.zeros((self.num_envs, 0), device=self.device)
+            )
+
+        if self.action_control_mode == "position":
+            # For position mode: reverse scale_to_limits operation
+            # Map [-1,1] to [lower_limits, upper_limits] for policy-controlled DOFs
+            return self.action_scaling.scale_to_limits(
+                actions,
+                self.active_lower_limits[self.active_target_mask],
+                self.active_upper_limits[self.active_target_mask],
+            )
+        else:  # position_delta mode
+            # For position_delta mode: convert to velocity deltas using max_deltas
+            # Actions represent fraction of maximum velocity change
+            return actions * self.max_deltas[self.active_target_mask]

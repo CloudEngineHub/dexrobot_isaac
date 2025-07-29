@@ -5,6 +5,9 @@ Test script for DexHand environment using BaseTask only.
 This script creates a DexHand environment with BaseTask
 and runs tests to verify hand movement and control functionality.
 Specifically designed for BaseTask testing - does not support other tasks.
+
+IMPORTANT: To test position control mode, use `task.controlMode=position`
+(not `env.controlMode`) to properly override the BaseTask configuration.
 """
 
 import os
@@ -1034,8 +1037,8 @@ def main(cfg: DictConfig):
     Usage examples:
       python dexhand_test.py                                     # Basic BaseTask test
       python dexhand_test.py headless=true steps=500            # Headless test for 500 steps
-      python dexhand_test.py env.controlMode=position           # Test position control mode
-      python dexhand_test.py env.controlMode=position_delta     # Test position_delta control mode
+      python dexhand_test.py task.controlMode=position          # Test position control mode (IMPORTANT: use task.controlMode)
+      python dexhand_test.py task.controlMode=position_delta    # Test position_delta control mode
       python dexhand_test.py env.policyControlsHandBase=false   # Test finger-only control
       python dexhand_test.py enablePlotting=true recordVideo=true  # Test with visualization and recording
       python dexhand_test.py env.numEnvs=4 device=cuda:1        # Use 4 environments on GPU 1
