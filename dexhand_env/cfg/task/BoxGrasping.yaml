@@ -21,7 +21,7 @@ env:
     restitution: 0.0
     initial_position:
       xy_range: 0.02    # ±2cm randomization
-      z: 0.025          # Fixed on table (box half-size)
+      z: 0.027          # Fixed on table (box half-size + small clearance for accurate physics)
 
 # Task configuration - all RL-related settings
 task:

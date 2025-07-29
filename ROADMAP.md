@@ -18,7 +18,6 @@ Code quality improvements and architectural enhancements.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
-- [ ] `fix-005-box-bounce-physics.md` - Fix box bouncing at initialization in BoxGrasping task
 
 #### Code Quality (`refactor_*`)
 - [ ] `refactor-004-render.md` - Clarify render option semantics (viewer vs background rendering)
@@ -56,6 +55,15 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-005-box-bounce-physics.md** (2025-07-29) - **ESSENTIAL** - Fix box bouncing at initialization in BoxGrasping task
+  - **Root Cause**: Refactor-005-default-values changed VecTask substeps from hardcoded default 2 to explicit config value 4, making physics simulation more accurate and exposing box positioning precision issues
+  - **Physics Analysis**: Higher substeps (4 vs 2) = more accurate collision detection, revealing that box center at z=0.025m placed bottom exactly at z=0 with no clearance for collision sensitivity
+  - **Principled Solution**: Adjusted box initial z position from 0.025m to 0.027m (box half-size + 2mm clearance) to work with accurate physics rather than masking the issue
+  - **Configuration Fix**: Updated BoxGrasping.yaml with clear comment explaining the clearance requirement for accurate physics simulation
+  - **Comprehensive Testing**: Validated fix works with both substeps=2 and substeps=4, confirmed no regression in BaseTask functionality
+  - **Architecture Compliance**: Maintained improved physics accuracy (substeps=4) while addressing root positioning cause, aligning with fail-fast philosophy
+  - **Impact**: Eliminated box bouncing behavior while preserving accurate physics simulation, no defensive programming added
+  - Single configuration change with thorough validation across multiple physics parameter settings
 - ✅ **refactor-005-default-values.md** (2025-07-29) - **CRITICAL** - Remove hardcoded defaults from .get() patterns
   - **Root Cause**: Hardcoded numerical defaults in `.get()` patterns violated fail-fast philosophy and masked configuration issues
   - **Critical Fix**: Fixed training pipeline config access pattern (cfg.train["seed"] → cfg["train"]["seed"]) for dict vs OmegaConf compatibility
@@ -64,7 +72,7 @@ Project organization, tooling, and workflow improvements.
   - **Architecture Compliance**: Eliminated defensive programming while preserving legitimate external interface defaults
   - **Testing Verified**: Both test script and training pipeline (BaseTask/BoxGrasping) work correctly
   - **Impact**: Restored training pipeline, improved fail-fast behavior, made all parameters discoverable in config files
-  - **Side Effect**: Box bouncing physics behavior change identified (see fix-005-box-bounce-physics.md)
+  - **Side Effect**: Box bouncing physics behavior change identified and resolved (fixed in fix-005-box-bounce-physics.md)
 - ✅ **fix-003-max-iterations.md** (2025-07-29) - **ESSENTIAL** - maxIterations config override and train.py cleanup
   - **Root Cause**: Hardcoded default checks in get_config_overrides() violated fail-fast philosophy and created brittle configuration system
   - **Configuration System Fix**: Removed all hardcoded default comparisons from get_config_overrides(), now always includes key parameters for complete reproducibility
