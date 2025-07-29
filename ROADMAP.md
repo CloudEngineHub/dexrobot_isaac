@@ -26,6 +26,7 @@ Issue resolution and bug fixes.
 - [ ] `refactor-007-blind-grasping.md` - Rename BoxGrasping to BlindGrasping task
 - [ ] `refactor-007-step-architecture.md` - Investigate step processing architecture consistency
 - [ ] `refactor-008-config-key-casing.md` - Unify config key naming to lower_case under task section (file currently has typo: rafactor-008-config-key-casing.md)
+- [ ] `refactor-009-fix-prompt-contact-viz.md` - Fix prompt file name from fix-001-contact-viz.md to correct duplicate numbering
 
 ### Low Priority Tasks
 
