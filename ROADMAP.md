@@ -18,7 +18,6 @@ Code quality improvements and architectural enhancements.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
-- [ ] `fix-004-dexhand-test-scope.md` - Fix dexhand_test script scope, position control mode, and logging issues
 - [ ] `fix-003-max-iterations.md` - Fix maxIterations config override and train.py cleanup
 
 #### Code Quality (`refactor_*`)
@@ -57,6 +56,14 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-004-dexhand-test-scope.md** (2025-07-29) - **CRITICAL** - DexHand test script functionality restoration
+  - **Root Cause**: Missing `unscale_actions` method removed during ActionProcessor refactoring (commit 2bbbaaff) broke plotting functionality
+  - **ActionProcessor Enhancement**: Added missing `unscale_actions` method (lines 723-757) with proper action unscaling for both position and position_delta control modes
+  - **Documentation Fix**: Updated usage examples to show correct `task.controlMode=position` syntax instead of incorrect `env.controlMode=position`
+  - **Configuration Clarity**: Added important note explaining proper BaseTask configuration override approach
+  - **Testing Verified**: Both control modes work without AttributeError, test script completes successfully, plotting functionality fully restored
+  - **Impact**: Fixed critical test script crash when plotting enabled, restored debugging capabilities essential for development workflow
+  - Minimal code changes with maximum impact on essential debugging and testing infrastructure
 - ✅ **fix-002-consistency.md** (2025-07-28) - **CRITICAL** - Test script and training consistency fixes
   - Fixed test script environment count issue by switching to existing test_render.yaml configuration (4 environments vs 1024)
   - Updated control mode validation to accept both position and position_delta modes, resolving BoxGrasping compatibility
