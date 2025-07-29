@@ -18,9 +18,9 @@ Code quality improvements and architectural enhancements.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
+- [ ] `fix-005-box-bounce-physics.md` - Fix box bouncing at initialization in BoxGrasping task
 
 #### Code Quality (`refactor_*`)
-- [ ] `refactor-005-default-values.md` - Move hardcoded defaults to config files
 - [ ] `refactor-004-render.md` - Clarify render option semantics (viewer vs background rendering)
 - [ ] `refactor-003-imports.md` - Clean up mid-file imports for opencv and flask
 - [ ] `refactor-007-blind-grasping.md` - Rename BoxGrasping to BlindGrasping task
@@ -55,6 +55,15 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **refactor-005-default-values.md** (2025-07-29) - **CRITICAL** - Remove hardcoded defaults from .get() patterns
+  - **Root Cause**: Hardcoded numerical defaults in `.get()` patterns violated fail-fast philosophy and masked configuration issues
+  - **Critical Fix**: Fixed training pipeline config access pattern (cfg.train["seed"] → cfg["train"]["seed"]) for dict vs OmegaConf compatibility
+  - **Comprehensive Cleanup**: Removed all hardcoded defaults from ActionProcessor, VideoManager, ViewerController, ObservationEncoder, TerminationManager, VecTask, and DexHandBase
+  - **Config Transparency**: Added explicit clipObservations/clipActions to config.yaml, termination rewards to BaseTask.yaml
+  - **Architecture Compliance**: Eliminated defensive programming while preserving legitimate external interface defaults
+  - **Testing Verified**: Both test script and training pipeline (BaseTask/BoxGrasping) work correctly
+  - **Impact**: Restored training pipeline, improved fail-fast behavior, made all parameters discoverable in config files
+  - **Side Effect**: Box bouncing physics behavior change identified (see fix-005-box-bounce-physics.md)
 - ✅ **fix-003-max-iterations.md** (2025-07-29) - **ESSENTIAL** - maxIterations config override and train.py cleanup
   - **Root Cause**: Hardcoded default checks in get_config_overrides() violated fail-fast philosophy and created brittle configuration system
   - **Configuration System Fix**: Removed all hardcoded default comparisons from get_config_overrides(), now always includes key parameters for complete reproducibility
