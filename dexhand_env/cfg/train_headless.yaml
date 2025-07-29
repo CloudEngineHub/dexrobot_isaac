@@ -9,5 +9,5 @@ env:
   render: false
   numEnvs: 8192
 
-training:
+train:
   maxIterations: 10000

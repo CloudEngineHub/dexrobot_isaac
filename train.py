@@ -123,32 +123,26 @@ def build_runner(
 
 
 def get_config_overrides(cfg: DictConfig) -> List[str]:
-    """Get list of non-default config overrides for reproducibility."""
+    """Get list of config overrides for reproducibility."""
     overrides = []
 
     # Check task override
     if cfg.task.name != "BaseTask":
         overrides.append(f"task={cfg.task.name}")
 
-    # Check environment overrides
-    if cfg.env.numEnvs != 1024:  # Default from config.yaml
-        overrides.append(f"env.numEnvs={cfg.env.numEnvs}")
+    # Always include key environment parameters for reproducibility
+    overrides.append(f"env.numEnvs={cfg.env.numEnvs}")
     if cfg.env.render is not None:
         overrides.append(f"env.render={cfg.env.render}")
 
-    # Check training overrides
+    # Always include key training parameters for reproducibility
     if cfg.train.test:
         overrides.append("train.test=true")
     if cfg.train.checkpoint:
         overrides.append(f"train.checkpoint={cfg.train.checkpoint}")
-    if cfg.train.seed != 42:  # Default from config.yaml
-        overrides.append(f"train.seed={cfg.train.seed}")
-    if cfg.train.maxIterations != 10000:  # Default from config.yaml
-        overrides.append(f"train.maxIterations={cfg.train.maxIterations}")
-
-    # Check logging overrides
-    if cfg.train.logging.logLevel != "info":  # Default from config.yaml
-        overrides.append(f"train.logging.logLevel={cfg.train.logging.logLevel}")
+    overrides.append(f"train.seed={cfg.train.seed}")
+    overrides.append(f"train.maxIterations={cfg.train.maxIterations}")
+    overrides.append(f"train.logging.logLevel={cfg.train.logging.logLevel}")
 
     return overrides
 

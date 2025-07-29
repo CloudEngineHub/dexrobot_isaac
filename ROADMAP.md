@@ -18,7 +18,6 @@ Code quality improvements and architectural enhancements.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
-- [ ] `fix-003-max-iterations.md` - Fix maxIterations config override and train.py cleanup
 
 #### Code Quality (`refactor_*`)
 - [ ] `refactor-005-default-values.md` - Move hardcoded defaults to config files
@@ -56,6 +55,14 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-003-max-iterations.md** (2025-07-29) - **ESSENTIAL** - maxIterations config override and train.py cleanup
+  - **Root Cause**: Hardcoded default checks in get_config_overrides() violated fail-fast philosophy and created brittle configuration system
+  - **Configuration System Fix**: Removed all hardcoded default comparisons from get_config_overrides(), now always includes key parameters for complete reproducibility
+  - **Alias Standardization**: Replaced confusing `maxIter` alias with explicit `maxIterations` for research code clarity (breaking change)
+  - **Config Structure Fix**: Corrected train_headless.yaml section from `training:` to `train:` for consistency
+  - **Fail-Fast Compliance**: Eliminated defensive programming patterns, configuration values now come from single source of truth
+  - **Impact**: Improved configuration system maintainability, eliminated brittle hardcoded checks, enhanced command reproducibility
+  - Three files modified with minimal changes following architectural principles
 - ✅ **fix-004-dexhand-test-scope.md** (2025-07-29) - **CRITICAL** - DexHand test script functionality restoration
   - **Root Cause**: Missing `unscale_actions` method removed during ActionProcessor refactoring (commit 2bbbaaff) broke plotting functionality
   - **ActionProcessor Enhancement**: Added missing `unscale_actions` method (lines 723-757) with proper action unscaling for both position and position_delta control modes

@@ -45,7 +45,7 @@ class CLIPreprocessor:
         "seed": "train.seed",
         "render": "env.render",
         "device": "env.device",
-        "maxIter": "train.maxIterations",
+        "maxIterations": "train.maxIterations",
         "logLevel": "train.logging.logLevel",
     }
 
