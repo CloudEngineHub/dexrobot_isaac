@@ -106,11 +106,11 @@ class Env(ABC):
         self.act_space = {}
 
         # Clip observations and actions
-        self.clip_obs = self.cfg["env"].get("clipObservations", np.Inf)
-        self.clip_actions = self.cfg["env"].get("clipActions", np.Inf)
+        self.clip_obs = self.cfg["env"]["clipObservations"]
+        self.clip_actions = self.cfg["env"]["clipActions"]
 
         # Set random seed
-        self.seed(self.cfg.get("seed", 42))
+        self.seed(self.cfg["train"]["seed"])
 
     @property
     def num_observations(self):
@@ -249,9 +249,9 @@ class VecTask(Env):
 
         # assign general sim parameters
         sim_params.dt = config_sim["dt"]
-        sim_params.num_client_threads = config_sim.get("num_client_threads", 0)
+        sim_params.num_client_threads = config_sim["num_client_threads"]
         sim_params.use_gpu_pipeline = config_sim["use_gpu_pipeline"]
-        sim_params.substeps = config_sim.get("substeps", 2)
+        sim_params.substeps = config_sim["substeps"]
 
         # Hard-code up-axis to Z (required by all DexHand environments)
         sim_params.up_axis = gymapi.UP_AXIS_Z

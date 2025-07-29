@@ -66,7 +66,15 @@ task:
     hand_angular_acceleration: 0.05  # Penalize rapid angular velocity changes
     contact_stability: 0.2        # Reward consistent contacts
 
+    # Termination rewards (explicit configuration required)
+    termination_success: 10.0           # Reward for successful task completion
+    termination_failure_penalty: 5.0   # Penalty for task failure
+    termination_timeout_penalty: 0.0   # Penalty for episode timeout (neutral for BaseTask)
+
   enableComponentDebugLogs: false # Enable detailed debug logs for component internals
+
+  # Curriculum learning parameters
+  maxConsecutiveSuccesses: 50       # Maximum consecutive successes before increasing difficulty
 
   # Bodies to monitor for contact force observations
   contactForceBodies:

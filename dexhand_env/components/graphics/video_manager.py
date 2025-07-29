@@ -64,10 +64,8 @@ class VideoManager:
         camera_props = gymapi.CameraProperties()
         camera_props.horizontal_fov = 75.0  # Field of view in degrees
 
-        # Get resolution from config or use defaults
-        resolution = self._video_config.get(
-            "resolution", self._video_config.get("videoResolution", [1024, 768])
-        )
+        # Get resolution from config
+        resolution = self._video_config["resolution"]
         camera_props.width = resolution[0]
         camera_props.height = resolution[1]
         camera_props.enable_tensors = False  # Avoid GPU pipeline deadlock in Isaac Gym
@@ -103,7 +101,7 @@ class VideoManager:
         """Position the camera to look at the hand via GraphicsManager."""
         # Calculate first environment position for camera targeting
         # Isaac Gym positions environments in a grid starting from origin
-        env_spacing = self.parent.env_cfg.get("envSpacing", 2.0)
+        env_spacing = self.parent.env_cfg["envSpacing"]
 
         # Environment 0 position (row=0, col=0) - Isaac Gym grid logic
         env0_x = 0.0

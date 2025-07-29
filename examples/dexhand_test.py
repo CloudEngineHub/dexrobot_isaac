@@ -1114,8 +1114,9 @@ def main(cfg: DictConfig):
             video_config = {
                 "enabled": True,
                 "output_dir": "/tmp/dexhand_videos",
-                "video_resolution": [1024, 768],
+                "resolution": [1024, 768],
                 "fps": 30,
+                "codec": "mp4v",
             }
 
         env = create_dex_env(

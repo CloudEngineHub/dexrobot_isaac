@@ -292,9 +292,9 @@ def create_video_recorder_from_config(
     """
     return VideoRecorder(
         output_dir=output_dir,
-        fps=video_config.get("fps", 30.0),
-        resolution=tuple(video_config.get("resolution", [1024, 768])),
-        codec=video_config.get("codec", "mp4v"),
+        fps=video_config["fps"],
+        resolution=tuple(video_config["resolution"]),
+        codec=video_config["codec"],
         max_duration=video_config.get("maxDuration"),
         max_frames_per_episode=video_config.get("maxFramesPerEpisode"),
     )

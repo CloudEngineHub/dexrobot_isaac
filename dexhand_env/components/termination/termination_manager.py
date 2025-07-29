@@ -56,15 +56,10 @@ class TerminationManager:
         self.max_episode_length = parent.env_cfg["episodeLength"]
 
         # Termination rewards - read from reward weights config
-        self.success_reward = task_cfg.get("rewardWeights", {}).get(
-            "termination_success", 10.0
-        )
-        self.failure_penalty = task_cfg.get("rewardWeights", {}).get(
-            "termination_failure_penalty", 5.0
-        )
-        self.timeout_penalty = task_cfg.get("rewardWeights", {}).get(
-            "termination_timeout_penalty", 0.0
-        )
+        reward_weights = task_cfg["rewardWeights"]
+        self.success_reward = reward_weights["termination_success"]
+        self.failure_penalty = reward_weights["termination_failure_penalty"]
+        self.timeout_penalty = reward_weights["termination_timeout_penalty"]
 
         # Raw values for unweighted tracking (before scaling)
         self.RAW_SUCCESS = 1.0
@@ -73,7 +68,7 @@ class TerminationManager:
 
         # Track consecutive successes for curriculum learning
         self.consecutive_successes = 0
-        self.max_consecutive_successes = task_cfg.get("maxConsecutiveSuccesses", 50)
+        self.max_consecutive_successes = task_cfg["maxConsecutiveSuccesses"]
 
     @property
     def num_envs(self):

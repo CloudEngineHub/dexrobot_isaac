@@ -182,16 +182,14 @@ class BoxGraspingTask(DexTask):
         self.base_stability_decay = reward_calc["base_stability_decay"]
 
         # Load penetration prevention parameters
-        penetration_cfg = task_config.get("penetrationPrevention", {})
-        self.geometric_penetration_factor = penetration_cfg.get(
-            "geometricPenetrationFactor", 1.0
-        )
-        self.proximity_min_distance_factor = penetration_cfg.get(
-            "proximityMinDistanceFactor", 1.0
-        )
-        self.penetration_depth_scale = penetration_cfg.get(
-            "penetrationDepthScale", 100.0
-        )
+        penetration_cfg = task_config["penetrationPrevention"]
+        self.geometric_penetration_factor = penetration_cfg[
+            "geometricPenetrationFactor"
+        ]
+        self.proximity_min_distance_factor = penetration_cfg[
+            "proximityMinDistanceFactor"
+        ]
+        self.penetration_depth_scale = penetration_cfg["penetrationDepthScale"]
 
         # Quality evaluation thresholds
         quality_thresh = task_config["quality_thresholds"]
@@ -796,7 +794,7 @@ class BoxGraspingTask(DexTask):
         box_force_magnitude = torch.norm(box_forces, dim=1)
 
         # Box has contact if force magnitude exceeds threshold
-        contact_threshold = self.parent_env.task_cfg.get("contactBinaryThreshold", 1.0)
+        contact_threshold = self.parent_env.task_cfg["contactBinaryThreshold"]
         box_has_contact = box_force_magnitude > contact_threshold
 
         # Get fingerpad positions from rigid body states

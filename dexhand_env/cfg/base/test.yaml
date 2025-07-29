@@ -21,5 +21,6 @@ env:
 train:
   test: true           # Enable test mode
   maxIterations: 1000  # Reasonable default for testing
+  seed: 42             # Random seed for reproducible testing
   logging:
     logLevel: "info"   # Standard logging level for tests

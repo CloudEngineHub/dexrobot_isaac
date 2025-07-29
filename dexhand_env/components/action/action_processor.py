@@ -199,8 +199,8 @@ class ActionProcessor:
             raise ValueError(f"Invalid control mode: {self.action_control_mode}")
 
         # Set control options
-        self.policy_controls_hand_base = config.get("policy_controls_hand_base", True)
-        self.policy_controls_fingers = config.get("policy_controls_fingers", True)
+        self.policy_controls_hand_base = config["policy_controls_hand_base"]
+        self.policy_controls_fingers = config["policy_controls_fingers"]
 
         # Set velocity limits
         self.policy_finger_velocity_limit = config["finger_vel_limit"]
@@ -229,9 +229,7 @@ class ActionProcessor:
         )
 
         # Configure which post-action filters are enabled
-        self._enabled_post_action_filters = config.get(
-            "post_action_filters", ["velocity_clamp", "position_clamp"]
-        )
+        self._enabled_post_action_filters = config["post_action_filters"]
 
         # Precompute active DOF limits
         self._precompute_active_limits()

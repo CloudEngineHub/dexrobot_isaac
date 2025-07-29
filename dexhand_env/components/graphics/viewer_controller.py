@@ -70,22 +70,20 @@ class ViewerController:
 
         # Contact force visualization settings - load from config
         contact_viz_config = parent.task_cfg.get("contactVisualization", {})
-        self.enable_contact_visualization = contact_viz_config.get("enabled", True)
-        self.contact_force_threshold = contact_viz_config.get(
-            "forceThreshold", 1.0
-        )  # Newtons
-        self.contact_force_max_intensity = contact_viz_config.get(
-            "forceMaxIntensity", 10.0
-        )  # Newtons
+        self.enable_contact_visualization = contact_viz_config["enabled"]
+        self.contact_force_threshold = contact_viz_config["forceThreshold"]  # Newtons
+        self.contact_force_max_intensity = contact_viz_config[
+            "forceMaxIntensity"
+        ]  # Newtons
 
-        # Load default color from config or use default gray
-        default_color = contact_viz_config.get("defaultColor", [0.7, 0.7, 0.7])
+        # Load colors from config
+        default_color = contact_viz_config["defaultColor"]
         self.default_body_color = gymapi.Vec3(
             default_color[0], default_color[1], default_color[2]
         )
 
-        # Load base color from config or use default
-        base_color = contact_viz_config.get("baseColor", [1.0, 0.2, 0.2])
+        # Load base color from config
+        base_color = contact_viz_config["baseColor"]
         self.contact_base_color = gymapi.Vec3(
             base_color[0], base_color[1], base_color[2]
         )
@@ -363,9 +361,7 @@ class ViewerController:
             "right": gymapi.Vec3(0.0, -1.0, 0.6),  # From the right side
             "bottom": gymapi.Vec3(0.0, 0.3, -1.0),  # Looking up from below
         }
-        camera_offset = camera_offsets.get(
-            self.camera_view_mode, gymapi.Vec3(-1.0, 0.0, 0.6)
-        )
+        camera_offset = camera_offsets[self.camera_view_mode]
 
         # Cache target position to avoid redundant CPU transfers
 

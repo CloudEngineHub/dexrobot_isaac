@@ -148,7 +148,7 @@ class DexHandBase(VecTask):
         self.max_episode_length = self.env_cfg["episodeLength"]
 
         # Physics parameters
-        self.physics_dt = self.sim_cfg.get("dt", 0.01)  # Physics simulation timestep
+        self.physics_dt = self.sim_cfg["dt"]  # Physics simulation timestep
         self.physics_steps_per_control_step = (
             1  # Will be auto-detected by PhysicsManager
         )
@@ -354,8 +354,8 @@ class DexHandBase(VecTask):
         # Set initial pose from config
         if "initialHandPos" in self.env_cfg:
             self.hand_initializer.set_initial_pose(
-                pos=self.env_cfg.get("initialHandPos", [0.0, 0.0, 0.5]),
-                rot=self.env_cfg.get("initialHandRot", [0.0, 0.0, 0.0, 1.0]),
+                pos=self.env_cfg["initialHandPos"],
+                rot=self.env_cfg["initialHandRot"],
             )
 
         # Set contact force bodies from config
@@ -470,6 +470,10 @@ class DexHandBase(VecTask):
             "finger_vel_limit": self.task_cfg["maxFingerJointVelocity"],
             "base_lin_vel_limit": self.task_cfg["maxBaseLinearVelocity"],
             "base_ang_vel_limit": self.task_cfg["maxBaseAngularVelocity"],
+            "post_action_filters": [
+                "velocity_clamp",
+                "position_clamp",
+            ],  # Standard filters
         }
 
         # Add optional default targets if present
@@ -605,9 +609,7 @@ class DexHandBase(VecTask):
         logger.info("Creating environments and actors...")
 
         # Define environment spacing (configurable)
-        env_spacing = self.env_cfg.get(
-            "envSpacing", 2.0
-        )  # Default 2.0m if not specified
+        env_spacing = self.env_cfg["envSpacing"]
         half_spacing = env_spacing / 2.0
         env_lower = gymapi.Vec3(-half_spacing, -half_spacing, 0.0)
         env_upper = gymapi.Vec3(
