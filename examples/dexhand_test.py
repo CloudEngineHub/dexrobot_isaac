@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 """
-Test script for DexHand environment using the factory.
+Test script for DexHand environment using BaseTask only.
 
-This script creates a DexHand environment with the BaseTask
-and runs a simple test to verify hand movement and control.
+This script creates a DexHand environment with BaseTask
+and runs tests to verify hand movement and control functionality.
+Specifically designed for BaseTask testing - does not support other tasks.
 """
 
 import os
@@ -132,10 +133,13 @@ def create_rule_based_base_controller():
     return base_controller
 
 
-def create_rule_based_finger_controller():
+def create_rule_based_finger_controller(debug=False):
     """
     Create a rule-based controller function for fingers.
     Returns a function that takes env and returns finger targets.
+
+    Args:
+        debug: Enable debug logging
     """
     # Create a mutable object to track state
     state = {"call_count": 0, "start_time": None}
@@ -157,7 +161,7 @@ def create_rule_based_finger_controller():
         last_progress = getattr(finger_controller, "last_progress", -1)
         current_progress = env.episode_step_count[0].item()
 
-        if state["call_count"] < 5 or current_progress != last_progress:
+        if debug and (state["call_count"] < 3 or current_progress != last_progress):
             logger.debug(
                 f"[Finger Controller] Call #{state['call_count']}, episode_step_count: {current_progress}, sim_time: {sim_time:.6f}, t: {t:.6f}, sin(t): {math.sin(t):.6f}"
             )
@@ -277,7 +281,7 @@ def setup_rerun_logging():
     return True
 
 
-def log_observation_data(env, step, cfg, env_idx=0):
+def log_observation_data(env, step, cfg, env_idx=0, debug=False):
     """Log observation data to Rerun for visualization."""
     if not RERUN_AVAILABLE:
         return
@@ -353,7 +357,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
             hand_quat = obs_dict["hand_pose"][env_idx, 3:7]
 
             # Debug: log quaternion values at first few steps
-            if step < 5:
+            if debug and step < 3:
                 logger.debug(f"Step {step} - hand_quat raw: {hand_quat}")
                 logger.debug(
                     f"  As list: [x={hand_quat[0]:.6f}, y={hand_quat[1]:.6f}, z={hand_quat[2]:.6f}, w={hand_quat[3]:.6f}]"
@@ -381,7 +385,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
                 euler_angles = rotation.as_euler("xyz", degrees=False)
 
                 # Debug: print Euler angles at first few steps
-                if step < 5:
+                if debug and step < 3:
                     print(
                         f"  Euler angles (rad): [roll={euler_angles[0]:.6f}, pitch={euler_angles[1]:.6f}, yaw={euler_angles[2]:.6f}]"
                     )
@@ -404,7 +408,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
         if "hand_pose_arr_aligned" in obs_dict:
             arr_aligned_quat = obs_dict["hand_pose_arr_aligned"][env_idx, 3:7]
 
-            if step < 5:
+            if debug and step < 3:
                 logger.debug(
                     f"  ARR-aligned quat: [x={arr_aligned_quat[0]:.6f}, y={arr_aligned_quat[1]:.6f}, z={arr_aligned_quat[2]:.6f}, w={arr_aligned_quat[3]:.6f}]"
                 )
@@ -436,7 +440,7 @@ def log_observation_data(env, step, cfg, env_idx=0):
                 arr_rotation = Rotation.from_quat(arr_quat_numpy)
                 arr_euler = arr_rotation.as_euler("xyz", degrees=False)
 
-                if step < 5:
+                if debug and step < 3:
                     print(
                         f"  ARR-aligned Euler (rad): [roll={arr_euler[0]:.6f}, pitch={arr_euler[1]:.6f}, yaw={arr_euler[2]:.6f}]"
                     )
@@ -1021,13 +1025,20 @@ BaseTask.create_task_objects = _patched_create_task_objects
 def main(cfg: DictConfig):
     """Main function to test the DexHand environment using Hydra configuration.
 
+    This script is designed for BaseTask testing only and provides:
+    - Position and position_delta control mode testing
+    - Policy control configuration verification (base/fingers)
+    - Observation system validation with Rerun plotting
+    - Contact force testing with simple box obstacles
+
     Usage examples:
-      python dexhand_test.py                                   # Basic test with default settings
-      python dexhand_test.py headless=true steps=500          # Headless test for 500 steps
-      python dexhand_test.py env.controlMode=position_delta   # Test with delta control mode
-      python dexhand_test.py task=BoxGrasping                  # Test BoxGrasping task
+      python dexhand_test.py                                     # Basic BaseTask test
+      python dexhand_test.py headless=true steps=500            # Headless test for 500 steps
+      python dexhand_test.py env.controlMode=position           # Test position control mode
+      python dexhand_test.py env.controlMode=position_delta     # Test position_delta control mode
+      python dexhand_test.py env.policyControlsHandBase=false   # Test finger-only control
       python dexhand_test.py enablePlotting=true recordVideo=true  # Test with visualization and recording
-      python dexhand_test.py env.numEnvs=4 device=cuda:1      # Use 4 environments on GPU 1
+      python dexhand_test.py env.numEnvs=4 device=cuda:1        # Use 4 environments on GPU 1
     """
 
     # Set up logging
@@ -1105,7 +1116,7 @@ def main(cfg: DictConfig):
             }
 
         env = create_dex_env(
-            task_name=cfg.task.get("name", "BaseTask"),
+            task_name="BaseTask",
             cfg=cfg,
             rl_device=rl_device,
             sim_device=sim_device,
@@ -1180,8 +1191,12 @@ def main(cfg: DictConfig):
                 # Both base and fingers controlled by policy
                 # Scale actions to DOF limits
                 scaled_actions = torch.zeros_like(targets)
-                scaled_actions[:, ap.active_target_mask] = ap._scale_actions_to_limits(
-                    actions
+                scaled_actions[
+                    :, ap.active_target_mask
+                ] = ap.action_scaling.scale_to_limits(
+                    actions,
+                    ap.active_lower_limits[ap.active_target_mask],
+                    ap.active_upper_limits[ap.active_target_mask],
                 )
 
                 # Compute diff and apply velocity clamping
@@ -1194,9 +1209,9 @@ def main(cfg: DictConfig):
                 # Scale base actions
                 base_lower = ap.active_lower_limits[:6]
                 base_upper = ap.active_upper_limits[:6]
-                scaled_base = (actions + 1.0) * 0.5 * (
-                    base_upper - base_lower
-                ) + base_lower
+                scaled_base = ap.action_scaling.scale_to_limits(
+                    actions, base_lower, base_upper
+                )
 
                 # Apply velocity clamping to base
                 base_diff = scaled_base - active_prev_targets[:, :6]
@@ -1210,9 +1225,9 @@ def main(cfg: DictConfig):
                 # Scale finger actions
                 finger_lower = ap.active_lower_limits[6:]
                 finger_upper = ap.active_upper_limits[6:]
-                scaled_fingers = (actions + 1.0) * 0.5 * (
-                    finger_upper - finger_lower
-                ) + finger_lower
+                scaled_fingers = ap.action_scaling.scale_to_limits(
+                    actions, finger_lower, finger_upper
+                )
 
                 # Apply velocity clamping to fingers
                 finger_diff = scaled_fingers - active_prev_targets[:, 6:]
@@ -1269,7 +1284,9 @@ def main(cfg: DictConfig):
         None if env.policy_controls_hand_base else create_rule_based_base_controller()
     )
     finger_controller = (
-        None if env.policy_controls_fingers else create_rule_based_finger_controller()
+        None
+        if env.policy_controls_fingers
+        else create_rule_based_finger_controller(debug)
     )
 
     # Set up pre-action rule if any controllers are needed
@@ -1588,15 +1605,15 @@ def main(cfg: DictConfig):
         if plotting_enabled:
             rr.set_time_sequence("step", step)
             plot_env_idx = cfg.get("plotEnvIdx", 0)
-            log_observation_data(env, step, cfg, plot_env_idx)
+            log_observation_data(env, step, cfg, plot_env_idx, debug)
 
             # Log reward data
             # Get reward components from info if available
             reward_components = info.get("reward_components", {}) if info else {}
             log_reward_data(env, rewards, reward_components, step, plot_env_idx)
 
-        # Print progress every 25 steps and at key transitions
-        if step_in_action % 25 == 0 or step_in_action == 49 or step_in_action == 99:
+        # Print progress every 50 steps and at key transitions
+        if step_in_action % 50 == 0 or step_in_action == 49 or step_in_action == 99:
             # Add random actions indicator to progress output
             random_mode_indicator = " [RANDOM]" if env.random_actions_enabled else ""
 
@@ -1644,9 +1661,13 @@ def main(cfg: DictConfig):
                     f"  Step {step+1:4d}: Test in progress (substep {step_in_action+1:2d}/100){random_mode_indicator}"
                 )
 
-            # At transitions, show DOF changes for the current action
-            if hasattr(env, "dof_pos") and (
-                step_in_action == 0 or step_in_action == 49 or step_in_action == 99
+            # At transitions, show DOF changes for the current action (debug level only)
+            if (
+                debug
+                and hasattr(env, "dof_pos")
+                and (
+                    step_in_action == 0 or step_in_action == 49 or step_in_action == 99
+                )
             ):
                 current_dof_pos = env.dof_pos[0]
                 dof_change = current_dof_pos - initial_dof_pos
