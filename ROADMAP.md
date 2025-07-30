@@ -30,7 +30,7 @@ Documentation improvements and illustrations.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
-- [ ] `fix-006-metadata-keys.md` - Fix git metadata saving error with config keys
+- [x] `fix-006-metadata-keys.md` - ✅ **COMPLETED** (2025-07-30) - Fix git metadata saving error with config keys
 - [ ] `fix-007-episode-length-of-grasping.md` - Fix BlindGrasping task early termination behavior
 
 #### Code Quality (`refactor_*`)
@@ -56,6 +56,15 @@ New functionality and API enhancements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-006-metadata-keys.md** (2025-07-30) - **ESSENTIAL** - Fix git metadata saving error with config keys
+  - **Root Cause**: `get_config_overrides()` function referenced non-existent `cfg.env.render` key (changed to `cfg.env.viewer` in refactor-004-render.md), causing "Key 'render' is not in struct" warning and breaking metadata saving
+  - **Architecture Problem**: Hardcoded config key assumptions violated fail-fast philosophy and created fragile reconstruction logic that broke with configuration changes
+  - **Solution**: Removed entire `get_config_overrides()` function and simplified git metadata saving to focus on original CLI args and git information only
+  - **Eliminated Issues**: No more hardcoded key assumptions, no defensive programming patterns, no duplication of existing config logging/saving functionality
+  - **Architecture Compliance**: Followed fail-fast philosophy by removing fragile reconstruction logic, maintained single source of truth principle
+  - **Testing Verified**: Both BaseTask and BlindGrasping configurations work without warnings, git metadata saving succeeds correctly
+  - **Impact**: Fixed critical metadata saving functionality, eliminated fragile code patterns, simplified architecture while preserving all essential functionality
+  - Minimal fix with maximum impact - removed ~25 lines of problematic code while maintaining full reproducibility capabilities
 - ✅ **feat-002-indefinite-testing.md** (2025-07-30) - **MEDIUM** - Enable indefinite testing mode
   - **Root Cause**: Test mode runs with hardcoded defaults (2000 games), making it difficult to control test duration for different evaluation scenarios
   - **Core Implementation**: Added `train.testGamesNum` parameter with finite/indefinite testing modes (0 = indefinite, >0 = finite games)
