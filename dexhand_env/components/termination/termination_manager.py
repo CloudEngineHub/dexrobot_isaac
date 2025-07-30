@@ -45,8 +45,12 @@ class TerminationManager:
         # Active criteria lists - read from config, no hardcoded defaults
         # If not specified in config, use empty list (means use all available)
         termination_cfg = task_cfg.get("termination", {})
-        self.active_success_criteria = termination_cfg.get("activeSuccessCriteria", [])
-        self.active_failure_criteria = termination_cfg.get("activeFailureCriteria", [])
+        self.active_success_criteria = termination_cfg.get(
+            "active_success_criteria", []
+        )
+        self.active_failure_criteria = termination_cfg.get(
+            "active_failure_criteria", []
+        )
 
         # Pre-allocate tensors for all possible success/failure reasons
         # This prevents dynamic dictionary growth during runtime which causes memory leaks
@@ -56,7 +60,7 @@ class TerminationManager:
         self.max_episode_length = parent.env_cfg["episodeLength"]
 
         # Termination rewards - read from reward weights config
-        reward_weights = task_cfg["rewardWeights"]
+        reward_weights = task_cfg["reward_weights"]
         self.success_reward = reward_weights["termination_success"]
         self.failure_penalty = reward_weights["termination_failure_penalty"]
         self.timeout_penalty = reward_weights["termination_timeout_penalty"]
@@ -68,7 +72,7 @@ class TerminationManager:
 
         # Track consecutive successes for curriculum learning
         self.consecutive_successes = 0
-        self.max_consecutive_successes = task_cfg["maxConsecutiveSuccesses"]
+        self.max_consecutive_successes = task_cfg["max_consecutive_successes"]
 
     @property
     def num_envs(self):

@@ -1041,7 +1041,7 @@ def main(cfg: DictConfig):
       python dexhand_test.py env.viewer=false steps=500        # No viewer test for 500 steps
       python dexhand_test.py task.controlMode=position          # Test position control mode (IMPORTANT: use task.controlMode)
       python dexhand_test.py task.controlMode=position_delta    # Test position_delta control mode
-      python dexhand_test.py env.policyControlsHandBase=false   # Test finger-only control
+      python dexhand_test.py task.policy_controls_hand_base=false   # Test finger-only control
       python dexhand_test.py enablePlotting=true env.videoRecord=true  # Test with visualization and recording
       python dexhand_test.py env.numEnvs=4 device=cuda:1        # Use 4 environments on GPU 1
     """

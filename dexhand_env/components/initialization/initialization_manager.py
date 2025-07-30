@@ -68,7 +68,7 @@ class InitializationManager:
 
         # Initialize observation encoder now that we know the action space size
         observation_keys = self.parent.task_cfg.get(
-            "policyObservationKeys",
+            "policy_observation_keys",
             [
                 "base_dof_pos",
                 "base_dof_vel",

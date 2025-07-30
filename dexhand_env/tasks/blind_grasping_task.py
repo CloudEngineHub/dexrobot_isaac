@@ -182,7 +182,7 @@ class BlindGraspingTask(DexTask):
         self.base_stability_decay = reward_calc["base_stability_decay"]
 
         # Load penetration prevention parameters
-        penetration_cfg = task_config["penetrationPrevention"]
+        penetration_cfg = task_config["penetration_prevention"]
         self.geometric_penetration_factor = penetration_cfg[
             "geometricPenetrationFactor"
         ]
@@ -794,7 +794,7 @@ class BlindGraspingTask(DexTask):
         box_force_magnitude = torch.norm(box_forces, dim=1)
 
         # Box has contact if force magnitude exceeds threshold
-        contact_threshold = self.parent_env.task_cfg["contactBinaryThreshold"]
+        contact_threshold = self.parent_env.task_cfg["contact_binary_threshold"]
         box_has_contact = box_force_magnitude > contact_threshold
 
         # Get fingerpad positions from rigid body states
@@ -1242,7 +1242,7 @@ class BlindGraspingTask(DexTask):
         Check task-specific failure criteria with comprehensive stage-based validation.
 
         This method implements a multi-layered failure detection system where ALL failure
-        criteria are explicitly declared in activeFailureCriteria configuration. Uses both
+        criteria are explicitly declared in active_failure_criteria configuration. Uses both
         policy-observable information and privileged information to provide accurate
         failure detection while maintaining the blind policy design.
 

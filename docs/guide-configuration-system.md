@@ -18,6 +18,55 @@ The DexHand configuration system is built on [Hydra](https://hydra.cc/) and uses
 - **CLI overrides** for quick experimentation
 - **Type safety and validation** to catch configuration errors early
 
+## Configuration Key Naming Conventions
+
+The DexHand configuration system uses strategic naming conventions to balance CLI usability with Python code consistency:
+
+### Casing Rules
+
+**Task Section (`task:`)**
+- **Uses snake_case** (e.g., `policy_controls_hand_base`, `reward_weights`)
+- **Rationale**: Task keys are accessed primarily by Python code rather than CLI overrides
+- **Benefits**: Consistent with Python naming conventions, reduces cognitive friction when working between config files and Python code
+
+**Other Sections (`env:`, `sim:`, `train:`)**
+- **Uses camelCase** (e.g., `numEnvs`, `episodeLength`, `maxIterations`)
+- **Rationale**: These keys are frequently overridden via CLI for experimentation
+- **Benefits**: Shorter CLI commands, follows established CLI conventions
+
+### Examples
+
+```yaml
+# Task section - snake_case for Python consistency
+task:
+  policy_controls_hand_base: true
+  max_finger_joint_velocity: 1.0
+  reward_weights:
+    object_height: 1.0
+  contact_binary_threshold: 1.0
+
+# Other sections - camelCase for CLI usability
+env:
+  numEnvs: 1024
+  episodeLength: 300
+
+sim:
+  physicsEngine: "physx"
+
+train:
+  maxIterations: 10000
+```
+
+### CLI Override Impact
+
+```bash
+# Easy CLI overrides for frequently-used keys (camelCase)
+python train.py numEnvs=2048 episodeLength=500
+
+# Task keys less frequently overridden (snake_case when needed)
+python train.py task.reward_weights.object_height=2.0
+```
+
 ## 4-Section Configuration Hierarchy
 
 The configuration system organizes all settings into four logical sections:

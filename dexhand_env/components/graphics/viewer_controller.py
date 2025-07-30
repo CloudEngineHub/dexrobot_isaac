@@ -73,7 +73,7 @@ class ViewerController:
         self._keyboard_subscribed = False
 
         # Contact force visualization settings - load from config
-        contact_viz_config = parent.task_cfg.get("contactVisualization", {})
+        contact_viz_config = parent.task_cfg.get("contact_visualization", {})
         self.enable_contact_visualization = contact_viz_config["enabled"]
         self.contact_force_threshold = contact_viz_config["forceThreshold"]  # Newtons
         self.contact_force_max_intensity = contact_viz_config[

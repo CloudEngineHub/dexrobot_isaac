@@ -29,26 +29,26 @@ task:
 
   # Action space configuration
   controlMode: "position_delta"   # position or position_delta
-  policyControlsHandBase: true    # Whether the policy controls the hand base (6 DOFs) - when false, use rule-based control
-  policyControlsFingers: true     # Whether the policy controls the finger joints (12 controls) - when false, use rule-based control
+  policy_controls_hand_base: true    # Whether the policy controls the hand base (6 DOFs) - when false, use rule-based control
+  policy_controls_fingers: true     # Whether the policy controls the finger joints (12 controls) - when false, use rule-based control
 
   # Default targets for uncontrolled DOFs (fallback if task doesn't provide them)
   # These are used only if the task's get_task_dof_targets method doesn't return targets
   # NOTE: Base targets are RELATIVE displacements from spawn position (0 = stay at spawn point)
-  defaultBaseTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default base targets [x, y, z, rx, ry, rz]
-  defaultFingerTargets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets (12 controls)
+  default_base_targets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default base targets [x, y, z, rx, ry, rz]
+  default_finger_targets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets (12 controls)
 
   # Component-wise velocity limits for position_delta mode action scaling
   # These limits are applied PER COMPONENT (each joint/axis independently)
-  maxFingerJointVelocity: 1.0     # Maximum velocity for each finger joint (rad/s) - applied per joint
-  maxBaseLinearVelocity: 0.5      # Maximum velocity for each base linear axis (m/s) - applied per x/y/z axis
-  maxBaseAngularVelocity: 1.5     # Maximum velocity for each base angular axis (rad/s) - applied per rx/ry/rz axis
+  max_finger_joint_velocity: 1.0     # Maximum velocity for each finger joint (rad/s) - applied per joint
+  max_base_linear_velocity: 0.5      # Maximum velocity for each base linear axis (m/s) - applied per x/y/z axis
+  max_base_angular_velocity: 1.5     # Maximum velocity for each base angular axis (rad/s) - applied per rx/ry/rz axis
 
   # Termination criteria (for BaseTask)
   termination:
     # Specify which criteria are active (empty means use all available)
-    activeSuccessCriteria: []
-    activeFailureCriteria: []
+    active_success_criteria: []
+    active_failure_criteria: []
 
     # Height thresholds for ground collision detection
     height_safety:
@@ -57,7 +57,7 @@ task:
       fingerpad_threshold: 0.0
 
   # Reward weights configuration (empty for BaseTask)
-  rewardWeights:
+  reward_weights:
     # Common rewards (implemented in RewardCalculator)
     alive: 0.1                    # Small constant reward per timestep
     height_safety: 1.0            # Penalize fingertips too close to ground
@@ -75,13 +75,13 @@ task:
     termination_failure_penalty: 5.0   # Penalty for task failure
     termination_timeout_penalty: 0.0   # Penalty for episode timeout (neutral for BaseTask)
 
-  enableComponentDebugLogs: false # Enable detailed debug logs for component internals
+  enable_component_debug_logs: false # Enable detailed debug logs for component internals
 
   # Curriculum learning parameters
-  maxConsecutiveSuccesses: 50       # Maximum consecutive successes before increasing difficulty
+  max_consecutive_successes: 50       # Maximum consecutive successes before increasing difficulty
 
   # Bodies to monitor for contact force observations
-  contactForceBodies:
+  contact_force_bodies:
     - "r_f_link1_4"  # thumb distal phalanx
     - "r_f_link2_4"  # index distal phalanx
     - "r_f_link3_4"  # middle distal phalanx
@@ -89,10 +89,10 @@ task:
     - "r_f_link5_4"  # pinky distal phalanx
 
   # Contact detection thresholds
-  contactBinaryThreshold: 1.0       # Force threshold (N) for binary contact detection (reduces sim2real gap)
+  contact_binary_threshold: 1.0       # Force threshold (N) for binary contact detection (reduces sim2real gap)
 
   # Contact force visualization settings
-  contactVisualization:
+  contact_visualization:
     enabled: true                  # Enable/disable contact force visualization
     forceThreshold: 0.1           # Minimum force (N) to trigger visualization
     forceMaxIntensity: 10.0       # Force (N) at which color intensity is maximum
@@ -100,7 +100,7 @@ task:
     defaultColor: [0.7, 0.7, 0.7] # RGB color for no contact (light gray)
 
   # Observation configuration
-  policyObservationKeys:        # List of observation components to include in final observation tensor
+  policy_observation_keys:        # List of observation components to include in final observation tensor
     - "base_dof_pos"            # Base DOF positions (6 DOFs: x, y, z, rx, ry, rz)
     - "base_dof_vel"            # Base DOF velocities (6 DOFs: x, y, z, rx, ry, rz)
     - "active_finger_dof_pos"   # Active finger DOF positions (12 active finger controls) - for RL

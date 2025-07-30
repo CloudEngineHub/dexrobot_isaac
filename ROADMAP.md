@@ -20,7 +20,6 @@ Code quality improvements and architectural enhancements.
 Issue resolution and bug fixes.
 
 #### Code Quality (`refactor_*`)
-- [ ] `refactor-008-config-key-casing.md` - Unify config key naming to lower_case under task section (file currently has typo: rafactor-008-config-key-casing.md)
 - [ ] `refactor-009-fix-prompt-contact-viz.md` - Fix prompt file name from fix-001-contact-viz.md to correct duplicate numbering
 
 ### Low Priority Tasks
@@ -57,6 +56,17 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **refactor-008-config-key-casing.md** (2025-07-30) - **MEDIUM** - Unify config key naming to snake_case under task section
+  - **Root Cause**: Configuration files had inconsistent naming conventions - camelCase keys in task section created cognitive friction between config files and Python code
+  - **Design Decision**: Keep other sections (env, sim, train) as camelCase for CLI usability, unify task section to snake_case for code consistency since accessed primarily by Python
+  - **Configuration Updates**: Updated BaseTask.yaml (16 keys) and BlindGrasping.yaml (9 keys) with comprehensive snake_case transformation
+  - **Code Updates**: Updated 9 Python files with 17 key references across components (dexhand_base, termination_manager, blind_grasping_task, reward_calculator, observation_encoder, viewer_controller, initialization_manager, hand_initializer, dexhand_test)
+  - **Key Transformations**: policyControlsHandBase → policy_controls_hand_base, rewardWeights → reward_weights, contactForceBodies → contact_force_bodies, policyObservationKeys → policy_observation_keys, and 13 other systematic transformations
+  - **Documentation Enhancement**: Added comprehensive "Configuration Key Naming Conventions" section to guide-configuration-system.md explaining casing rules, rationale, and CLI impact
+  - **Architecture Compliance**: Followed fail-fast philosophy with clean break (no backward compatibility), preserved CLI usability for frequently-used sections, respected component boundaries
+  - **Testing Verified**: Both BaseTask and BlindGrasping task loading and training pipeline work correctly with new snake_case keys
+  - **Impact**: Improved code consistency between configuration files and Python code while maintaining CLI usability for frequently-overridden keys
+  - Comprehensive configuration refactoring with systematic snake_case transformation and thorough testing validation
 - ✅ **refactor-007-step-architecture.md** (2025-07-30) - **MEDIUM** - Investigate step processing architecture consistency
   - **Root Cause**: Question about architectural inconsistency - why pre_physics_step is in DexHandBase but post_physics_step delegates to StepProcessor component
   - **Architecture Analysis**: Comprehensive investigation revealed 3:1 complexity ratio (120+ lines vs 40 lines) justifies different architectural treatments

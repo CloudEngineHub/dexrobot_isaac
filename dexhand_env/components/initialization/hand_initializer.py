@@ -554,7 +554,7 @@ class HandInitializer:
                     raise RuntimeError(
                         f"Failed to find contact force rigid body '{name}'. "
                         f"Available rigid bodies: {list(self.local_rigid_body_index_to_name.values())}. "
-                        f"Check that the body name exists in the MJCF model and is correctly specified in contactForceBodies config."
+                        f"Check that the body name exists in the MJCF model and is correctly specified in contact_force_bodies config."
                     )
                 local_idx = global_idx - self._env0_first_body_global_idx
                 self.contact_force_local_body_indices.append(local_idx)

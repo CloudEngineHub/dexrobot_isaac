@@ -28,21 +28,21 @@ task:
   name: BlindGrasping
 
   # Velocity limits
-  maxBaseLinearVelocity: 0.1
-  maxBaseAngularVelocity: 0.5
-  maxFingerJointVelocity: 0.5  # Reduced for more controlled movements
+  max_base_linear_velocity: 0.1
+  max_base_angular_velocity: 0.5
+  max_finger_joint_velocity: 0.5  # Reduced for more controlled movements
 
   # Contact detection
-  contactBinaryThreshold: 0.1
+  contact_binary_threshold: 0.1
 
   # Penetration prevention parameters
-  penetrationPrevention:
+  penetration_prevention:
     geometricPenetrationFactor: 1.0         # Fraction of half box size for detection
     proximityMinDistanceFactor: 1.0         # Minimum distance clamp for proximity reward
     penetrationDepthScale: 100.0            # Scaling factor for continuous penetration penalty
 
   # Policy observation keys - what the policy actually sees (blind policy design)
-  policyObservationKeys:
+  policy_observation_keys:
     - base_dof_pos
     - active_finger_dof_pos
     - base_dof_vel
@@ -65,8 +65,8 @@ task:
   # Termination criteria
   termination:
     # Specify which criteria are active (fail-fast if any are missing)
-    activeSuccessCriteria: ["grasp_lift_success"]
-    activeFailureCriteria: ["hitting_ground", "box_too_far", "stage1_pregrasp_failed", "stage2_contact_failed", "stage3_grasp_lost"]
+    active_success_criteria: ["grasp_lift_success"]
+    active_failure_criteria: ["hitting_ground", "box_too_far", "stage1_pregrasp_failed", "stage2_contact_failed", "stage3_grasp_lost"]
 
     # Height thresholds for ground collision detection
     height_safety:
@@ -120,7 +120,7 @@ task:
     box_color: [0.5, 0.8, 1.0]                # RGB color for box (light blue)
 
   # Reward weights configuration - override BaseTask completely
-  rewardWeights:
+  reward_weights:
     _delete_: true  # Delete parent rewardWeights to ensure BlindGrasping has complete control
 
     # Unified stage-based reward system (removes redundancy)

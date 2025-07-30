@@ -359,9 +359,9 @@ class DexHandBase(VecTask):
             )
 
         # Set contact force bodies from config
-        if "contactForceBodies" in self.task_cfg:
+        if "contact_force_bodies" in self.task_cfg:
             self.hand_initializer.set_contact_force_bodies(
-                self.task_cfg["contactForceBodies"]
+                self.task_cfg["contact_force_bodies"]
             )
 
         # Load hand asset
@@ -465,11 +465,11 @@ class DexHandBase(VecTask):
         action_processor_config = {
             "control_mode": self.task_cfg["controlMode"],
             "num_dof": self.num_dof,
-            "policy_controls_hand_base": self.task_cfg["policyControlsHandBase"],
-            "policy_controls_fingers": self.task_cfg["policyControlsFingers"],
-            "finger_vel_limit": self.task_cfg["maxFingerJointVelocity"],
-            "base_lin_vel_limit": self.task_cfg["maxBaseLinearVelocity"],
-            "base_ang_vel_limit": self.task_cfg["maxBaseAngularVelocity"],
+            "policy_controls_hand_base": self.task_cfg["policy_controls_hand_base"],
+            "policy_controls_fingers": self.task_cfg["policy_controls_fingers"],
+            "finger_vel_limit": self.task_cfg["max_finger_joint_velocity"],
+            "base_lin_vel_limit": self.task_cfg["max_base_linear_velocity"],
+            "base_ang_vel_limit": self.task_cfg["max_base_angular_velocity"],
             "post_action_filters": [
                 "velocity_clamp",
                 "position_clamp",
@@ -477,13 +477,13 @@ class DexHandBase(VecTask):
         }
 
         # Add optional default targets if present
-        if "defaultBaseTargets" in self.task_cfg:
+        if "default_base_targets" in self.task_cfg:
             action_processor_config["default_base_targets"] = self.task_cfg[
-                "defaultBaseTargets"
+                "default_base_targets"
             ]
-        if "defaultFingerTargets" in self.task_cfg:
+        if "default_finger_targets" in self.task_cfg:
             action_processor_config["default_finger_targets"] = self.task_cfg[
-                "defaultFingerTargets"
+                "default_finger_targets"
             ]
 
         self.action_processor.initialize_from_config(action_processor_config)
@@ -1100,7 +1100,7 @@ class DexHandBase(VecTask):
 
         # Get logging preferences from config (now passed from logging.logLevel)
         log_level = self.env_cfg.get("logLevel", "INFO").upper()
-        enable_debug_logs = self.env_cfg.get("enableComponentDebugLogs", False)
+        enable_debug_logs = self.task_cfg.get("enable_component_debug_logs", False)
         force_config_logging = self.env_cfg.get("forceConfigLogging", False)
 
         # Only configure if no handlers exist or explicitly forced via config

@@ -34,7 +34,7 @@ class RewardCalculator:
         self.task_cfg = task_cfg
 
         # Initialize reward weights from config
-        self.reward_weights = task_cfg.get("rewardWeights", {})
+        self.reward_weights = task_cfg.get("reward_weights", {})
 
         # Import loguru for debug logging
         from loguru import logger
