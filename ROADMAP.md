@@ -15,6 +15,18 @@ With major architectural improvements complete (episode length config, graphics 
 Code quality improvements and architectural enhancements.
 
 ### Medium Priority Tasks
+#### Feature Enhancements (`feat_*`)
+- [ ] `feat-000-streaming-port.md` - Improve port management and binding options
+- [ ] `feat-001-video-fps-control.md` - Implement FPS-aware video saving
+- [x] `feat-002-indefinite-testing.md` - ✅ **COMPLETED** (2025-07-30) - Enable indefinite testing mode
+- [ ] `feat-004-action-rule-example.md` - Action rule example implementation
+
+#### Documentation Tasks (`doc_*`)
+Documentation improvements and illustrations.
+- [ ] `doc-000-cp.md` - Documentation task
+- [ ] `doc-001-video.md` - Video documentation
+- [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
+- [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
@@ -29,19 +41,9 @@ Policy tuning, physics improvements, and reward engineering.
 
 #### Feature Enhancements (`feat_*`)
 New functionality and API enhancements.
-- [ ] `feat-000-streaming-port.md` - Improve port management and binding options
-- [ ] `feat-001-video-fps-control.md` - Implement FPS-aware video saving
-- [ ] `feat-002-indefinite-testing.md` - Enable indefinite testing mode
-- [ ] `feat-004-action-rule-example.md` - Action rule example implementation
 - [ ] `feat-100-bimanual.md` - Support bimanual environment with dexhand_left and dexhand_right
 - [ ] `feat-110-domain-randomization.md` - Structured domain randomization scheme
 
-#### Documentation Tasks (`doc_*`)
-Documentation improvements and illustrations.
-- [ ] `doc-000-cp.md` - Documentation task
-- [ ] `doc-001-video.md` - Video documentation
-- [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
-- [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 
 #### Completed Meta Tasks (`meta_*`)
 - [x] `meta-000-workflow-setup.md` - ✅ **COMPLETED** - AI development workflow design and implementation
@@ -52,6 +54,18 @@ Documentation improvements and illustrations.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **feat-002-indefinite-testing.md** (2025-07-30) - **MEDIUM** - Enable indefinite testing mode
+  - **Root Cause**: Test mode runs with hardcoded defaults (2000 games), making it difficult to control test duration for different evaluation scenarios
+  - **Core Implementation**: Added `train.testGamesNum` parameter with finite/indefinite testing modes (0 = indefinite, >0 = finite games)
+  - **RL Games API Fix**: Fixed incorrect Runner.config access pattern by modifying train_cfg dictionary before build_runner() call instead of post-creation modification
+  - **Configuration Hierarchy Fix**: Corrected parameter placement from `train_cfg['player']['games_num']` to `train_cfg['config']['player']['games_num']` to match RL Games BasePlayer expectations
+  - **CLI Enhancement**: Added `testGamesNum` alias (maps to `train.testGamesNum`) for convenient CLI usage without "train" prefix
+  - **Configuration Integration**: Added testGamesNum: 100 default to config.yaml with proper Hydra override support
+  - **Usage Examples**: `python train.py train.test=true testGamesNum=5` (finite), `python train.py train.test=true testGamesNum=0` (indefinite)
+  - **Architecture Compliance**: Followed fail-fast philosophy, maintained existing RL Games integration patterns, preserved training mode functionality
+  - **Testing Verified**: Both finite and indefinite modes work correctly, CLI aliases function properly, logging shows correct test mode detection
+  - **Impact**: Users now have explicit control over test duration with predictable termination, enabling scripted testing and resource management
+  - Complete indefinite testing implementation with RL Games API integration fix and CLI convenience features
 - ✅ **refactor-009-config-yaml.md** (2025-07-30) - **MEDIUM** - Configuration architecture cleanup
   - **Root Cause**: Configuration files served dual purposes (training pipeline + test script) with mixed responsibilities, duplicated settings, and naming inconsistencies
   - **Architecture Cleanup**: Created dedicated test_script.yaml for examples/dexhand_test.py, cleaned config.yaml to focus on training pipeline, removed duplicated settings from base/test.yaml

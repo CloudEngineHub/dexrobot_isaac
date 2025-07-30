@@ -218,6 +218,43 @@ python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000
 python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000 testing.reloadInterval=30
 ```
 
+### Indefinite Testing and Test Duration Control
+
+By default, testing runs for a finite number of games (100) then terminates. You can control test duration using the `testGamesNum` parameter:
+
+```bash
+# Finite testing: run exactly 25 games
+python train.py task=BaseTask test=true checkpoint=latest testGamesNum=25
+
+# Indefinite testing: run until manual termination (Ctrl+C)
+python train.py task=BaseTask test=true checkpoint=latest testGamesNum=0
+
+# Indefinite testing with hot-reload: powerful development workflow
+python train.py task=BaseTask test=true checkpoint=latest testGamesNum=0 reloadInterval=30 env.viewer=true
+
+# Headless indefinite testing for extended evaluation
+python train.py task=BaseTask test=true checkpoint=latest testGamesNum=0 headless=true env.numEnvs=32
+```
+
+**Test Duration Options:**
+- `testGamesNum=N` (N > 0): Run exactly N games then terminate
+- `testGamesNum=0`: Run indefinitely until manual termination with Ctrl+C
+- Combined with `reloadInterval=30`: Automatically reload newer checkpoints every 30 seconds
+
+**Indefinite Testing Use Cases:**
+- **Live Policy Development**: Watch policy behavior update in real-time as training progresses
+- **Extended Evaluation**: Long-running tests to assess policy stability and performance
+- **Interactive Debugging**: Manual observation of policy behavior over extended periods
+- **Demo and Presentation**: Continuous policy demonstration for showcasing results
+
+**Best Practices:**
+- Use `env.viewer=true` for interactive observation
+- Use `headless=true` for background/overnight testing
+- Scale `env.numEnvs` based on GPU memory for better statistics
+- Always terminate indefinite testing with Ctrl+C for clean shutdown
+
+> **Advanced Workflow:** For comprehensive indefinite testing workflows including automated scripts and development integration, see [Indefinite Testing Guide](docs/guide-indefinite-testing.md).
+
 ### Video Recording
 
 ```bash

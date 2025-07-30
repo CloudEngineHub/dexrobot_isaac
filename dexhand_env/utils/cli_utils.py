@@ -47,6 +47,7 @@ class CLIPreprocessor:
         "device": "env.device",
         "maxIterations": "train.maxIterations",
         "logLevel": "train.logging.logLevel",
+        "testGamesNum": "train.testGamesNum",
     }
 
     def preprocess_args(self, args: List[str]) -> List[str]:

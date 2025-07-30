@@ -378,10 +378,36 @@ def main(cfg: DictConfig):
     # Update environment creator in config
     env_configurations.configurations["rlgpu_dexhand"]["env_creator"] = env_creator
 
+    # Configure test mode parameters before building runner
+    if cfg.train.test:
+        logger.info("Running in test mode")
+
+        # Configure test games count
+        test_games = getattr(cfg.train, "testGamesNum", 100)
+        if test_games == 0:
+            test_games = 999999  # Effectively indefinite
+            logger.info("Test mode: indefinite testing (runs until manual termination)")
+        else:
+            logger.info(f"Test mode: finite testing ({test_games} games)")
+
+        # Add test configuration to train_cfg before building runner
+        if "config" not in train_cfg:
+            train_cfg["config"] = {}
+        if "player" not in train_cfg["config"]:
+            train_cfg["config"]["player"] = {}
+        train_cfg["config"]["player"]["games_num"] = test_games
+        logger.info(
+            f"DEBUG: Added games_num={test_games} to train_cfg['config']['player']"
+        )
+
     # Build and run trainer
     # RL Games expects config with 'params' wrapper, but we flattened it
     # Create compatible structure for RL Games
     rl_games_train_cfg = {"params": train_cfg}
+    if cfg.train.test:
+        logger.info(
+            f"DEBUG: RL Games config contains config.player.games_num = {rl_games_train_cfg['params'].get('config', {}).get('player', {}).get('games_num', 'NOT_FOUND')}"
+        )
     runner = build_runner(
         rl_games_train_cfg,
         env_creator,
@@ -394,8 +420,6 @@ def main(cfg: DictConfig):
 
     # Run training or testing
     if cfg.train.test:
-        logger.info("Running in test mode")
-
         # Configure hot-reload if requested
         if cfg.train.checkpoint and getattr(cfg.train, "reloadInterval", 0) > 0:
             reload_interval = cfg.train.reloadInterval
@@ -412,14 +436,15 @@ def main(cfg: DictConfig):
             )
 
         logger.info("About to call runner.run() in test mode")
-        runner.run(
-            {
-                "train": False,
-                "play": True,
-                "checkpoint": cfg.train.checkpoint,
-                "sigma": None,
-            }
-        )
+        run_args = {
+            "train": False,
+            "play": True,
+            "checkpoint": cfg.train.checkpoint,
+            "sigma": None,
+            # games_num should be configured in player config, not here
+        }
+        logger.info(f"DEBUG: runner.run() args = {run_args}")
+        runner.run(run_args)
         logger.info("runner.run() completed in test mode")
     else:
         logger.info("Starting training")

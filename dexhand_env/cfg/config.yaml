@@ -64,6 +64,7 @@ train:
   checkpoint: null
   envName: "rlgpu_dexhand"  # RL Games environment name
   reloadInterval: 30  # Seconds between checkpoint reloads in test mode
+  testGamesNum: 100   # Number of games to evaluate in test mode (0 = indefinite)
   logging:
     experimentName: null  # Auto-generated if null
     logInterval: 10

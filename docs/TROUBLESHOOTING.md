@@ -130,6 +130,71 @@ ls -la assets/dexrobot_mujoco/
 2. Verify control mode (position, velocity, effort) matches training setup
 3. Check action scaling and limits are appropriate
 
+## Testing and Evaluation Issues
+
+### Indefinite Testing Problems
+
+#### Testing Terminates Unexpectedly
+**Symptom**: Indefinite testing (testGamesNum=0) stops before manual termination
+**Common Causes**:
+1. **Environment errors**: Runtime errors in task or simulation
+2. **Hardware issues**: GPU memory exhaustion or driver failures
+3. **Checkpoint corruption**: Invalid or corrupted model checkpoint
+**Solution**:
+1. Check terminal logs for error messages before termination
+2. Verify checkpoint integrity: `python train.py test=true checkpoint=path/to/checkpoint.pth testGamesNum=10`
+3. Monitor GPU memory usage during testing
+4. Try with fewer environments: `env.numEnvs=4`
+
+#### Hot-Reload Not Working
+**Symptom**: New checkpoints aren't automatically loaded during indefinite testing
+**Common Causes**:
+1. **Incorrect checkpoint path**: Path doesn't point to updating checkpoint file
+2. **File permissions**: Checkpoint directory not writable or readable
+3. **Wrong reload interval**: Too short/long reload interval
+**Solution**:
+1. Verify checkpoint path exists and is being updated: `ls -la runs/experiment/nn/`
+2. Check reload interval logs in terminal output
+3. Test with explicit checkpoint path: `train.checkpoint=runs/experiment/nn/checkpoint.pth`
+4. Ensure training process is actively saving checkpoints
+
+#### High Memory Usage During Indefinite Testing
+**Symptom**: GPU memory grows continuously during long testing runs
+**Root Cause**: Memory leaks in environment or observation processing
+**Solution**:
+1. Reduce number of environments: `env.numEnvs` to 4-8 for indefinite testing
+2. Use headless mode: `headless=true` reduces memory overhead
+3. Monitor memory with: `nvidia-smi -l 1` during testing
+4. Restart indefinite testing periodically if memory grows
+
+#### Manual Termination Issues
+**Symptom**: Ctrl+C doesn't cleanly stop indefinite testing
+**Solution**:
+1. Use single Ctrl+C and wait 5-10 seconds for clean shutdown
+2. If hanging, use Ctrl+Z to suspend, then `kill %1` to terminate
+3. Force termination: `killall python` (last resort)
+4. Check for background processes: `ps aux | grep train.py`
+
+### Finite Testing Problems
+
+#### Test Count Not Respected
+**Symptom**: Testing runs for wrong number of games despite testGamesNum setting
+**Solution**:
+1. Verify CLI override syntax: `train.testGamesNum=25` (not `testing.testGamesNum`)
+2. Check configuration loading: review terminal logs for parameter confirmation
+3. Test with explicit config file if CLI overrides aren't working
+
+#### Test Mode Performance Issues
+**Symptom**: Testing runs significantly slower than training
+**Common Causes**:
+1. **Viewer overhead**: Rendering significantly impacts performance
+2. **Too many environments**: Test mode doesn't need many parallel environments
+3. **Video recording**: Recording adds performance overhead
+**Solution**:
+1. Use fewer environments for testing: `env.numEnvs=4`
+2. For performance testing, use: `headless=true env.numEnvs=32`
+3. Disable video recording if not needed: `env.videoRecord=false`
+
 ## Performance Issues
 
 ### Slow Training

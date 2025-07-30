@@ -108,6 +108,26 @@ python train.py task=BaseTask test=true checkpoint=latest viewer=true numEnvs=4
 - **"Checkpoint not found"** → Use specific path: `checkpoint=runs/BaseTask_train_YYMMDD_HHMMSS/nn/BaseTask.pth`
 - **Unstable behavior** → Normal for early training; train longer for better policy
 
+### 4. Control Test Duration
+
+By default, testing runs for 100 games then stops. You can customize this:
+
+```bash
+# Test for exactly 25 games
+python train.py task=BaseTask test=true checkpoint=latest testGamesNum=25
+
+# Run indefinitely until manual termination (Ctrl+C)
+python train.py task=BaseTask test=true checkpoint=latest testGamesNum=0
+
+# Indefinite testing with hot-reload (automatically loads newer checkpoints)
+python train.py task=BaseTask test=true checkpoint=latest testGamesNum=0 reloadInterval=30
+```
+
+**Test Duration Options:**
+- `testGamesNum=50` → Run exactly 50 games then stop
+- `testGamesNum=0` → Run indefinitely until Ctrl+C
+- `reloadInterval=30` → Check for new checkpoints every 30 seconds (hot-reload)
+
 ## What Just Happened?
 
 You've successfully:
