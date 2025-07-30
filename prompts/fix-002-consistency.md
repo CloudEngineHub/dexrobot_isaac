@@ -125,4 +125,4 @@ def main(cfg: DictConfig):
 
 **Overall Status**: ✅ **FULLY COMPLETED** - All consistency issues resolved, both tasks work reliably with proper test defaults and flexible validation.
 
-REOPENED: `dexhand_test.py` should be
+REOPENED: `dexhand_test.py` should be hardcoded to use `BaseTask`, without an option for specifying a task. Docs mentioning this file should be updated accordingly.
