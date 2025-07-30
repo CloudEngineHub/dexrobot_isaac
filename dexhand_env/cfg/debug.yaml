@@ -8,7 +8,7 @@ defaults:
   - _self_
 
 env:
-  render: true
+  viewer: true
 
-training:
+train:
   maxIterations: 100  # Override for shorter debug sessions

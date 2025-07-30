@@ -52,7 +52,7 @@ physx:
   contact_offset: 0.002         # Slightly relaxed precision
 ```
 
-**Use cases:** `test_render`, `test_stream`, interactive debugging (~2-3x faster)
+**Use cases:** `test_viewer`, `test_stream`, interactive debugging (~2-3x faster)
 
 #### `accurate.yaml` - High Precision Training
 ```yaml
@@ -83,7 +83,7 @@ sim:
 
 #### In Test Configurations
 ```yaml
-# dexhand_env/cfg/test_render.yaml
+# dexhand_env/cfg/test_viewer.yaml
 defaults:
   - config
   - base/test

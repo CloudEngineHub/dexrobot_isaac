@@ -64,7 +64,7 @@ env:
     videoRecord: false     # Save video files to disk
     videoStream: false     # Stream over network
   ```
-- `dexhand_env/cfg/test_render.yaml`: Update to use new schema:
+- `dexhand_env/cfg/test_viewer.yaml`: Update to use new schema:
   ```yaml
   env:
     viewer: true

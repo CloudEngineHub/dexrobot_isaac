@@ -1025,7 +1025,7 @@ BaseTask.create_task_objects = _patched_create_task_objects
 
 
 @hydra.main(
-    config_path="../dexhand_env/cfg", config_name="test_render", version_base=None
+    config_path="../dexhand_env/cfg", config_name="test_script", version_base=None
 )
 def main(cfg: DictConfig):
     """Main function to test the DexHand environment using BaseTask only.

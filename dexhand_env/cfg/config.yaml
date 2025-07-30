@@ -13,14 +13,7 @@ defaults:
 # Task and training configs will be loaded from task/ and train/ subdirectories
 # The following are runtime overrides
 
-# Test script settings (for examples/dexhand_test.py)
-steps: 1200            # Total number of test steps to run
-sleep: 0.01            # Sleep time between steps in seconds
 device: "cuda:0"       # Device for simulation and RL
-debug: false           # Enable debug output and additional logging
-log_level: "info"      # Set logging verbosity level
-enablePlotting: false  # Enable real-time plotting with Rerun
-plotEnvIdx: 0          # Environment index to plot
 
 # Physics engine at root level (required by VecTask)
 physics_engine: physx

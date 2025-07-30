@@ -270,7 +270,7 @@ class CLIPreprocessor:
         """Get usage examples for the CLI aliases."""
         examples = [
             "# Simplified syntax:",
-            "python train.py config=test_render numEnvs=1 test=true",
+            "python train.py config=test_viewer numEnvs=1 test=true",
             "",
             "# Smart checkpoint resolution:",
             "python train.py checkpoint=latest          # Latest training run",

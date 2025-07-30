@@ -241,7 +241,7 @@ physx:
 ```
 
 **Use cases:**
-- `test_render.yaml` and `test_stream.yaml` configs
+- `test_viewer.yaml` and `test_stream.yaml` configs
 - Real-time visualization and debugging
 - Interactive testing and development
 - ~2-3x faster than default

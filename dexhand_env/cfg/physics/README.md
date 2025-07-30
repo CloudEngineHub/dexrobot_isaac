@@ -13,7 +13,7 @@ This directory contains modular physics configurations that can be mixed and mat
 ### `fast.yaml`
 - **Purpose**: Optimized for real-time visualization and testing
 - **Settings**: 2 substeps, 8 position iterations, 0.002 contact_offset
-- **Use case**: test_render, test_stream configs for smooth visualization
+- **Use case**: test_viewer, test_stream configs for smooth visualization
 - **Performance**: ~2-3x faster than default
 - **Trade-off**: Slightly reduced physics accuracy for speed
 

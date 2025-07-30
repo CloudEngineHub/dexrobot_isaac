@@ -112,7 +112,7 @@ Choose physics configuration based on your use case:
 python train.py task=BlindGrasping +defaults=[config,/physics/accurate]
 
 # Fast physics for visualization (faster but less precise)
-python train.py -cn test_render   # Uses /physics/fast automatically
+python train.py -cn test_viewer   # Uses /physics/fast automatically
 
 # Custom physics selection
 python train.py +defaults=[config,/physics/accurate]
@@ -168,7 +168,7 @@ python train.py task=BaseTask                       # Uses default physics
 python train.py +defaults=[config,/physics/fast]   # Override with fast physics
 
 # Test mode with visualization
-python train.py test=true viewer=true -cn test_render  # Uses fast physics automatically
+python train.py test=true viewer=true -cn test_viewer  # Uses fast physics automatically
 
 # Custom physics + other overrides
 python train.py task=BlindGrasping numEnvs=512 viewer=true +defaults=[config,/physics/accurate]

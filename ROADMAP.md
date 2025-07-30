@@ -20,7 +20,6 @@ Code quality improvements and architectural enhancements.
 Issue resolution and bug fixes.
 
 #### Code Quality (`refactor_*`)
-- [ ] `refactor-009-fix-prompt-contact-viz.md` - Fix prompt file name from fix-001-contact-viz.md to correct duplicate numbering
 
 ### Low Priority Tasks
 
@@ -44,18 +43,25 @@ Documentation improvements and illustrations.
 - [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
 - [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 
-#### Meta Tasks (`meta_*`)
-Project organization, tooling, and workflow improvements.
-- [ ] `meta-002-backward-compatibility.md` - Remove backward compatibility requirement from CLAUDE.md guidelines
-- [ ] `meta-003-precommit.md` - Add precommit hook handling to CLAUDE.md git workflow
-
 #### Completed Meta Tasks (`meta_*`)
 - [x] `meta-000-workflow-setup.md` - ✅ **COMPLETED** - AI development workflow design and implementation
 - [x] `meta-001-programming-guideline.md` - ✅ **COMPLETED** - Consolidate programming guidelines to user memory
+- [x] `meta-002-backward-compatibility.md` - ✅ **COMPLETED** - Remove backward compatibility requirement from CLAUDE.md guidelines
+- [x] `meta-003-precommit.md` - ✅ **COMPLETED** - Add precommit hook handling to CLAUDE.md git workflow
 
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **refactor-009-config-yaml.md** (2025-07-30) - **MEDIUM** - Configuration architecture cleanup
+  - **Root Cause**: Configuration files served dual purposes (training pipeline + test script) with mixed responsibilities, duplicated settings, and naming inconsistencies
+  - **Architecture Cleanup**: Created dedicated test_script.yaml for examples/dexhand_test.py, cleaned config.yaml to focus on training pipeline, removed duplicated settings from base/test.yaml
+  - **Naming Fixes**: Fixed debug.yaml inconsistency (training: → train:, render → viewer), renamed test_render.yaml → test_viewer.yaml for semantic clarity following refactor-004-render.md conventions
+  - **Documentation Updates**: Updated 8 documentation files with 13 references from test_render to test_viewer, updated CLI examples and usage instructions
+  - **Code Updates**: Updated examples/dexhand_test.py to use test_script configuration, updated cli_utils.py example commands
+  - **Architecture Compliance**: Clear separation of concerns between three test concepts: environment functional testing (test_script.yaml), policy evaluation (base/test.yaml), policy evaluation with visualization (test_viewer.yaml)
+  - **Testing Verified**: All configurations load and initialize correctly, maintained identical functionality with improved maintainability
+  - **Impact**: Clear configuration hierarchy with focused responsibilities, consistent naming conventions, no functionality changes - pure architectural refactoring
+  - Comprehensive configuration architecture cleanup with clear separation of concerns and consistent naming conventions
 - ✅ **refactor-008-config-key-casing.md** (2025-07-30) - **MEDIUM** - Unify config key naming to snake_case under task section
   - **Root Cause**: Configuration files had inconsistent naming conventions - camelCase keys in task section created cognitive friction between config files and Python code
   - **Design Decision**: Keep other sections (env, sim, train) as camelCase for CLI usability, unify task section to snake_case for code consistency since accessed primarily by Python
@@ -140,7 +146,7 @@ Project organization, tooling, and workflow improvements.
   - **Impact**: Fixed critical test script crash when plotting enabled, restored debugging capabilities essential for development workflow
   - Minimal code changes with maximum impact on essential debugging and testing infrastructure
 - ✅ **fix-002-consistency.md** (2025-07-28) - **CRITICAL** - Test script and training consistency fixes
-  - Fixed test script environment count issue by switching to existing test_render.yaml configuration (4 environments vs 1024)
+  - Fixed test script environment count issue by switching to existing test_viewer.yaml configuration (4 environments vs 1024)
   - Updated control mode validation to accept both position and position_delta modes, resolving BlindGrasping compatibility
   - Leveraged existing test configuration infrastructure instead of creating new files
   - Verified both BaseTask and BlindGrasping work properly with Hydra inheritance and CLI overrides

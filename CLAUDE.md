@@ -143,6 +143,10 @@ When investigating issues:
 - Commit message must accurately reflect ALL changes, not just the most recent fix
 - Include all file changes, config updates, and code modifications in the message
 
+### Precommit Hook Handling
+- If a file is modified by precommit hook, run `git add` on it again before retrying the commit
+- Precommit modifications should be included in the same commit, not separate ones
+
 ## Implementation Guidelines
 
 ### Study Before Modifying
@@ -494,8 +498,13 @@ enabled_components = [name for name, weight in reward_weights.items() if weight 
 When asked to "optimize without changing logic":
 - Preserve ALL aspects of the output (keys, structure, meaning)
 - Only change the implementation approach
-- Maintain backward compatibility
 - Test that outputs remain identical
+
+### Discourage Backward Compatibility
+Research code should break fast and embrace current best practices:
+- Don't bloat codebase with legacy support
+- Clean breaks are preferred over compatibility layers
+- Focus on maintaining a modern, clean codebase
 
 ### Query Existing Systems for Truth
 - Don't maintain separate lists of components/features

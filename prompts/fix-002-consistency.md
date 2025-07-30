@@ -99,7 +99,7 @@ def main(cfg: DictConfig):
 ### Final Implementation Changes:
 
 #### Fix 1: Used Existing Test Configuration
-**Solution**: Changed `@hydra.main(config_name="config")` to `@hydra.main(config_name="test_render")`
+**Solution**: Changed `@hydra.main(config_name="config")` to `@hydra.main(config_name="test_viewer")`
 **Result**: Test script now uses existing `base/test.yaml` with `env.numEnvs: 4` (reasonable for testing)
 **Benefits**:
 - No new files needed - reuses well-designed existing configuration
