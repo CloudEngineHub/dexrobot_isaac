@@ -84,7 +84,6 @@ def create_env_fn(
     sim_device: str,
     rl_device: str,
     graphics_device_id: int,
-    headless: bool,
     virtual_screen_capture: bool = False,
     force_render: bool = False,
     video_config: dict = None,
@@ -98,7 +97,6 @@ def create_env_fn(
             sim_device=sim_device,
             rl_device=rl_device,
             graphics_device_id=graphics_device_id,
-            headless=headless,
             cfg=cfg,
             virtual_screen_capture=virtual_screen_capture,
             force_render=force_render,
@@ -307,20 +305,12 @@ def main(cfg: DictConfig):
     # Apply RL Games compatibility patches (hot-reload + device compatibility)
     apply_rl_games_patches()
 
-    # Determine rendering mode with new defaults:
-    # - Test mode defaults to render enabled
-    # - Train mode defaults to headless
-    # - Explicit render setting overrides defaults
-    if hasattr(cfg.env, "render") and cfg.env.render is not None:
-        # Explicit render setting overrides defaults
-        should_render = cfg.env.render
-    else:
-        # Use new default logic: test mode renders by default, train mode is headless
-        should_render = cfg.train.test
+    # Use explicit viewer configuration (no assumption logic)
+    should_render = cfg.env.viewer
 
-    # Handle video recording in headless mode
-    record_video = getattr(cfg.env, "recordVideo", False)
-    stream_video = getattr(cfg.env, "streamVideo", False)
+    # Handle video recording and streaming
+    record_video = cfg.env.videoRecord
+    stream_video = cfg.env.videoStream
     virtual_screen_capture = (record_video or stream_video) and not should_render
     force_render = (
         record_video or stream_video
@@ -399,7 +389,9 @@ def main(cfg: DictConfig):
                 f"  ⚙️  Render config: virtual_screen_capture={virtual_screen_capture}, force_render={force_render}"
             )
     else:
-        logger.info("Video features disabled (recordVideo=false, streamVideo=false)")
+        logger.info(
+            "Video features disabled (env.videoRecord=false, env.videoStream=false)"
+        )
 
     # Create environment creator function
     env_creator = create_env_fn(
@@ -409,7 +401,6 @@ def main(cfg: DictConfig):
         sim_device=cfg.env.device,
         rl_device=cfg.env.device,
         graphics_device_id=cfg.sim.graphicsDeviceId,
-        headless=not should_render,
         virtual_screen_capture=virtual_screen_capture,
         force_render=force_render,
         video_config=video_config,

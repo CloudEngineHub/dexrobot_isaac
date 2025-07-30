@@ -17,6 +17,10 @@ env:
   initialHandPos: [0.0, 0.0, 0.5] # Initial hand position
   initialHandRot: [0.0, 0.0, 0.0, 1.0]  # Initial hand rotation (quaternion)
   episodeLength: 300              # Maximum number of steps per episode
+  # Graphics configuration (defaults for BaseTask)
+  viewer: false                   # Interactive visualization window
+  videoRecord: false              # Save video files to disk
+  videoStream: false              # Stream video over network
 
 # Task configuration - all RL-related settings
 task:

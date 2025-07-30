@@ -20,7 +20,6 @@ Code quality improvements and architectural enhancements.
 Issue resolution and bug fixes.
 
 #### Code Quality (`refactor_*`)
-- [ ] `refactor-004-render.md` - Clarify render option semantics (viewer vs background rendering)
 - [ ] `refactor-003-imports.md` - Clean up mid-file imports for opencv and flask
 - [ ] `refactor-007-blind-grasping.md` - Rename BoxGrasping to BlindGrasping task
 - [ ] `refactor-007-step-architecture.md` - Investigate step processing architecture consistency
@@ -39,6 +38,7 @@ New functionality and API enhancements.
 - [ ] `feat-001-video-fps-control.md` - Implement FPS-aware video saving
 - [ ] `feat-002-indefinite-testing.md` - Enable indefinite testing mode
 - [ ] `feat-004-action-rule-example.md` - Action rule example implementation
+- [ ] `feat-100-bimanual.md` - Support bimanual environment with dexhand_left and dexhand_right
 
 #### Documentation Tasks (`doc_*`)
 Documentation improvements and illustrations.
@@ -55,6 +55,15 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **refactor-004-render.md** (2025-07-30) - **MEDIUM** - Clarify render option semantics (viewer vs background rendering)
+  - **Root Cause**: Legacy render configuration was ambiguous and violated single source of truth principles with assumption-based logic
+  - **Configuration Cleanup**: Removed deprecated `recordVideo: false` from config.yaml root level, eliminated all legacy video option references
+  - **Consistent Structure**: Added explicit viewer/videoRecord/videoStream defaults to BaseTask.yaml, migrated all test config files to new structure
+  - **CLI Enhancement**: Added `viewer=true` CLI alias mapping to `env.viewer=true` for improved usability in train.py
+  - **Legacy Removal**: Cleaned up recordVideo handling in examples/dexhand_test.py, updated train.py log messages, fixed documentation examples
+  - **Architecture Compliance**: Eliminated assumption-based rendering logic, all decisions now come from explicit configuration (no code defaults)
+  - **Impact**: Clear render semantics with independent control of interactive visualization, video recording, and video streaming
+  - Comprehensive cleanup across 16 files with improved configuration clarity and removed technical debt
 - ✅ **fix-005-box-bounce-physics.md** (2025-07-29) - **ESSENTIAL** - Fix box bouncing at initialization in BoxGrasping task
   - **Root Cause**: Refactor-005-default-values changed VecTask substeps from hardcoded default 2 to explicit config value 4, making physics simulation more accurate and exposing box positioning precision issues
   - **Physics Analysis**: Higher substeps (4 vs 2) = more accurate collision detection, revealing that box center at z=0.025m placed bottom exactly at z=0 with no clearance for collision sensitivity

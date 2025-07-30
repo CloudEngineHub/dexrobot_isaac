@@ -9,6 +9,6 @@ defaults:
   - _self_
 
 env:
-  render: false        # Explicitly headless
-  recordVideo: false   # Disable file recording
-  streamVideo: true    # Enable HTTP streaming
+  viewer: false        # Explicitly headless
+  videoRecord: false   # Disable file recording
+  videoStream: true    # Enable HTTP streaming

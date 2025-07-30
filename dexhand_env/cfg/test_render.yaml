@@ -8,4 +8,4 @@ defaults:
   - _self_
 
 env:
-  render: true
+  viewer: true

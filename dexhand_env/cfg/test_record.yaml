@@ -7,9 +7,9 @@ defaults:
   - _self_
 
 env:
-  render: false        # Explicitly headless
-  recordVideo: true    # Enable video recording
-  streamVideo: false   # Disable HTTP streaming (can be enabled for both modes)
+  viewer: false        # Explicitly headless
+  videoRecord: true    # Enable video recording
+  videoStream: false   # Disable HTTP streaming (can be enabled for both modes)
   numEnvs: 4           # Small number for testing
 
 training:

@@ -1036,11 +1036,11 @@ def main(cfg: DictConfig):
 
     Usage examples:
       python dexhand_test.py                                     # Basic BaseTask test
-      python dexhand_test.py headless=true steps=500            # Headless test for 500 steps
+      python dexhand_test.py env.viewer=false steps=500        # No viewer test for 500 steps
       python dexhand_test.py task.controlMode=position          # Test position control mode (IMPORTANT: use task.controlMode)
       python dexhand_test.py task.controlMode=position_delta    # Test position_delta control mode
       python dexhand_test.py env.policyControlsHandBase=false   # Test finger-only control
-      python dexhand_test.py enablePlotting=true recordVideo=true  # Test with visualization and recording
+      python dexhand_test.py enablePlotting=true env.videoRecord=true  # Test with visualization and recording
       python dexhand_test.py env.numEnvs=4 device=cuda:1        # Use 4 environments on GPU 1
     """
 
@@ -1089,11 +1089,12 @@ def main(cfg: DictConfig):
     sim_device = cfg.get("device", "cuda:0")
     rl_device = cfg.get("device", "cuda:0")
 
-    # Use -1 for graphics_device_id only if headless AND not recording video
-    # Camera recording requires graphics device even in headless mode
-    headless = cfg.get("headless", False)
-    record_video = cfg.get("recordVideo", False)
-    graphics_device_id = -1 if (headless and not record_video) else 0
+    # Use -1 for graphics_device_id only if no viewer AND not recording video
+    # Camera recording requires graphics device even without viewer
+    viewer_enabled = cfg.env.get("viewer", False)
+    video_record = cfg.env.get("videoRecord", False)
+    has_video = video_record
+    graphics_device_id = -1 if (not viewer_enabled and not has_video) else 0
 
     # Add debug information if requested
     if debug:
@@ -1110,7 +1111,7 @@ def main(cfg: DictConfig):
     try:
         # Configure video recording if requested
         video_config = None
-        if record_video:
+        if video_record:
             video_config = {
                 "enabled": True,
                 "output_dir": "/tmp/dexhand_videos",
@@ -1125,9 +1126,8 @@ def main(cfg: DictConfig):
             rl_device=rl_device,
             sim_device=sim_device,
             graphics_device_id=graphics_device_id,
-            headless=headless,
-            force_render=not headless or record_video,
-            virtual_screen_capture=record_video and headless,
+            force_render=not viewer_enabled or has_video,
+            virtual_screen_capture=has_video and not viewer_enabled,
             video_config=video_config,
         )
         logger.info("Environment created successfully!")
@@ -1145,8 +1145,8 @@ def main(cfg: DictConfig):
     logger.info(f"Policy controls hand base: {env.policy_controls_hand_base}")
     logger.info(f"Policy controls fingers: {env.policy_controls_fingers}")
 
-    # Display keyboard shortcuts if not headless
-    if not headless:
+    # Display keyboard shortcuts if viewer is enabled
+    if viewer_enabled:
         logger.info("\nKeyboard shortcuts:")
         logger.info("  SPACE - Toggle random actions mode")
         logger.info("  E     - Reset current environment")

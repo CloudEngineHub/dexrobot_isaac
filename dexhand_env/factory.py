@@ -23,7 +23,6 @@ def create_dex_env(
     rl_device,
     sim_device,
     graphics_device_id,
-    headless,
     virtual_screen_capture=False,
     force_render=False,
     video_config=None,
@@ -37,7 +36,6 @@ def create_dex_env(
         rl_device: Device for RL computations
         sim_device: Device for simulation
         graphics_device_id: Graphics device ID
-        headless: Whether to run headless
         virtual_screen_capture: Whether to enable virtual screen capture
         force_render: Whether to force rendering
         video_config: Optional video recording configuration
@@ -66,6 +64,9 @@ def create_dex_env(
             raise ValueError(f"Unknown task: {task_name}")
 
         logger.debug("Task created successfully, creating environment...")
+
+        # Derive headless from explicit viewer configuration
+        headless = not cfg["env"]["viewer"]
 
         # Create the environment with the task component
         env = DexHandBase(
@@ -98,7 +99,6 @@ def make_env(
     sim_device: str,
     rl_device: str,
     graphics_device_id: int,
-    headless: bool,
     cfg: dict = None,
     virtual_screen_capture: bool = False,
     force_render: bool = False,
@@ -116,7 +116,6 @@ def make_env(
         sim_device: Device for physics simulation (e.g., "cuda:0", "cpu")
         rl_device: Device for RL algorithm (e.g., "cuda:0", "cpu")
         graphics_device_id: GPU device ID for rendering
-        headless: Whether to run without visualization
         cfg: Optional configuration dictionary (will load from file if not provided)
         virtual_screen_capture: Whether to enable virtual screen capture
         force_render: Whether to force rendering even in headless mode
@@ -146,7 +145,6 @@ def make_env(
         rl_device=rl_device,
         sim_device=sim_device,
         graphics_device_id=graphics_device_id,
-        headless=headless,
         virtual_screen_capture=virtual_screen_capture,
         force_render=force_render,
         video_config=video_config,

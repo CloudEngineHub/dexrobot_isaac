@@ -43,7 +43,7 @@ class CLIPreprocessor:
         "test": "train.test",
         "checkpoint": "train.checkpoint",
         "seed": "train.seed",
-        "render": "env.render",
+        "viewer": "env.viewer",
         "device": "env.device",
         "maxIterations": "train.maxIterations",
         "logLevel": "train.logging.logLevel",

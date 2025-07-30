@@ -38,19 +38,23 @@ class ViewerController:
     - Update camera position based on the current mode
     """
 
-    def __init__(self, parent, headless):
+    def __init__(self, parent):
         """
         Initialize the viewer controller and create the viewer.
 
         Args:
             parent: Parent object (typically DexHandBase) that provides shared properties
-            headless: Whether running in headless mode
         """
         self.parent = parent
-        self.headless = headless
 
-        # Create viewer if not in headless mode
-        if not self.headless:
+        # Create viewer if viewer is enabled in config
+        # Handle both dict and DictConfig access patterns
+        if hasattr(self.parent.cfg, "env"):
+            viewer_enabled = self.parent.cfg.env.viewer
+        else:
+            viewer_enabled = self.parent.cfg["env"]["viewer"]
+
+        if viewer_enabled:
             self.viewer = self._create_viewer()
         else:
             self.viewer = None
@@ -98,8 +102,19 @@ class ViewerController:
         self._last_follow_index = None
         self._frame_count = 0
         self._global_view_initialized = False
+
+        # Contact visualization state
         self._had_contacts = False
         self._prev_colors = None
+
+    @property
+    def headless(self):
+        """Backward compatibility property - returns inverse of viewer configuration."""
+        # Handle both dict and DictConfig access patterns
+        if hasattr(self.parent.cfg, "env"):
+            return not self.parent.cfg.env.viewer
+        else:
+            return not self.parent.cfg["env"]["viewer"]
 
     def _create_viewer(self):
         """Create the viewer and set initial camera position."""

@@ -27,7 +27,7 @@ python examples/dexhand_test.py env.controlMode=position_delta env.policyControl
 python examples/dexhand_test.py debug=true log_level=debug
 
 # Enable video recording and plotting
-python examples/dexhand_test.py recordVideo=true enablePlotting=true
+python examples/dexhand_test.py env.videoRecord=true enablePlotting=true
 ```
 
 ### Configuration Parameters
@@ -49,7 +49,7 @@ All configuration parameters can be overridden via command line:
 - `env.policyControlsFingers` (true) - Include fingers in policy action space
 
 **Recording & Visualization:**
-- `recordVideo` (false) - Enable video recording (works in headless mode)
+- `env.videoRecord` (false) - Enable video recording (works in headless mode)
 - `enablePlotting` (false) - Enable real-time plotting with Rerun
 - `plotEnvIdx` (0) - Environment index to plot
 

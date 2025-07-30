@@ -3,16 +3,16 @@
 # Contains common video settings shared across recording and streaming
 #
 # INDEPENDENT FEATURES:
-# - Video recording (env.recordVideo: true/false) - Saves MP4 files to disk
-# - HTTP streaming (env.streamVideo: true/false) - Serves real-time MJPEG over HTTP
+# - Video recording (env.videoRecord: true/false) - Saves MP4 files to disk
+# - HTTP streaming (env.videoStream: true/false) - Serves real-time MJPEG over HTTP
 # - Both features can be enabled/disabled independently
 # - Both use the same unified camera system (ViewerController's persistent camera)
 #
 # USAGE EXAMPLES:
-# Recording only:    env.recordVideo=true env.streamVideo=false
-# Streaming only:    env.recordVideo=false env.streamVideo=true
-# Both enabled:      env.recordVideo=true env.streamVideo=true
-# Neither enabled:   env.recordVideo=false env.streamVideo=false (default)
+# Recording only:    env.videoRecord=true env.videoStream=false
+# Streaming only:    env.videoRecord=false env.videoStream=true
+# Both enabled:      env.videoRecord=true env.videoStream=true
+# Neither enabled:   env.videoRecord=false env.videoStream=false (default)
 
 env:
   # Video recording configuration (requires OpenCV)

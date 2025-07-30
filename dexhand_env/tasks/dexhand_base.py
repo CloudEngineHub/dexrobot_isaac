@@ -512,7 +512,7 @@ class DexHandBase(VecTask):
         )
 
         # Create viewer controller with graphics manager dependency
-        self.viewer_controller = ViewerController(parent=self, headless=self.headless)
+        self.viewer_controller = ViewerController(parent=self)
 
         # Create termination manager
         self.termination_manager = TerminationManager(
