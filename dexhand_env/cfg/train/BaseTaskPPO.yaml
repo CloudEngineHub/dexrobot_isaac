@@ -1,5 +1,4 @@
 # @package train
-seed: ${train.seed}
 algo:
   name: a2c_continuous
 

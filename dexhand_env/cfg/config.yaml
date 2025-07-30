@@ -5,10 +5,10 @@
 # Override: python examples/dexhand_test.py task=BlindGrasping headless=true steps=500
 
 defaults:
+  - _self_
   - task: BaseTask
   - train: BaseTaskPPO
   - base/video
-  - _self_
 
 # Task and training configs will be loaded from task/ and train/ subdirectories
 # The following are runtime overrides

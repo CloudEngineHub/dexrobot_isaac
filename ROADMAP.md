@@ -31,7 +31,7 @@ Documentation improvements and illustrations.
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
 - [x] `fix-006-metadata-keys.md` - ✅ **COMPLETED** (2025-07-30) - Fix git metadata saving error with config keys
-- [ ] `fix-007-episode-length-of-grasping.md` - Fix BlindGrasping task early termination behavior
+- [x] `fix-007-episode-length-of-grasping.md` - ✅ **COMPLETED** (2025-07-30) - Fix BlindGrasping task early termination behavior
 
 #### Code Quality (`refactor_*`)
 
@@ -65,6 +65,17 @@ New functionality and API enhancements.
   - **Testing Verified**: Both BaseTask and BlindGrasping configurations work without warnings, git metadata saving succeeds correctly
   - **Impact**: Fixed critical metadata saving functionality, eliminated fragile code patterns, simplified architecture while preserving all essential functionality
   - Minimal fix with maximum impact - removed ~25 lines of problematic code while maintaining full reproducibility capabilities
+- ✅ **fix-007-episode-length-of-grasping.md** (2025-07-30) - **ESSENTIAL** - Fix BlindGrasping task early termination behavior
+  - **Root Cause**: Hydra configuration inheritance order in config.yaml caused base config `sim.dt: 0.005` to override task-specific `sim.dt: 0.01` setting
+  - **Configuration Architecture Problem**: `_self_` positioned last in defaults list violated task-specific override principle, breaking BlindGrasping physics timing expectations
+  - **Primary Fix**: Moved `_self_` to beginning of defaults list in config.yaml, allowing task configs to properly override base settings
+  - **Secondary Fix**: Removed recursive seed reference `seed: ${train.seed}` in BaseTaskPPO.yaml that became problematic with new inheritance order
+  - **Physics Timing Restored**: BlindGrasping now correctly runs at `physics_dt: 0.010000s` with proper `dt: 0.01` configuration instead of incorrect `dt: 0.005`
+  - **Inheritance Order**: Fixed from `task → train → base_video → _self_` to `_self_ → task → train → base_video` for proper override behavior
+  - **Architecture Compliance**: Followed fail-fast philosophy, maintained component boundaries, respected configuration hierarchy principles
+  - **Testing Verified**: BlindGrasping loads with correct physics timing, BaseTask unchanged, training pipeline works without recursive interpolation errors
+  - **Impact**: Restored proper task-specific physics timing control, eliminated configuration inheritance violations, maintained training functionality
+  - Fundamental configuration architecture fix with comprehensive physics timing verification
 - ✅ **feat-002-indefinite-testing.md** (2025-07-30) - **MEDIUM** - Enable indefinite testing mode
   - **Root Cause**: Test mode runs with hardcoded defaults (2000 games), making it difficult to control test duration for different evaluation scenarios
   - **Core Implementation**: Added `train.testGamesNum` parameter with finite/indefinite testing modes (0 = indefinite, >0 = finite games)
