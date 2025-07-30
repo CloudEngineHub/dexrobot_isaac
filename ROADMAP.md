@@ -46,8 +46,12 @@ Documentation improvements and illustrations.
 - [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
 - [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 
-#### Completed Meta Tasks (`meta_*`)
+#### Meta Tasks (`meta_*`)
 Project organization, tooling, and workflow improvements.
+- [ ] `meta-002-backward-compatibility.md` - Remove backward compatibility requirement from CLAUDE.md guidelines
+- [ ] `meta-003-precommit.md` - Add precommit hook handling to CLAUDE.md git workflow
+
+#### Completed Meta Tasks (`meta_*`)
 - [x] `meta-000-workflow-setup.md` - ✅ **COMPLETED** - AI development workflow design and implementation
 - [x] `meta-001-programming-guideline.md` - ✅ **COMPLETED** - Consolidate programming guidelines to user memory
 
