@@ -29,7 +29,7 @@ The project uses Hydra for configuration management. You can override any config
 python train.py task=BoxGrasping numEnvs=2048
 
 # Training with visualization (fewer environments for better performance)
-python train.py render=true numEnvs=64
+python train.py viewer=true numEnvs=64
 
 # Use predefined configuration
 python train.py config=train_headless
@@ -49,7 +49,7 @@ python train.py test=true checkpoint=latest
 python train.py task=BoxGrasping test=true checkpoint=runs/BoxGrasping_20250707_183716
 
 # Force headless in test mode
-python train.py test=true checkpoint=latest render=false
+python train.py test=true checkpoint=latest viewer=false
 
 # Hot-reload test mode (reloads checkpoint every 30 seconds)
 python train.py test=true checkpoint=path/to/checkpoint.pth testing.reloadInterval=30
@@ -66,7 +66,7 @@ The training script supports convenient aliases that map to full Hydra configura
 | `test` | `training.test` | Enable test mode |
 | `checkpoint` | `training.checkpoint` | Checkpoint path for testing |
 | `seed` | `training.seed` | Random seed |
-| `render` | `env.render` | Enable visualization |
+| `viewer` | `env.viewer` | Enable visualization |
 | `device` | `env.device` | CUDA device (e.g., "cuda:0") |
 | `maxIter` | `training.maxIterations` | Maximum training iterations |
 | `logLevel` | `logging.logLevel` | Logging level for entire system (debug, info, warning) |
@@ -76,14 +76,14 @@ The training script supports convenient aliases that map to full Hydra configura
 **Usage Examples:**
 ```bash
 # Using aliases (recommended for simplicity)
-python train.py task=BoxGrasping numEnvs=1024 render=true
+python train.py task=BoxGrasping numEnvs=1024 viewer=true
 
 # Control logging level for entire system
 python train.py logLevel=debug  # Enable debug logging everywhere
 python train.py logLevel=warning  # Only show warnings and errors
 
 # Using full paths (equivalent)
-python train.py task=BoxGrasping env.numEnvs=1024 env.render=true
+python train.py task=BoxGrasping env.numEnvs=1024 env.viewer=true
 
 # Smart checkpoint resolution:
 checkpoint=latest                    # Auto-finds latest training experiment
@@ -99,7 +99,7 @@ The DexHand system uses a clean 4-section configuration hierarchy. See the [Conf
 ### Main Configuration Sections
 
 - **`sim`**: Physics simulation parameters (dt, substeps, PhysX settings)
-- **`env`**: Environment setup (numEnvs, device, render, task objects)
+- **`env`**: Environment setup (numEnvs, device, viewer, task objects)
 - **`task`**: RL task definition (episodes, observations, rewards, termination)
 - **`train`**: Training algorithm configuration (rl_games parameters, logging)
 
@@ -116,7 +116,7 @@ python train.py -cn test_render   # Uses /physics/fast automatically
 
 # Custom physics selection
 python train.py +defaults=[config,/physics/accurate]
-python train.py +defaults=[config,/physics/fast] render=true
+python train.py +defaults=[config,/physics/fast] viewer=true
 ```
 
 **Available Physics Configs:**
@@ -134,8 +134,9 @@ python train.py +defaults=[config,/physics/fast] render=true
 - `env.numEnvs`: Number of parallel environments (default: 1024)
 - `env.device`: Device for simulation and RL algorithm (default: "cuda:0")
 - `env.graphicsDeviceId`: Graphics device ID (default: 0)
-- `env.render`: Rendering mode (null=auto, true=force, false=headless)
-- `env.recordVideo`: Enable video recording in headless mode
+- `env.viewer`: Interactive visualization window (true/false)
+- `env.videoRecord`: Enable video recording to disk (true/false)
+- `env.videoStream`: Enable video streaming over network (true/false)
 
 ### Training Parameters
 
@@ -167,10 +168,10 @@ python train.py task=BaseTask                       # Uses default physics
 python train.py +defaults=[config,/physics/fast]   # Override with fast physics
 
 # Test mode with visualization
-python train.py test=true render=true -cn test_render  # Uses fast physics automatically
+python train.py test=true viewer=true -cn test_render  # Uses fast physics automatically
 
 # Custom physics + other overrides
-python train.py task=BoxGrasping numEnvs=512 +defaults=[config,/physics/accurate]
+python train.py task=BoxGrasping numEnvs=512 viewer=true +defaults=[config,/physics/accurate]
 ```
 
 ### Configuration Hierarchy Overrides
@@ -180,7 +181,7 @@ python train.py task=BoxGrasping numEnvs=512 +defaults=[config,/physics/accurate
 python train.py sim.dt=0.01 sim.substeps=8
 
 # Override env section (environment)
-python train.py env.numEnvs=2048 env.render=true
+python train.py env.numEnvs=2048 env.viewer=true
 
 # Override task section (RL parameters)
 python train.py task.episodeLength=300 task.rewardWeights.object_height=2.0
@@ -221,10 +222,10 @@ python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000
 
 ```bash
 # Record video in headless mode
-python train.py task=BoxGrasping training.test=true training.checkpoint=latest env.render=false env.recordVideo=true
+python train.py task=BoxGrasping test=true checkpoint=latest env.viewer=false env.videoRecord=true
 
 # Record video with rendering
-python train.py task=BoxGrasping training.test=true training.checkpoint=latest env.render=true env.recordVideo=true
+python train.py task=BoxGrasping test=true checkpoint=latest env.viewer=true env.videoRecord=true
 ```
 
 > **Video Output:** Videos are saved in MP4 format to the Hydra output directory, typically `outputs/<YYYY-MM-DD>/<HH-MM-SS>/videos/`. Video recording may have a minor impact on performance but is useful for debugging and visualization.
@@ -234,7 +235,7 @@ python train.py task=BoxGrasping training.test=true training.checkpoint=latest e
 For multi-GPU training, use PyTorch's distributed launch:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2 train.py task=BaseTask env.numEnvs=2048 env.render=false
+python -m torch.distributed.launch --nproc_per_node=2 train.py task=BaseTask env.numEnvs=2048 env.viewer=false
 ```
 
 ## Training Configuration

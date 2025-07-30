@@ -28,14 +28,14 @@ pip install -e .[all]
 
 ### Basic Streaming Setup
 
-To enable HTTP streaming, set `streamVideo: true` in your configuration:
+To enable HTTP streaming, set `videoStream: true` in your configuration:
 
 ```yaml
 # dexhand_env/cfg/test_stream.yaml
 env:
-  render: false        # Headless mode
-  recordVideo: false   # Disable file recording
-  streamVideo: true    # Enable HTTP streaming
+  viewer: false        # Headless mode
+  videoRecord: false   # Disable file recording
+  videoStream: true    # Enable HTTP streaming
 
   # HTTP streaming configuration
   videoStreamHost: "127.0.0.1"     # Server host
@@ -52,7 +52,7 @@ env:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `streamVideo` | `false` | Enable/disable HTTP streaming |
+| `videoStream` | `false` | Enable/disable HTTP streaming |
 | `videoStreamHost` | `"127.0.0.1"` | Server host address |
 | `videoStreamPort` | `8080` | Server port |
 | `videoStreamQuality` | `85` | JPEG quality (1-100, higher = better quality) |
@@ -64,8 +64,8 @@ You can enable both file recording and HTTP streaming simultaneously:
 
 ```yaml
 env:
-  recordVideo: true    # Save to files
-  streamVideo: true    # Also stream via HTTP
+  videoRecord: true    # Save to files
+  videoStream: true    # Also stream via HTTP
 ```
 
 ## Usage
@@ -77,7 +77,7 @@ env:
 python train.py --config-name test_stream
 
 # Or enable streaming with any config
-python train.py --config-name test_record env.streamVideo=true
+python train.py --config-name test_record env.videoStream=true
 ```
 
 ### Viewing the Stream
@@ -180,7 +180,7 @@ python train.py --config-name test_stream
 ### Recording + Streaming
 
 ```bash
-python train.py --config-name test_record env.streamVideo=true
+python train.py --config-name test_record env.videoStream=true
 ```
 
 ### Custom Port
@@ -203,7 +203,7 @@ python train.py --config-name test_stream \
 
 All streaming configuration goes under `env:` in your YAML config:
 
-- `streamVideo`: Enable streaming (boolean)
+- `videoStream`: Enable streaming (boolean)
 - `videoStreamHost`: Server host (string)
 - `videoStreamPort`: Server port (integer)
 - `videoStreamQuality`: JPEG quality 1-100 (integer)

@@ -94,7 +94,7 @@ Navigate to `http://localhost:6006` to see training curves.
 ### 3. Test Your Trained Policy
 ```bash
 # Test with visualization (finds latest training checkpoint automatically)
-python train.py task=BaseTask test=true checkpoint=latest render=true numEnvs=4
+python train.py task=BaseTask test=true checkpoint=latest viewer=true numEnvs=4
 ```
 
 **✅ Success Criteria:**
@@ -125,7 +125,7 @@ The BaseTask teaches the hand basic movement and stability without a specific ma
 python train.py task=BoxGrasping numEnvs=1024
 
 # Test the grasping policy (latest training checkpoint)
-python train.py task=BoxGrasping test=true checkpoint=latest render=true
+python train.py task=BoxGrasping test=true checkpoint=latest viewer=true
 ```
 
 **✅ Success Criteria (BoxGrasping):**
@@ -196,7 +196,7 @@ python train.py maxIter=20000
 python train.py numEnvs=2048
 
 # Ensure headless mode for speed (default in train mode)
-python train.py render=false
+python train.py viewer=false
 ```
 
 ### Testing Issues
@@ -225,13 +225,13 @@ python train.py test=true checkpoint=runs/BaseTask_train_20250709_123456/nn/Base
 
 **For faster training:**
 - Use more environments: `numEnvs=2048`
-- Ensure headless mode: `render=false`
+- Ensure headless mode: `viewer=false`
 - Use multiple GPUs if available
 - Close unnecessary applications
 
 **For better visualization:**
 - Use fewer environments: `numEnvs=64`
-- Enable rendering: `render=true`
+- Enable rendering: `viewer=true`
 - Reduce episode length for faster cycles
 
 ### Getting Help

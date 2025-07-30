@@ -115,7 +115,7 @@ python examples/dexhand_test.py --movement-speed 0.5 --debug
 python train.py task=BaseTask numEnvs=1024
 
 # Training with visualization
-python train.py task=BaseTask numEnvs=64 render=true
+python train.py task=BaseTask numEnvs=64 viewer=true
 ```
 
 ## Available Tasks

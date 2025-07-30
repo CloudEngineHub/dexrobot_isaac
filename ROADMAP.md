@@ -71,7 +71,8 @@ Project organization, tooling, and workflow improvements.
   - **Legacy Removal**: Cleaned up recordVideo handling in examples/dexhand_test.py, updated train.py log messages, fixed documentation examples
   - **Architecture Compliance**: Eliminated assumption-based rendering logic, all decisions now come from explicit configuration (no code defaults)
   - **Impact**: Clear render semantics with independent control of interactive visualization, video recording, and video streaming
-  - Comprehensive cleanup across 16 files with improved configuration clarity and removed technical debt
+  - **Documentation Updates** (2025-07-30): Completed legacy option removal - updated all documentation files (TRAINING.md, guide-http-video-streaming.md, guide-configuration-system.md, README.md, GETTING_STARTED.md, TROUBLESHOOTING.md, guide-physics-tuning.md) to use new configuration names (viewer/videoRecord/videoStream instead of render/recordVideo/streamVideo)
+  - Comprehensive cleanup across 23 files with improved configuration clarity and removed technical debt
 - ✅ **fix-005-box-bounce-physics.md** (2025-07-29) - **ESSENTIAL** - Fix box bouncing at initialization in BoxGrasping task
   - **Root Cause**: Refactor-005-default-values changed VecTask substeps from hardcoded default 2 to explicit config value 4, making physics simulation more accurate and exposing box positioning precision issues
   - **Physics Analysis**: Higher substeps (4 vs 2) = more accurate collision detection, revealing that box center at z=0.025m placed bottom exactly at z=0 with no clearance for collision sensitivity

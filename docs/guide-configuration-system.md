@@ -55,7 +55,7 @@ Configures the simulation environment and world state:
 env:
   numEnvs: 1024               # Number of parallel environments
   device: "cuda:0"            # Computation device
-  render: null                # null=auto, true=force, false=headless
+  viewer: false               # Interactive visualization window
   envSpacing: 2.0             # Distance between environments
 
   # Task-specific environment objects
@@ -308,7 +308,7 @@ python train.py task=BoxGrasping env.numEnvs=1024 sim.dt=0.005
 ```bash
 # Convenient aliases (see TRAINING.md for full list)
 python train.py numEnvs=2048              # → env.numEnvs=2048
-python train.py render=true               # → env.render=true
+python train.py viewer=true               # → env.viewer=true
 python train.py logLevel=debug            # → train.logging.logLevel=debug
 ```
 
@@ -347,7 +347,7 @@ python train.py task=BoxGrasping numEnvs=4096 +defaults=[config,/physics/accurat
 #### Debugging with Visualization
 ```bash
 # Few environments with fast physics and rendering
-python train.py numEnvs=4 render=true physics=fast logLevel=debug
+python train.py numEnvs=4 viewer=true physics=fast logLevel=debug
 ```
 
 #### Custom Task Development

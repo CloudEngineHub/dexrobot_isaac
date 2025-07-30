@@ -95,7 +95,7 @@ defaults:
 ```bash
 # Select physics configuration at runtime
 python train.py +defaults=[config,/physics/accurate]
-python train.py +defaults=[config,/physics/fast] render=true
+python train.py +defaults=[config,/physics/fast] viewer=true
 ```
 
 See the [Configuration System Guide](guide-configuration-system.md) for detailed customization patterns.

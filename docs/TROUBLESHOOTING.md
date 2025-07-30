@@ -135,7 +135,7 @@ ls -la assets/dexrobot_mujoco/
 ### Slow Training
 **Symptom**: Training runs much slower than expected
 **Common Causes**:
-1. **Too many environments with rendering**: Reduce `env.numEnvs` when using `env.render=true`
+1. **Too many environments with rendering**: Reduce `env.numEnvs` when using `env.viewer=true`
 2. **Single environment training**: Use `training.test=true` for single environment debugging
 3. **GPU memory issues**: Reduce batch size or number of environments
 **Solution**: Profile training to identify bottlenecks and adjust configuration accordingly

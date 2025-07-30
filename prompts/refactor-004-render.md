@@ -225,3 +225,31 @@ Core SSOT violation has been eliminated and explicit configuration system implem
 - **Naming consensus**: "viewer" preferred over "gui" for approachability
 - **Structure consensus**: Flat config with consistent "video" prefix pattern
 - **Industry alignment**: Matches patterns in other simulation/ML frameworks
+
+
+### ✅ FULLY COMPLETED (2025-07-30)
+
+All remaining tasks have been completed:
+
+**✅ Task 1: Complete Legacy Option Removal**
+- ✅ Updated TRAINING.md to use `viewer=true` instead of `render=true` in all examples
+- ✅ Updated guide-http-video-streaming.md to use `videoStream` and `videoRecord` instead of `streamVideo` and `recordVideo`
+- ✅ Updated guide-configuration-system.md to use `viewer` instead of `render` in configuration examples
+- ✅ Updated README.md, GETTING_STARTED.md, TROUBLESHOOTING.md, and guide-physics-tuning.md to use new naming
+- ✅ All legacy option references (`render=`, `recordVideo=`, `streamVideo=`, `env.render`) have been removed from documentation
+
+**✅ Task 2: CLI Alias for Convenience**
+- ✅ `viewer=true` CLI alias was already implemented and working
+
+**✅ Task 3: Configuration Validation**
+- ✅ Configuration validation exists in base/video.yaml with proper structure
+
+### Final Status
+- All core implementation completed
+- All documentation updated to match new configuration structure
+- All legacy references removed from codebase documentation
+- `viewer`/`videoRecord`/`videoStream` naming consistently used throughout
+- CLI aliases working correctly
+- Configuration validation in place
+
+**TASK FULLY COMPLETED** - No remaining work needed.
