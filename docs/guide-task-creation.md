@@ -245,8 +245,8 @@ params:
 ### 5. Test Your Task
 
 ```bash
-# Test with visualization
-python examples/dexhand_test.py --config dexhand_env/cfg/task/YourTask.yaml
+# Test script only supports BaseTask - use training script for testing custom tasks
+python train.py task=YourTask steps=100 headless=false
 
 # Train your task
 python train.py task=YourTask

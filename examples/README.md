@@ -4,18 +4,15 @@ This directory contains example scripts for testing and demonstrating the DexHan
 
 ## dexhand_test.py
 
-Comprehensive test script for the DexHand environment using Hydra configuration.
+Comprehensive test script for the DexHand environment using BaseTask only.
 
 ### Usage
 
-The test script uses Hydra configuration, allowing powerful command-line overrides:
+The test script is hardcoded to use BaseTask and supports Hydra configuration overrides:
 
 ```bash
-# Basic test with default settings (BaseTask)
+# Basic test (BaseTask only)
 python examples/dexhand_test.py
-
-# Test BlindGrasping task
-python examples/dexhand_test.py task=BlindGrasping env.controlMode=position_delta
 
 # Headless test with custom parameters
 python examples/dexhand_test.py headless=true steps=100 env.numEnvs=16
@@ -54,12 +51,11 @@ All configuration parameters can be overridden via command line:
 - `plotEnvIdx` (0) - Environment index to plot
 
 **Task Selection:**
-- `task=BaseTask` - Basic task with contact test boxes (default)
-- `task=BlindGrasping` - Box grasping task with reward system
+- Script is hardcoded to use BaseTask only (basic task with contact test boxes)
 
 ### Key Features
 
-1. **Configuration Inheritance**: Uses Hydra to properly load task configurations with inheritance (fixes BlindGrasping compatibility)
+1. **BaseTask Focus**: Hardcoded to BaseTask for reliable and consistent testing of core functionality
 
 2. **Action Verification**: Tests all DOF mappings with sequential action patterns to verify control modes
 
@@ -85,7 +81,7 @@ All configuration parameters can be overridden via command line:
 The test script inherits configuration from the main Hydra config system:
 
 - Base configuration: `dexhand_env/cfg/config.yaml`
-- Task configurations: `dexhand_env/cfg/task/BaseTask.yaml`, `BlindGrasping.yaml`
+- Task configuration: `dexhand_env/cfg/task/BaseTask.yaml` (hardcoded)
 - Physics configurations: `dexhand_env/cfg/physics/default.yaml`
 
-This ensures consistency between training (`train.py`) and testing workflows.
+For testing other tasks, use the training script (`train.py`) instead.

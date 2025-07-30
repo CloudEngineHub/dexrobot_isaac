@@ -2,12 +2,14 @@
 """
 Test script for DexHand environment using BaseTask only.
 
-This script creates a DexHand environment with BaseTask
+This script creates a DexHand environment hardcoded to use BaseTask
 and runs tests to verify hand movement and control functionality.
 Specifically designed for BaseTask testing - does not support other tasks.
 
 IMPORTANT: To test position control mode, use `task.controlMode=position`
 (not `env.controlMode`) to properly override the BaseTask configuration.
+
+Note: This script is hardcoded to BaseTask. Use train.py for other tasks.
 """
 
 import os
@@ -1026,9 +1028,9 @@ BaseTask.create_task_objects = _patched_create_task_objects
     config_path="../dexhand_env/cfg", config_name="test_render", version_base=None
 )
 def main(cfg: DictConfig):
-    """Main function to test the DexHand environment using Hydra configuration.
+    """Main function to test the DexHand environment using BaseTask only.
 
-    This script is designed for BaseTask testing only and provides:
+    This script is hardcoded to BaseTask and provides:
     - Position and position_delta control mode testing
     - Policy control configuration verification (base/fingers)
     - Observation system validation with Rerun plotting
@@ -1121,7 +1123,7 @@ def main(cfg: DictConfig):
             }
 
         env = create_dex_env(
-            task_name=cfg.task.name,
+            task_name="BaseTask",
             cfg=cfg,
             rl_device=rl_device,
             sim_device=sim_device,

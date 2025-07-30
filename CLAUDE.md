@@ -7,7 +7,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Run simple test: `python examples/dexhand_test.py`
 - Run with options: `python examples/dexhand_test.py env.episodeLength=200 debug=true steps=500`
 - Test different control modes: `python examples/dexhand_test.py env.controlMode=position_delta env.policyControlsFingers=true env.policyControlsHandBase=false`
-- Test BlindGrasping task: `python examples/dexhand_test.py task=BlindGrasping env.controlMode=position_delta`
 - Test headless with fewer envs: `python examples/dexhand_test.py headless=true env.numEnvs=16 steps=100`
 
 ## Development Philosophy
