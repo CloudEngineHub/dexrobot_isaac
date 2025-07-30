@@ -11,7 +11,6 @@ import sys
 import yaml
 from datetime import datetime
 from pathlib import Path
-from typing import List
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
@@ -123,31 +122,6 @@ def build_runner(
     return runner
 
 
-def get_config_overrides(cfg: DictConfig) -> List[str]:
-    """Get list of config overrides for reproducibility."""
-    overrides = []
-
-    # Check task override
-    if cfg.task.name != "BaseTask":
-        overrides.append(f"task={cfg.task.name}")
-
-    # Always include key environment parameters for reproducibility
-    overrides.append(f"env.numEnvs={cfg.env.numEnvs}")
-    if cfg.env.render is not None:
-        overrides.append(f"env.render={cfg.env.render}")
-
-    # Always include key training parameters for reproducibility
-    if cfg.train.test:
-        overrides.append("train.test=true")
-    if cfg.train.checkpoint:
-        overrides.append(f"train.checkpoint={cfg.train.checkpoint}")
-    overrides.append(f"train.seed={cfg.train.seed}")
-    overrides.append(f"train.maxIterations={cfg.train.maxIterations}")
-    overrides.append(f"train.logging.logLevel={cfg.train.logging.logLevel}")
-
-    return overrides
-
-
 @hydra.main(config_path="dexhand_env/cfg", config_name="config", version_base=None)
 def main(cfg: DictConfig):
     """Main training function."""
@@ -191,19 +165,12 @@ def main(cfg: DictConfig):
         git_info.append("=== COMMAND LINE INFORMATION ===")
         git_info.append(f"Original command: {' '.join(sys.argv)}")
 
-        # Reconstruct Hydra command with resolved config
-        hydra_cmd_parts = ["python", "train.py"]
-        overrides = get_config_overrides(cfg)
-        hydra_cmd_parts.extend(overrides)
-
-        git_info.append(f"Hydra equivalent: {' '.join(hydra_cmd_parts)}")
         git_info.append("")
         git_info.append("=== GIT INFORMATION ===")
 
         # Save to separate command info file as well
         with open(output_dir / "command_info.txt", "w") as f:
             f.write(f"Original command: {' '.join(sys.argv)}\n")
-            f.write(f"Hydra equivalent: {' '.join(hydra_cmd_parts)}\n")
             f.write(f"Working directory: {Path.cwd()}\n")
             f.write(f"Timestamp: {timestamp}\n")
 
