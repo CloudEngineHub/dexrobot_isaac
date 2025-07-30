@@ -317,6 +317,7 @@ def main(cfg: DictConfig):
             video_config["stream_port"] = cfg.env.videoStreamPort
             video_config["stream_quality"] = cfg.env.videoStreamQuality
             video_config["stream_buffer_size"] = cfg.env.videoStreamBufferSize
+            video_config["stream_bind_all"] = cfg.env.videoStreamBindAll
             logger.info(
                 f"  🌐 HTTP stream will be available at: http://{video_config['stream_host']}:{video_config['stream_port']}"
             )

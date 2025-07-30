@@ -22,7 +22,8 @@ env:
   videoMaxDuration: 300             # Maximum duration per video file (seconds)
 
   # HTTP streaming configuration (requires Flask)
-  videoStreamHost: "127.0.0.1"     # Server host address
-  videoStreamPort: 8080             # Server port
+  videoStreamHost: "127.0.0.1"     # Server host address (localhost for security)
+  videoStreamPort: 58080            # Server port (uncommon port to avoid conflicts, auto-increments if occupied)
   videoStreamQuality: 100           # JPEG quality (1-100) - Maximum quality
   videoStreamBufferSize: 10         # Frame buffer size
+  videoStreamBindAll: false         # Bind to all interfaces (0.0.0.0) instead of localhost - SECURITY RISK if enabled

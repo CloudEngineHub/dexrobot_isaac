@@ -35,7 +35,14 @@ class HTTPVideoStreamer:
     - Thread-safe frame buffering
     """
 
-    def __init__(self, host: str, port: int, quality: int, buffer_size: int):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        quality: int,
+        buffer_size: int,
+        bind_all: bool = False,
+    ):
         """
         Initialize the HTTP video streamer.
 
@@ -47,14 +54,21 @@ class HTTPVideoStreamer:
             port: Port to serve on
             quality: JPEG quality (1-100)
             buffer_size: Maximum frames to buffer (kept at 1 for latest frame only)
+            bind_all: If True, bind to all interfaces (0.0.0.0) instead of configured host
         """
         if not FLASK_AVAILABLE:
             raise ImportError("Flask is required for HTTP video streaming")
 
-        self.host = host
+        # Store original values for reference
+        self.original_host = host
+        self.original_port = port
+
+        # Set actual host based on bind_all flag - SINGLE SOURCE OF TRUTH
+        self.host = "0.0.0.0" if bind_all else host
         self.port = port
         self.quality = quality
         self.buffer_size = buffer_size
+        self.bind_all = bind_all
 
         # Frame management - use queue for non-blocking streaming
         self._frame_queue: Queue = Queue(maxsize=1)  # Only keep latest frame
@@ -82,9 +96,17 @@ class HTTPVideoStreamer:
         self._server_thread: Optional[threading.Thread] = None
         self._server_running = False
 
-        logger.info(
-            f"HTTPVideoStreamer initialized: {host}:{port}, quality={quality} (real-time streaming)"
-        )
+        if bind_all:
+            logger.info(
+                f"HTTPVideoStreamer initialized: {self.host}:{port} (ALL interfaces), quality={quality}"
+            )
+            logger.warning(
+                "Binding to all interfaces (0.0.0.0) - ensure firewall is configured!"
+            )
+        else:
+            logger.info(
+                f"HTTPVideoStreamer initialized: {self.host}:{port}, quality={quality}"
+            )
 
     def _create_placeholder_frame(self) -> np.ndarray:
         """Create a placeholder frame for when no real frames are available."""
@@ -298,7 +320,7 @@ class HTTPVideoStreamer:
 
     def start_server(self) -> bool:
         """
-        Start the HTTP streaming server.
+        Start the HTTP streaming server with automatic port conflict resolution.
 
         Returns:
             True if server started successfully
@@ -307,30 +329,76 @@ class HTTPVideoStreamer:
             logger.warning("Server already running")
             return False
 
-        def run_server():
-            """Run Flask server in thread."""
+        # Try to find available port starting from configured port
+        import socket
+
+        max_attempts = 10
+        current_port = self.port
+
+        for attempt in range(max_attempts):
+            # First test if port is available by trying to bind to it
+            test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            test_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
-                self._app.run(
-                    host=self.host,
-                    port=self.port,
-                    debug=False,
-                    use_reloader=False,
-                    threaded=True,
+                test_sock.bind((self.host, current_port))
+                test_sock.close()
+                # Port is available, start Flask server
+                break
+            except OSError as e:
+                test_sock.close()
+                if attempt < max_attempts - 1:
+                    logger.debug(
+                        f"Port {current_port} unavailable ({e}), trying {current_port + 1}"
+                    )
+                    current_port += 1
+                    continue
+                else:
+                    logger.error(
+                        f"No available port found after {max_attempts} attempts (tried {self.original_port}-{current_port})"
+                    )
+                    return False
+
+        # Found available port, now start Flask server
+        try:
+
+            def run_server():
+                """Run Flask server in thread."""
+                try:
+                    self._app.run(
+                        host=self.host,
+                        port=current_port,
+                        debug=False,
+                        use_reloader=False,
+                        threaded=True,
+                    )
+                except Exception as e:
+                    logger.error(f"Server error on {self.host}:{current_port}: {e}")
+
+            self._server_thread = threading.Thread(target=run_server, daemon=True)
+            self._server_thread.start()
+            self._server_running = True
+
+            # Update port if it changed
+            if current_port != self.original_port:
+                logger.info(
+                    f"Port {self.original_port} was occupied, using port {current_port}"
                 )
-            except Exception as e:
-                logger.error(f"Server error: {e}")
+                self.port = current_port
 
-        self._server_thread = threading.Thread(target=run_server, daemon=True)
-        self._server_thread.start()
-        self._server_running = True
+            # Give server time to start
+            time.sleep(1.0)
 
-        # Give server time to start
-        time.sleep(1.0)
+            logger.info(
+                f"HTTP video stream server started at http://{self.host}:{current_port}"
+            )
+            return True
 
-        logger.info(
-            f"HTTP video stream server started at http://{self.host}:{self.port}"
-        )
-        return True
+        except Exception as e:
+            logger.error(f"Unexpected error starting server: {e}")
+            self._server_running = False
+            return False
+
+        return False
 
     def stop_server(self):
         """Stop the HTTP streaming server."""
@@ -414,6 +482,9 @@ class HTTPVideoStreamer:
             stats_copy["server_running"] = self._server_running
             stats_copy["host"] = self.host
             stats_copy["port"] = self.port
+            stats_copy["original_host"] = self.original_host
+            stats_copy["original_port"] = self.original_port
+            stats_copy["bind_all"] = self.bind_all
 
         return stats_copy
 
@@ -444,7 +515,7 @@ def create_http_video_streamer_from_config(
 
     Args:
         video_config: Video configuration dictionary with required keys:
-                     stream_host, stream_port, stream_quality, stream_buffer_size
+                     stream_host, stream_port, stream_quality, stream_buffer_size, stream_bind_all
 
     Returns:
         Configured HTTPVideoStreamer instance
@@ -458,6 +529,7 @@ def create_http_video_streamer_from_config(
         "stream_port",
         "stream_quality",
         "stream_buffer_size",
+        "stream_bind_all",
     ]
     missing_keys = [key for key in required_keys if key not in video_config]
 
@@ -472,4 +544,5 @@ def create_http_video_streamer_from_config(
         port=video_config["stream_port"],
         quality=video_config["stream_quality"],
         buffer_size=video_config["stream_buffer_size"],
+        bind_all=video_config["stream_bind_all"],
     )
