@@ -418,6 +418,38 @@ def __init__(self, parent):
 - No manual synchronization needed
 - Property decorators provide clean access without coupling
 
+### Step Processing Architecture
+
+The DexHand environment uses a **split step processing architecture** that balances simplicity and complexity appropriately:
+
+#### Design Decision: Split Architecture
+- **`pre_physics_step`** (40 lines) - implemented directly in `DexHandBase`
+  - Handles simple action input processing
+  - Stores actions, handles random actions mode
+  - Delegates to ActionProcessor and ObservationEncoder
+
+- **`post_physics_step`** (120+ lines) - delegates to `StepProcessor` component
+  - Orchestrates complex multi-component coordination
+  - Coordinates TensorManager, ObservationEncoder, ActionProcessor, TerminationManager, RewardCalculator
+  - Handles observation computation, termination evaluation, reward calculation, resets
+
+#### Architectural Rationale
+This design follows **complexity-justified separation** principles:
+
+1. **Complexity Difference**: 3:1 complexity ratio (120+ vs 40 lines) justifies different architectural treatments
+2. **Single Responsibility**: `StepProcessor` has clear responsibility for complex post-physics orchestration
+3. **Maintainability**: Prevents `DexHandBase` bloat while avoiding unnecessary abstraction of simple logic
+4. **Component Cohesion**: Each component maintains focused responsibilities aligned with complexity level
+
+#### Expert Consensus (2025-07-30)
+Comprehensive expert analysis confirmed this architecture as **optimal for research code**:
+- Aligns with single responsibility principle
+- Enables focused testing and debugging
+- Supports future extensibility
+- Follows industry best practices for simulation systems
+
+**Key Principle**: Different complexity levels warrant different architectural approaches - avoid forcing consistency where it would harm maintainability.
+
 ## Critical Lessons - Optimization and Refactoring
 
 ### ALWAYS Understand Before Optimizing

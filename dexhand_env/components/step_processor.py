@@ -13,6 +13,11 @@ class StepProcessor:
     """
     Handles post-physics step processing for the DexHand environment.
 
+    ARCHITECTURE NOTE: This component exists to separate complex post-physics
+    orchestration (120+ lines) from the main DexHandBase class. Simple pre-physics
+    action processing (40 lines) remains in DexHandBase to avoid unnecessary
+    abstraction while maintaining single responsibility principle.
+
     This component coordinates:
     - Reward computation
     - Termination evaluation
@@ -30,7 +35,13 @@ class StepProcessor:
         return self.parent.device
 
     def process_physics_step(self):
-        """Process state after physics simulation step."""
+        """Process state after physics simulation step.
+
+        ARCHITECTURE NOTE: This method handles complex multi-component orchestration
+        (120+ lines) that justifies separation from DexHandBase. It coordinates
+        TensorManager, ObservationEncoder, ActionProcessor, TerminationManager,
+        and RewardCalculator to prevent main class bloat.
+        """
         try:
             # Refresh tensors from simulation
             self.parent.tensor_manager.refresh_tensors(

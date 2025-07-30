@@ -833,7 +833,13 @@ class DexHandBase(VecTask):
         return obs
 
     def pre_physics_step(self, actions):
-        """Process actions before physics simulation step."""
+        """Process actions before physics simulation step.
+
+        ARCHITECTURE NOTE: This method is implemented directly in DexHandBase (40 lines)
+        because it handles simple action input processing. Complex post-physics
+        orchestration is delegated to StepProcessor (120+ lines) to maintain single
+        responsibility principle and prevent DexHandBase bloat.
+        """
         # Keyboard events are now handled in render() method to avoid duplicate processing
 
         # Store actions

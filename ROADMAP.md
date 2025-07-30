@@ -20,7 +20,6 @@ Code quality improvements and architectural enhancements.
 Issue resolution and bug fixes.
 
 #### Code Quality (`refactor_*`)
-- [ ] `refactor-007-step-architecture.md` - Investigate step processing architecture consistency
 - [ ] `refactor-008-config-key-casing.md` - Unify config key naming to lower_case under task section (file currently has typo: rafactor-008-config-key-casing.md)
 - [ ] `refactor-009-fix-prompt-contact-viz.md` - Fix prompt file name from fix-001-contact-viz.md to correct duplicate numbering
 
@@ -58,6 +57,16 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **refactor-007-step-architecture.md** (2025-07-30) - **MEDIUM** - Investigate step processing architecture consistency
+  - **Root Cause**: Question about architectural inconsistency - why pre_physics_step is in DexHandBase but post_physics_step delegates to StepProcessor component
+  - **Architecture Analysis**: Comprehensive investigation revealed 3:1 complexity ratio (120+ lines vs 40 lines) justifies different architectural treatments
+  - **Expert Consensus**: Multi-expert analysis confirmed current design as optimal - complexity-justified separation aligns with single responsibility principle
+  - **Design Decision**: Keep current split architecture - simple pre_physics action processing in DexHandBase, complex post_physics orchestration in StepProcessor
+  - **Documentation Added**: Added architectural rationale comments to both components explaining design decision and complexity justification
+  - **CLAUDE.md Update**: Added comprehensive "Step Processing Architecture" section documenting design principles and expert consensus findings
+  - **Architecture Compliance**: Validated alignment with component responsibility separation, maintainability principles, and research code best practices
+  - **Impact**: Eliminated architectural confusion with clear documentation explaining why apparent inconsistency is actually well-designed architecture
+  - Architecture investigation with comprehensive expert validation and documentation of design rationale
 - ✅ **refactor-007-blind-grasping.md** (2025-07-30) - **MEDIUM** - Rename BoxGrasping to BlindGrasping task
   - **Root Cause**: BoxGrasping task name was inaccurate - the task doesn't use vision, so "BlindGrasping" better describes the tactile-only grasping approach
   - **Core Implementation Changes**: Renamed task file (box_grasping_task.py → blind_grasping_task.py), updated class (BoxGraspingTask → BlindGraspingTask), renamed config (BoxGrasping.yaml → BlindGrasping.yaml), updated factory registration
