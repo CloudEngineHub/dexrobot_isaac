@@ -77,11 +77,11 @@ Project organization, tooling, and workflow improvements.
   - **Impact**: Clear render semantics with independent control of interactive visualization, video recording, and video streaming
   - **Documentation Updates** (2025-07-30): Completed legacy option removal - updated all documentation files (TRAINING.md, guide-http-video-streaming.md, guide-configuration-system.md, README.md, GETTING_STARTED.md, TROUBLESHOOTING.md, guide-physics-tuning.md) to use new configuration names (viewer/videoRecord/videoStream instead of render/recordVideo/streamVideo)
   - Comprehensive cleanup across 23 files with improved configuration clarity and removed technical debt
-- ✅ **fix-005-box-bounce-physics.md** (2025-07-29) - **ESSENTIAL** - Fix box bouncing at initialization in BoxGrasping task
+- ✅ **fix-005-box-bounce-physics.md** (2025-07-29) - **ESSENTIAL** - Fix box bouncing at initialization in BlindGrasping task
   - **Root Cause**: Refactor-005-default-values changed VecTask substeps from hardcoded default 2 to explicit config value 4, making physics simulation more accurate and exposing box positioning precision issues
   - **Physics Analysis**: Higher substeps (4 vs 2) = more accurate collision detection, revealing that box center at z=0.025m placed bottom exactly at z=0 with no clearance for collision sensitivity
   - **Principled Solution**: Adjusted box initial z position from 0.025m to 0.027m (box half-size + 2mm clearance) to work with accurate physics rather than masking the issue
-  - **Configuration Fix**: Updated BoxGrasping.yaml with clear comment explaining the clearance requirement for accurate physics simulation
+  - **Configuration Fix**: Updated BlindGrasping.yaml with clear comment explaining the clearance requirement for accurate physics simulation
   - **Comprehensive Testing**: Validated fix works with both substeps=2 and substeps=4, confirmed no regression in BaseTask functionality
   - **Architecture Compliance**: Maintained improved physics accuracy (substeps=4) while addressing root positioning cause, aligning with fail-fast philosophy
   - **Impact**: Eliminated box bouncing behavior while preserving accurate physics simulation, no defensive programming added
@@ -92,7 +92,7 @@ Project organization, tooling, and workflow improvements.
   - **Comprehensive Cleanup**: Removed all hardcoded defaults from ActionProcessor, VideoManager, ViewerController, ObservationEncoder, TerminationManager, VecTask, and DexHandBase
   - **Config Transparency**: Added explicit clipObservations/clipActions to config.yaml, termination rewards to BaseTask.yaml
   - **Architecture Compliance**: Eliminated defensive programming while preserving legitimate external interface defaults
-  - **Testing Verified**: Both test script and training pipeline (BaseTask/BoxGrasping) work correctly
+  - **Testing Verified**: Both test script and training pipeline (BaseTask/BlindGrasping) work correctly
   - **Impact**: Restored training pipeline, improved fail-fast behavior, made all parameters discoverable in config files
   - **Side Effect**: Box bouncing physics behavior change identified and resolved (fixed in fix-005-box-bounce-physics.md)
 - ✅ **fix-003-max-iterations.md** (2025-07-29) - **ESSENTIAL** - maxIterations config override and train.py cleanup
@@ -113,9 +113,9 @@ Project organization, tooling, and workflow improvements.
   - Minimal code changes with maximum impact on essential debugging and testing infrastructure
 - ✅ **fix-002-consistency.md** (2025-07-28) - **CRITICAL** - Test script and training consistency fixes
   - Fixed test script environment count issue by switching to existing test_render.yaml configuration (4 environments vs 1024)
-  - Updated control mode validation to accept both position and position_delta modes, resolving BoxGrasping compatibility
+  - Updated control mode validation to accept both position and position_delta modes, resolving BlindGrasping compatibility
   - Leveraged existing test configuration infrastructure instead of creating new files
-  - Verified both BaseTask and BoxGrasping work properly with Hydra inheritance and CLI overrides
+  - Verified both BaseTask and BlindGrasping work properly with Hydra inheritance and CLI overrides
   - Achieved full consistency between test and train scripts using identical Hydra configuration system
   - Minimal code changes with maximum reuse of existing well-designed test configurations
 - ✅ **fix-001-contact-viz.md** (2025-07-28) - **ESSENTIAL** - Contact visualization NameError fix
@@ -140,7 +140,7 @@ Project organization, tooling, and workflow improvements.
 - ✅ **refactor-001-episode-length.md** (2025-07-28) - **MAJOR** - Episode length configuration architectural fix
   - Resolved inconsistency where episodeLength was placed in different config sections (task vs env)
   - Moved episodeLength from task to env section in BaseTask.yaml to align with DexHandBase expectations
-  - Maintained CLI override functionality (--episode-length) and BoxGrasping.yaml compatibility
+  - Maintained CLI override functionality (--episode-length) and BlindGrasping.yaml compatibility
   - Fixed potential runtime failures when BaseTask was used directly
   - Single line configuration change with comprehensive testing validation
 - ✅ **refactor-002-graphics-manager-in-parent.md** (2025-07-25) - **MAJOR** - Graphics component architecture alignment
@@ -160,7 +160,7 @@ Project organization, tooling, and workflow improvements.
   - Implemented continuous geometric penetration detection using fingertip-to-box-center distance
   - Added penetration penalty proportional to penetration depth for smooth gradients
   - Modified s2_fingerpad_proximity reward to prevent exploitation via distance clamping
-  - Added configurable penetrationPrevention parameters to BoxGrasping.yaml
+  - Added configurable penetrationPrevention parameters to BlindGrasping.yaml
   - Prevents RL policies from exploiting physics simulation artifacts for realistic training
 - ✅ **meta-000-workflow-setup.md** (2025-01-25) - AI development workflow implementation
   - Created structured 3-phase workflow process

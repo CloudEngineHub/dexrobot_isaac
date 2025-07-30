@@ -122,13 +122,13 @@ The BaseTask teaches the hand basic movement and stability without a specific ma
 ### Try Different Tasks
 ```bash
 # Train on box grasping (more complex)
-python train.py task=BoxGrasping numEnvs=1024
+python train.py task=BlindGrasping numEnvs=1024
 
 # Test the grasping policy (latest training checkpoint)
-python train.py task=BoxGrasping test=true checkpoint=latest viewer=true
+python train.py task=BlindGrasping test=true checkpoint=latest viewer=true
 ```
 
-**✅ Success Criteria (BoxGrasping):**
+**✅ Success Criteria (BlindGrasping):**
 - Hand approaches and grasps the box
 - Box is lifted above the table
 - Stable grasp maintained for several seconds

@@ -1,5 +1,5 @@
 """
-Box grasping task for DexHand.
+Blind grasping task for DexHand.
 
 This module implements a blind grasping task where the policy learns to grasp
 a 5cm box using only tactile feedback (binary contacts and duration).
@@ -24,9 +24,9 @@ from dexhand_env.tasks.task_interface import DexTask
 from dexhand_env.constants import FINGER_JOINT_NAMES
 
 
-class BoxGraspingTask(DexTask):
+class BlindGraspingTask(DexTask):
     """
-    Blind box grasping task implementing curriculum learning through structured stages.
+    Blind grasping task implementing curriculum learning through structured stages.
 
     ## Design Philosophy: Blind Tactile-Only Grasping
 
@@ -113,7 +113,7 @@ class BoxGraspingTask(DexTask):
 
     def __init__(self, sim, gym, device, num_envs, full_config):
         """
-        Initialize the box grasping task.
+        Initialize the blind grasping task.
 
         Args:
             sim: Simulation instance
@@ -298,7 +298,7 @@ class BoxGraspingTask(DexTask):
         # Task states are now registered in initialize_task_states()
 
     def load_task_assets(self):
-        """Load box asset for the grasping task."""
+        """Load box asset for the blind grasping task."""
         logger.info("Loading box asset...")
 
         # Create box asset

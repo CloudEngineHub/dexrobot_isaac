@@ -196,7 +196,7 @@ training:
 python train.py env.numEnvs=2048 task.episodeLength=500
 
 # Configuration composition
-python train.py --config-name=debug task=BoxGrasping
+python train.py --config-name=debug task=BlindGrasping
 
 # Runtime behavior
 python train.py training.test=true training.checkpoint=latest

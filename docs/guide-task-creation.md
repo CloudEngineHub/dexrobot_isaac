@@ -255,13 +255,13 @@ python train.py task=YourTask
 python train.py task=YourTask train=YourTaskPPO
 ```
 
-## Complete Example: BoxGrasping Task
+## Complete Example: BlindGrasping Task
 
-The BoxGrasping task provides a real-world example of all the concepts above. Here are the key implementation patterns you can adapt for your own tasks.
+The BlindGrasping task provides a real-world example of all the concepts above. Here are the key implementation patterns you can adapt for your own tasks.
 
 ### Task Configuration Example
 
-**File: `dexhand_env/cfg/task/BoxGrasping.yaml`**
+**File: `dexhand_env/cfg/task/BlindGrasping.yaml`**
 ```yaml
 # @package _global_
 defaults:
@@ -269,7 +269,7 @@ defaults:
   - _self_
 
 task:
-  name: BoxGrasping
+  name: BlindGrasping
 
 env:
   episodeLength: 300  # 10 seconds at 30 Hz
@@ -297,7 +297,7 @@ reward:
 **Key patterns from `dexhand_env/tasks/box_grasping_task.py`:**
 
 ```python
-class BoxGraspingTask(DexTask):
+class BlindGraspingTask(DexTask):
     """Box grasping with tactile-only feedback (no vision)."""
 
     def __init__(self, sim, gym, device, num_envs, cfg):
@@ -591,7 +591,7 @@ if __name__ == "__main__":
    - Use simple reward functions initially
    - Add complexity incrementally
 
-This guide should get you started with creating custom tasks. Refer to `BoxGraspingTask` for a complete example implementation.
+This guide should get you started with creating custom tasks. Refer to `BlindGraspingTask` for a complete example implementation.
 
 ## See Also
 

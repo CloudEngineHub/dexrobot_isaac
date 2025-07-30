@@ -1,16 +1,16 @@
 # fix-005-box-bounce-physics.md
 
-Fix box bouncing at initialization in BoxGrasping task
+Fix box bouncing at initialization in BlindGrasping task
 
 ## Issue Description
 
-After completing refactor-005-default-values, the BoxGrasping task exhibits a consistent physics behavior change where the box bounces slightly during initialization. This did not occur before the refactor.
+After completing refactor-005-default-values, the BlindGrasping task exhibits a consistent physics behavior change where the box bounces slightly during initialization. This did not occur before the refactor.
 
 ## Symptoms
 
-- **Consistent behavior**: Box bounces every time BoxGrasping environment initializes
+- **Consistent behavior**: Box bounces every time BlindGrasping environment initializes
 - **Timing**: Occurs during environment startup/initialization phase
-- **Task-specific**: Affects BoxGrasping task (BaseTask has no box to compare)
+- **Task-specific**: Affects BlindGrasping task (BaseTask has no box to compare)
 - **Physics-related**: Appears to be actual physics simulation bounce, not visual glitch
 
 ## Investigation Context
@@ -58,7 +58,7 @@ Based on the refactor changes, the most likely causes are:
 
 ## Configuration Context
 
-**Box Configuration (BoxGrasping.yaml):**
+**Box Configuration (BlindGrasping.yaml):**
 ```yaml
 env:
   box:

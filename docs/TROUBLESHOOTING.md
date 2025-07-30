@@ -172,7 +172,7 @@ If you're still experiencing issues:
 
 1. **Check component logs**: Use loguru logging to get detailed debugging information
 2. **Consult specialized guides**: See [Component Debugging Guide](guide-debugging.md) for component-specific issues
-3. **Review examples**: Study the BoxGrasping task implementation for working patterns
+3. **Review examples**: Study the BlindGrasping task implementation for working patterns
 4. **Validate setup**: Ensure your installation matches the requirements in [README.md](../README.md)
 
 ## Related Documentation

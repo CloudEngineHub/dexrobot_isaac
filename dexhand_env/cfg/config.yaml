@@ -1,8 +1,8 @@
 # Main Hydra configuration for DexHand training and testing
 # Training: python train.py
 # Testing: python examples/dexhand_test.py
-# Override: python train.py task=BoxGrasping env.numEnvs=2048
-# Override: python examples/dexhand_test.py task=BoxGrasping headless=true steps=500
+# Override: python train.py task=BlindGrasping env.numEnvs=2048
+# Override: python examples/dexhand_test.py task=BlindGrasping headless=true steps=500
 
 defaults:
   - task: BaseTask

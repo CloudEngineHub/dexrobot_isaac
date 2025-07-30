@@ -121,7 +121,7 @@ python train.py task=BaseTask numEnvs=64 viewer=true
 ## Available Tasks
 
 - **BaseTask**: Basic environment for testing and development
-- **BoxGrasping**: Grasping and manipulation task with box objects
+- **BlindGrasping**: Grasping and manipulation task with box objects
 
 ## Training
 
@@ -132,7 +132,7 @@ python train.py task=BaseTask numEnvs=64 viewer=true
 python train.py
 
 # Custom task and environment size
-python train.py task=BoxGrasping numEnvs=2048
+python train.py task=BlindGrasping numEnvs=2048
 
 # Test mode with rendering (automatically enabled)
 python train.py test=true checkpoint=path/to/checkpoint.pth

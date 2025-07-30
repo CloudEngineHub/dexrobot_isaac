@@ -19,7 +19,7 @@
 - Consider if organization/naming could be clearer
 
 ### 4. Training Compatibility Issues
-- Need to verify both "BaseTask" and "BoxGrasping" work with training pipeline
+- Need to verify both "BaseTask" and "BlindGrasping" work with training pipeline
 - Check that task switching works properly in train.py
 - Ensure configs are compatible and well-documented
 
@@ -30,18 +30,18 @@ The core consistency issue is a **configuration loading mismatch**:
 
 1. **dexhand_test.py**: Uses `yaml.safe_load()` - no Hydra inheritance
 2. **train.py**: Uses Hydra - inheritance works properly
-3. **BoxGraspingTask**: Requires `contactForceBodies` but only inherits it via Hydra defaults
+3. **BlindGraspingTask**: Requires `contactForceBodies` but only inherits it via Hydra defaults
 
 **Test Results:**
 - ✅ `dexhand_test.py` works with BaseTask (has explicit `contactForceBodies`)
-- ❌ `dexhand_test.py` fails with BoxGrasping ("No contact force body indices provided")
+- ❌ `dexhand_test.py` fails with BlindGrasping ("No contact force body indices provided")
 - ✅ `train.py` works with BaseTask (Hydra resolves inheritance)
-- ✅ `train.py` works with BoxGrasping (Hydra resolves inheritance)
+- ✅ `train.py` works with BlindGrasping (Hydra resolves inheritance)
 
 ### Recommended Solution: Switch Test Script to Hydra
 
 **Benefits:**
-1. **Fixes core issue**: BoxGrasping inheritance works properly
+1. **Fixes core issue**: BlindGrasping inheritance works properly
 2. **Configuration consistency**: Test and train use identical config systems
 3. **Proven approach**: `train.py` already uses Hydra successfully
 4. **Future-proofing**: Any new tasks with inheritance work automatically
@@ -70,7 +70,7 @@ def main(cfg: DictConfig):
 ### Phase 1: Convert Test Script to Hydra (HIGH PRIORITY)
 - Replace argparse with Hydra decorator and DictConfig
 - Update CLI argument syntax to match train.py patterns
-- Test both BaseTask and BoxGrasping functionality
+- Test both BaseTask and BlindGrasping functionality
 - Update examples documentation with new CLI syntax
 
 ### Phase 2: Validate Cross-Task Compatibility (MEDIUM PRIORITY)
@@ -89,9 +89,9 @@ def main(cfg: DictConfig):
 1. **Converted test script to Hydra**: Replaced argparse with `@hydra.main()` decorator
 2. **Updated CLI syntax**: Changed from `--num-envs 2` to `env.numEnvs=2` pattern
 3. **Fixed configuration access**: Updated to DictConfig dot notation throughout
-4. **Resolved core inheritance issue**: BoxGrasping task now loads properly with Hydra inheritance
+4. **Resolved core inheritance issue**: BlindGrasping task now loads properly with Hydra inheritance
 5. **Updated documentation**: Modified CLAUDE.md build commands and created examples/README.md
-6. **Verified both tasks work**: BaseTask and BoxGrasping both function with Hydra configuration
+6. **Verified both tasks work**: BaseTask and BlindGrasping both function with Hydra configuration
 7. **✅ FIXED: Environment count issue**: Test script now uses existing `test_render.yaml` with 4 environments
 8. **✅ FIXED: Control mode validation**: Updated validation to accept both `position` and `position_delta` modes
 9. **✅ VERIFIED: CLI overrides**: All command-line overrides work correctly with new configuration
@@ -110,17 +110,19 @@ def main(cfg: DictConfig):
 **Location**: `examples/dexhand_test.py` lines 1155-1163
 **Solution**: Updated validation to accept both `position` and `position_delta` as valid modes
 **Code change**: Replaced strict mode matching with flexible validation allowing both modes
-**Result**: Both BaseTask (position_delta) and BoxGrasping (position_delta) work without errors
+**Result**: Both BaseTask (position_delta) and BlindGrasping (position_delta) work without errors
 
 #### Fix 3: Comprehensive Testing Verification
 **BaseTask**: ✅ Works with 4 environments, position_delta mode, proper rendering
-**BoxGrasping**: ✅ Works with position_delta mode, task assets load correctly, Hydra inheritance functional
+**BlindGrasping**: ✅ Works with position_delta mode, task assets load correctly, Hydra inheritance functional
 **CLI Overrides**: ✅ All overrides tested and working (`env.numEnvs=2`, `steps=50`, `headless=true`)
 
 ### Final Impact Assessment:
-- **CORE FUNCTIONALITY**: ✅ **FIXED** - BoxGrasping inheritance works perfectly
+- **CORE FUNCTIONALITY**: ✅ **FIXED** - BlindGrasping inheritance works perfectly
 - **USABILITY**: ✅ **FIXED** - Reasonable environment defaults, flexible mode validation
 - **CONSISTENCY**: ✅ **ACHIEVED** - Both scripts use identical Hydra system
 - **MAINTAINABILITY**: ✅ **IMPROVED** - Leverages existing test configurations, minimal code changes
 
 **Overall Status**: ✅ **FULLY COMPLETED** - All consistency issues resolved, both tasks work reliably with proper test defaults and flexible validation.
+
+REOPENED: `dexhand_test.py` should be

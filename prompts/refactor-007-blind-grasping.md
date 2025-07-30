@@ -1,1 +1,1 @@
-The current BoxGrasping task is better called "Blind Grasping" as it does not involve visual input. The task is to grasp an object without using vision, relying on other sensors or pre-defined parameters.
+The current BlindGrasping task is better called "Blind Grasping" as it does not involve visual input. The task is to grasp an object without using vision, relying on other sensors or pre-defined parameters.

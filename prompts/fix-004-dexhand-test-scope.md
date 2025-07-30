@@ -3,7 +3,7 @@
 ## Problems Identified
 
 ### 1. Task Scope Confusion
-**Current Issue**: Test script attempts to support multiple tasks (BaseTask, BoxGrasping) but this creates compatibility problems
+**Current Issue**: Test script attempts to support multiple tasks (BaseTask, BlindGrasping) but this creates compatibility problems
 **Root Cause**: Different tasks may implement their own action parsing logic incompatible with BaseTask assumptions
 **Expected Behavior**: dexhand_test.py should focus exclusively on BaseTask testing
 
@@ -43,7 +43,7 @@ AttributeError: 'ActionProcessor' object has no attribute '_scale_actions_to_lim
 - Remove task switching logic entirely
 - Hardcode BaseTask usage with clear documentation
 - Focus on testing core hand control and observation systems
-- Remove BoxGrasping compatibility attempts
+- Remove BlindGrasping compatibility attempts
 
 ### 2. **Fix Position Control Mode**
 - Investigate actual ActionProcessor API for action scaling

@@ -74,7 +74,7 @@ This creates consistent, maintainable architecture aligned with other components
 - May need property decorators for gym, sim, env_handles if not already available on parent
 
 **Testing approach:**
-- Use existing test command: `python train.py config=test_stream render=true task=BoxGrasping device=cuda:0 checkpoint=runs/BoxGrasping_train_20250724_120120/nn/BoxGrasping.pth numEnvs=1`
+- Use existing test command: `python train.py config=test_stream render=true task=BlindGrasping device=cuda:0 checkpoint=runs/BlindGrasping_train_20250724_120120/nn/BlindGrasping.pth numEnvs=1`
 - Verify video recording and viewer functionality unchanged
 - Test both headless and viewer modes
 

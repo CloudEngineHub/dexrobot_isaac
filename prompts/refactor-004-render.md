@@ -72,7 +72,7 @@ env:
 
 **1.2 Update Task Configuration Files**
 - `dexhand_env/cfg/task/BaseTask.yaml`: Add viewer defaults if needed
-- `dexhand_env/cfg/task/BoxGrasping.yaml`: Add viewer defaults if needed
+- `dexhand_env/cfg/task/BlindGrasping.yaml`: Add viewer defaults if needed
 
 ### Phase 2: Code Logic Updates (Critical)
 

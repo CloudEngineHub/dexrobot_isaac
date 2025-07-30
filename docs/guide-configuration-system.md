@@ -79,7 +79,7 @@ Defines the reinforcement learning task parameters:
 
 ```yaml
 task:
-  name: "BoxGrasping"         # Task identifier
+  name: "BlindGrasping"         # Task identifier
   episodeLength: 500          # Maximum episode steps
   controlMode: "position_delta" # Action control mode
 
@@ -210,7 +210,7 @@ physx:
 ```
 
 **Use cases:**
-- BoxGrasping training for penetration mitigation
+- BlindGrasping training for penetration mitigation
 - Research requiring high physics fidelity
 - Tasks with complex contact interactions
 - ~2-3x slower than default but higher quality
@@ -301,7 +301,7 @@ python train.py task.rewardWeights.object_height=2.0
 python train.py sim.physx.num_position_iterations=32
 
 # Multiple overrides
-python train.py task=BoxGrasping env.numEnvs=1024 sim.dt=0.005
+python train.py task=BlindGrasping env.numEnvs=1024 sim.dt=0.005
 ```
 
 **Using CLI Aliases:**
@@ -318,7 +318,7 @@ python train.py logLevel=debug            # → train.logging.logLevel=debug
 python train.py +defaults=[config,/physics/fast]
 
 # Or specify physics config with task explicitly
-python train.py task=BoxGrasping +defaults=[config,/physics/accurate]
+python train.py task=BlindGrasping +defaults=[config,/physics/accurate]
 ```
 
 #### 3. Runtime Configuration Composition
@@ -326,7 +326,7 @@ python train.py task=BoxGrasping +defaults=[config,/physics/accurate]
 **Combining Multiple Configs:**
 ```bash
 # Use test base + custom physics + task override
-python train.py -cn test_render task=BoxGrasping +physics=accurate
+python train.py -cn test_render task=BlindGrasping +physics=accurate
 ```
 
 **Environment Variable Integration:**
@@ -341,7 +341,7 @@ python train.py env.device="cuda:${oc.env:CUDA_DEVICE}"
 #### High-Performance Training
 ```bash
 # Maximum environments with accurate physics
-python train.py task=BoxGrasping numEnvs=4096 +defaults=[config,/physics/accurate]
+python train.py task=BlindGrasping numEnvs=4096 +defaults=[config,/physics/accurate]
 ```
 
 #### Debugging with Visualization
@@ -408,7 +408,7 @@ python -c "
 from dexhand_env.utils.config_validation import validate_config
 from hydra import compose, initialize_config_dir
 with initialize_config_dir(config_dir='dexhand_env/cfg'):
-    cfg = compose(config_name='config', overrides=['task=BoxGrasping'])
+    cfg = compose(config_name='config', overrides=['task=BlindGrasping'])
     print('Valid:', validate_config(cfg))
 "
 ```
@@ -440,7 +440,7 @@ Complex workflows can compose multiple configuration sources:
 # Advanced composition example
 defaults:
   - base/multi_gpu           # Multi-GPU training base
-  - task: BoxGrasping        # Task configuration
+  - task: BlindGrasping        # Task configuration
   - physics: accurate        # High-precision physics
   - train: distributed_ppo   # Distributed training algorithm
   - override /logging: wandb # W&B logging instead of TensorBoard

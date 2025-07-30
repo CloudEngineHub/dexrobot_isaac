@@ -11,7 +11,7 @@ from loguru import logger
 # Import tasks first (they will import Isaac Gym)
 from dexhand_env.tasks.dexhand_base import DexHandBase
 from dexhand_env.tasks.base_task import BaseTask
-from dexhand_env.tasks.box_grasping_task import BoxGraspingTask
+from dexhand_env.tasks.blind_grasping_task import BlindGraspingTask
 
 # Import PyTorch after Isaac Gym modules
 import torch
@@ -54,10 +54,10 @@ def create_dex_env(
             task = BaseTask(
                 None, None, torch.device(rl_device), cfg["env"]["numEnvs"], cfg
             )
-        elif task_name == "BoxGrasping":
+        elif task_name == "BlindGrasping":
             # Box grasping task
-            logger.debug("Creating BoxGraspingTask...")
-            task = BoxGraspingTask(
+            logger.debug("Creating BlindGraspingTask...")
+            task = BlindGraspingTask(
                 None, None, torch.device(rl_device), cfg["env"]["numEnvs"], cfg
             )
         else:

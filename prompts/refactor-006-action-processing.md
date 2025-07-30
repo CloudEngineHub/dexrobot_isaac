@@ -58,7 +58,7 @@ This improves clarity and makes the timing more coherent with RL frameworks wher
 
 **Testing Approach:**
 - Verify identical behavior before/after refactoring
-- Test with existing BoxGrasping task
+- Test with existing BlindGrasping task
 - Validate timing and performance
 
 ## Dependencies

@@ -25,7 +25,7 @@ An architectural principle ensuring shared state (like `control_dt`, `device`, `
 ## Environment and Simulation
 
 ### **Task**
-A specific manipulation scenario (e.g., `BaseTask`, `BoxGrasping`) that defines:
+A specific manipulation scenario (e.g., `BaseTask`, `BlindGrasping`) that defines:
 - Scene setup (objects, spawn positions)
 - Reward functions and termination conditions
 - Task-specific observations and reset behavior

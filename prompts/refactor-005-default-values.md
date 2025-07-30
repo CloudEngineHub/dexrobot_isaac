@@ -94,16 +94,16 @@ The code should not contain ANY numerical default values. Every `.get()` pattern
   - Code: `/dexhand_env/tasks/base/vec_task.py:109-110`
 
 #### **3. Penetration Prevention Hardcoded Defaults Removed**
-- **Problem**: BoxGrasping task had hardcoded penetration parameter defaults
-- **Solution**: Removed `.get()` patterns since `BoxGrasping.yaml` already contains all needed values
-- **File**: `/dexhand_env/tasks/box_grasping_task.py:184-188`
+- **Problem**: BlindGrasping task had hardcoded penetration parameter defaults
+- **Solution**: Removed `.get()` patterns since `BlindGrasping.yaml` already contains all needed values
+- **File**: `/dexhand_env/tasks/blind_grasping_task.py:184-188`
 - **Config Values**: `geometricPenetrationFactor`, `proximityMinDistanceFactor`, `penetrationDepthScale`
 
 ### Testing Results
 
 ✅ **Test Script Path**: `python examples/dexhand_test.py headless=true steps=10` - **WORKS**
 ✅ **Training Path (BaseTask)**: `python train.py task=BaseTask headless=true train.maxIterations=1 env.numEnvs=4` - **WORKS**
-✅ **Training Path (BoxGrasping)**: `python train.py task=BoxGrasping headless=true train.maxIterations=1 env.numEnvs=4` - **WORKS**
+✅ **Training Path (BlindGrasping)**: `python train.py task=BlindGrasping headless=true train.maxIterations=1 env.numEnvs=4` - **WORKS**
 
 ### Impact Assessment
 
@@ -129,7 +129,7 @@ As per task requirements, the following `.get()` patterns were **correctly prese
 
 1. `/dexhand_env/cfg/config.yaml` - Added clip configuration keys (already existed)
 2. `/dexhand_env/tasks/base/vec_task.py` - Fixed config access patterns and removed hardcoded defaults (already fixed)
-3. `/dexhand_env/tasks/box_grasping_task.py` - Removed penetration prevention hardcoded defaults
+3. `/dexhand_env/tasks/blind_grasping_task.py` - Removed penetration prevention hardcoded defaults
 
 ### Task Completion
 

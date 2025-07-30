@@ -6,7 +6,7 @@ Resolve architectural inconsistency in episodeLength configuration placement.
 
 The DexHand codebase has an architectural inconsistency where `episodeLength` is placed in different config sections:
 - BaseTask.yaml: `task.episodeLength: 300`
-- BoxGrasping.yaml: `env.episodeLength: 500`
+- BlindGrasping.yaml: `env.episodeLength: 500`
 - DexHandBase code: expects `env_cfg["episodeLength"]`
 
 This creates potential runtime failures when BaseTask is used directly, since the code looks for the parameter in the env section but BaseTask defines it in the task section.
@@ -14,7 +14,7 @@ This creates potential runtime failures when BaseTask is used directly, since th
 ## Current State
 
 - **BaseTask.yaml**: Places `episodeLength` in `task` section (line 24)
-- **BoxGrasping.yaml**: Places `episodeLength` in `env` section (line 15)
+- **BlindGrasping.yaml**: Places `episodeLength` in `env` section (line 15)
 - **DexHandBase**: Reads from `self.env_cfg["episodeLength"]` (line 148)
 - **CLI Integration**: `dexhand_test.py` overrides `cfg["env"]["episodeLength"]`
 
@@ -24,7 +24,7 @@ Consistent placement of `episodeLength` parameter across all config files and co
 
 ## Constraints
 
-- Must maintain backward compatibility with existing BoxGrasping.yaml
+- Must maintain backward compatibility with existing BlindGrasping.yaml
 - Must align with existing code expectations in DexHandBase
 - Must preserve CLI override functionality
 - Should follow architectural principles for config section organization

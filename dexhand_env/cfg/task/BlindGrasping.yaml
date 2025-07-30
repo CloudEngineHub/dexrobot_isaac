@@ -1,5 +1,5 @@
 # @package _global_
-# BoxGrasping task configuration - inherits from BaseTask
+# BlindGrasping task configuration - inherits from BaseTask
 defaults:
   - BaseTask
   - _self_
@@ -25,7 +25,7 @@ env:
 
 # Task configuration - all RL-related settings
 task:
-  name: BoxGrasping
+  name: BlindGrasping
 
   # Velocity limits
   maxBaseLinearVelocity: 0.1
@@ -121,7 +121,7 @@ task:
 
   # Reward weights configuration - override BaseTask completely
   rewardWeights:
-    _delete_: true  # Delete parent rewardWeights to ensure BoxGrasping has complete control
+    _delete_: true  # Delete parent rewardWeights to ensure BlindGrasping has complete control
 
     # Unified stage-based reward system (removes redundancy)
     # Stage 1: Pre-grasp rewards
@@ -156,7 +156,7 @@ task:
     termination_timeout_penalty: 200.0       # Penalty for not completing task
 
     # Explicitly disable BaseTask rewards (set to 0.0)
-    alive: 0.0                      # No alive bonus for BoxGrasping
+    alive: 0.0                      # No alive bonus for BlindGrasping
     height_safety: 0.0              # No height safety penalty (handled by termination)
     finger_velocity: 0.0            # No velocity penalties
     hand_velocity: 0.0

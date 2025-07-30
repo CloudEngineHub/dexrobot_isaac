@@ -14,8 +14,8 @@ The test script uses Hydra configuration, allowing powerful command-line overrid
 # Basic test with default settings (BaseTask)
 python examples/dexhand_test.py
 
-# Test BoxGrasping task
-python examples/dexhand_test.py task=BoxGrasping env.controlMode=position_delta
+# Test BlindGrasping task
+python examples/dexhand_test.py task=BlindGrasping env.controlMode=position_delta
 
 # Headless test with custom parameters
 python examples/dexhand_test.py headless=true steps=100 env.numEnvs=16
@@ -55,11 +55,11 @@ All configuration parameters can be overridden via command line:
 
 **Task Selection:**
 - `task=BaseTask` - Basic task with contact test boxes (default)
-- `task=BoxGrasping` - Box grasping task with reward system
+- `task=BlindGrasping` - Box grasping task with reward system
 
 ### Key Features
 
-1. **Configuration Inheritance**: Uses Hydra to properly load task configurations with inheritance (fixes BoxGrasping compatibility)
+1. **Configuration Inheritance**: Uses Hydra to properly load task configurations with inheritance (fixes BlindGrasping compatibility)
 
 2. **Action Verification**: Tests all DOF mappings with sequential action patterns to verify control modes
 
@@ -85,7 +85,7 @@ All configuration parameters can be overridden via command line:
 The test script inherits configuration from the main Hydra config system:
 
 - Base configuration: `dexhand_env/cfg/config.yaml`
-- Task configurations: `dexhand_env/cfg/task/BaseTask.yaml`, `BoxGrasping.yaml`
+- Task configurations: `dexhand_env/cfg/task/BaseTask.yaml`, `BlindGrasping.yaml`
 - Physics configurations: `dexhand_env/cfg/physics/default.yaml`
 
 This ensures consistency between training (`train.py`) and testing workflows.

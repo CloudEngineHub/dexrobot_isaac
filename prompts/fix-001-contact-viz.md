@@ -15,7 +15,7 @@ Initial investigation suggested configuration issues, but thorough analysis reve
 ## Current State
 
 **Working Components:**
-- ✅ Configuration properly defined in BaseTask.yaml with correct inheritance to BoxGrasping
+- ✅ Configuration properly defined in BaseTask.yaml with correct inheritance to BlindGrasping
 - ✅ ViewerController correctly accesses config via `parent.task_cfg.get("contactVisualization", {})`
 - ✅ Contact body names (`r_f_link*_4`) exist in MJCF and resolve to valid indices
 - ✅ Keyboard shortcut 'C' registered and toggle logging implemented
@@ -73,7 +73,7 @@ Contact visualization should work reliably:
 - Shape compatibility: Both are [num_envs, num_bodies] tensors with force magnitudes
 
 **Testing Approach:**
-- Run with BoxGrasping task and make hand contact with box
+- Run with BlindGrasping task and make hand contact with box
 - Press 'C' to toggle contact visualization and verify logging shows correct config values
 - Confirm color changes occur during contact events based on obs_dict data
 - Verify performance impact is minimal (should be better since no duplicate computation)

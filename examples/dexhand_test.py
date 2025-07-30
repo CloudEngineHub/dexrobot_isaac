@@ -1121,7 +1121,7 @@ def main(cfg: DictConfig):
             }
 
         env = create_dex_env(
-            task_name="BaseTask",
+            task_name=cfg.task.name,
             cfg=cfg,
             rl_device=rl_device,
             sim_device=sim_device,

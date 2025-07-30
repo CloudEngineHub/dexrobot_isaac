@@ -26,7 +26,7 @@ The project uses Hydra for configuration management. You can override any config
 
 ```bash
 # Train with different task and environment count
-python train.py task=BoxGrasping numEnvs=2048
+python train.py task=BlindGrasping numEnvs=2048
 
 # Training with visualization (fewer environments for better performance)
 python train.py viewer=true numEnvs=64
@@ -46,7 +46,7 @@ Test mode automatically enables rendering by default:
 python train.py test=true checkpoint=latest
 
 # Test specific task with directory auto-resolution
-python train.py task=BoxGrasping test=true checkpoint=runs/BoxGrasping_20250707_183716
+python train.py task=BlindGrasping test=true checkpoint=runs/BlindGrasping_20250707_183716
 
 # Force headless in test mode
 python train.py test=true checkpoint=latest viewer=false
@@ -76,14 +76,14 @@ The training script supports convenient aliases that map to full Hydra configura
 **Usage Examples:**
 ```bash
 # Using aliases (recommended for simplicity)
-python train.py task=BoxGrasping numEnvs=1024 viewer=true
+python train.py task=BlindGrasping numEnvs=1024 viewer=true
 
 # Control logging level for entire system
 python train.py logLevel=debug  # Enable debug logging everywhere
 python train.py logLevel=warning  # Only show warnings and errors
 
 # Using full paths (equivalent)
-python train.py task=BoxGrasping env.numEnvs=1024 env.viewer=true
+python train.py task=BlindGrasping env.numEnvs=1024 env.viewer=true
 
 # Smart checkpoint resolution:
 checkpoint=latest                    # Auto-finds latest training experiment
@@ -109,7 +109,7 @@ Choose physics configuration based on your use case:
 
 ```bash
 # High precision training (slower but more accurate)
-python train.py task=BoxGrasping +defaults=[config,/physics/accurate]
+python train.py task=BlindGrasping +defaults=[config,/physics/accurate]
 
 # Fast physics for visualization (faster but less precise)
 python train.py -cn test_render   # Uses /physics/fast automatically
@@ -127,7 +127,7 @@ python train.py +defaults=[config,/physics/fast] viewer=true
 ### Available Tasks
 
 - `BaseTask`: Basic environment for testing and development
-- `BoxGrasping`: Grasping and manipulation task with box objects
+- `BlindGrasping`: Grasping and manipulation task with box objects
 
 ### Environment Parameters
 
@@ -163,7 +163,7 @@ python train.py +defaults=[config,/physics/fast] viewer=true
 
 ```bash
 # Training examples with different physics configs
-python train.py task=BoxGrasping +defaults=[config,/physics/accurate]  # Explicit accurate physics
+python train.py task=BlindGrasping +defaults=[config,/physics/accurate]  # Explicit accurate physics
 python train.py task=BaseTask                       # Uses default physics
 python train.py +defaults=[config,/physics/fast]   # Override with fast physics
 
@@ -171,7 +171,7 @@ python train.py +defaults=[config,/physics/fast]   # Override with fast physics
 python train.py test=true viewer=true -cn test_render  # Uses fast physics automatically
 
 # Custom physics + other overrides
-python train.py task=BoxGrasping numEnvs=512 viewer=true +defaults=[config,/physics/accurate]
+python train.py task=BlindGrasping numEnvs=512 viewer=true +defaults=[config,/physics/accurate]
 ```
 
 ### Configuration Hierarchy Overrides
@@ -190,7 +190,7 @@ python train.py task.episodeLength=300 task.rewardWeights.object_height=2.0
 python train.py train.seed=123 train.maxIterations=5000
 
 # Complex override example
-python train.py task=BoxGrasping env.numEnvs=1024 sim.dt=0.005 task.episodeLength=400
+python train.py task=BlindGrasping env.numEnvs=1024 sim.dt=0.005 task.episodeLength=400
 ```
 
 ## Training Examples
@@ -222,10 +222,10 @@ python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000
 
 ```bash
 # Record video in headless mode
-python train.py task=BoxGrasping test=true checkpoint=latest env.viewer=false env.videoRecord=true
+python train.py task=BlindGrasping test=true checkpoint=latest env.viewer=false env.videoRecord=true
 
 # Record video with rendering
-python train.py task=BoxGrasping test=true checkpoint=latest env.viewer=true env.videoRecord=true
+python train.py task=BlindGrasping test=true checkpoint=latest env.viewer=true env.videoRecord=true
 ```
 
 > **Video Output:** Videos are saved in MP4 format to the Hydra output directory, typically `outputs/<YYYY-MM-DD>/<HH-MM-SS>/videos/`. Video recording may have a minor impact on performance but is useful for debugging and visualization.
@@ -270,12 +270,12 @@ runs_all/                   # Permanent archive (all experiments)
 │   └── nn/               # Neural network checkpoints
 │       ├── checkpoint_100.pth
 │       └── checkpoint_best.pth
-└── BoxGrasping_20240102_150000/
+└── BlindGrasping_20240102_150000/
     └── ...
 
 runs/                      # Clean workspace (recent experiments + latest symlinks)
 ├── BaseTask_train_20240101_120000/     # symlink → runs_all/BaseTask_train_20240101_120000/
-├── BoxGrasping_test_20240102_150000/   # symlink → runs_all/BoxGrasping_test_20240102_150000/
+├── BlindGrasping_test_20240102_150000/   # symlink → runs_all/BlindGrasping_test_20240102_150000/
 ├── ... (more recent symlinks)
 ├── latest_train                        # symlink → latest training experiment
 └── latest_test                         # symlink → latest testing experiment
@@ -350,10 +350,10 @@ When you find an experiment worth keeping permanently visible:
 
 ```bash
 # After training completes, pin your favorite experiment
-mv runs/BoxGrasping_excellent_results_20240101_120000 runs/pinned/
+mv runs/BlindGrasping_excellent_results_20240101_120000 runs/pinned/
 
 # Or give it a meaningful name when pinning
-mv runs/BoxGrasping_train_20240101_120000 runs/pinned/best_grasping_model
+mv runs/BlindGrasping_train_20240101_120000 runs/pinned/best_grasping_model
 ```
 
 **Benefits of pinning:**
@@ -377,7 +377,7 @@ All experiments are always preserved and accessible:
 
 ```bash
 # Search in full archive
-ls runs_all/ | grep BoxGrasping
+ls runs_all/ | grep BlindGrasping
 
 # Smart checkpoint resolution works with archived experiments
 python train.py test=true checkpoint=runs_all/old_experiment_20231201_100000
