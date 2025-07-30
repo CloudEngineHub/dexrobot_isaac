@@ -37,6 +37,7 @@ New functionality and API enhancements.
 - [ ] `feat-002-indefinite-testing.md` - Enable indefinite testing mode
 - [ ] `feat-004-action-rule-example.md` - Action rule example implementation
 - [ ] `feat-100-bimanual.md` - Support bimanual environment with dexhand_left and dexhand_right
+- [ ] `feat-110-domain-randomization.md` - Structured domain randomization scheme
 
 #### Documentation Tasks (`doc_*`)
 Documentation improvements and illustrations.
