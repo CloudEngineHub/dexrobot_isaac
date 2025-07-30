@@ -30,6 +30,8 @@ Documentation improvements and illustrations.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
+- [ ] `fix-006-metadata-keys.md` - Fix git metadata saving error with config keys
+- [ ] `fix-007-episode-length-of-grasping.md` - Fix BlindGrasping task early termination behavior
 
 #### Code Quality (`refactor_*`)
 
