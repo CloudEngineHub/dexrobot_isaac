@@ -27,13 +27,17 @@ INSTALL_REQUIRES = [
     "pysdf==0.1.9",
     "warp-lang==0.10.1",
     "trimesh==3.23.5",
+    # Video dependencies (now required for training workflows)
+    "opencv-python>=4.5.0",  # For video recording
+    "flask>=2.0.0",  # For HTTP video streaming
 ]
 
-# Optional dependencies for additional features
+# Optional dependencies for additional features (backward compatibility)
+# Note: video dependencies are now required in INSTALL_REQUIRES above
 EXTRAS_REQUIRE = {
-    "streaming": ["flask>=2.0.0"],  # For HTTP video streaming
-    "video": ["opencv-python>=4.5.0"],  # For video recording
-    "all": ["flask>=2.0.0", "opencv-python>=4.5.0"],  # All optional features
+    "streaming": [],  # Flask now required by default
+    "video": [],  # OpenCV now required by default
+    "all": [],  # All video features now included by default
 }
 
 

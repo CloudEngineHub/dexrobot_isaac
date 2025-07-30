@@ -52,6 +52,9 @@ from dexhand_env.rl.rl_games_patches import apply_rl_games_patches  # noqa: E402
 from rl_games.common import env_configurations  # noqa: E402
 from rl_games.torch_runner import Runner  # noqa: E402
 
+# Video dependencies (now required)
+import flask  # noqa: E402,F401
+
 
 def set_seed(seed: int, torch_deterministic: bool = False):
     """Set random seed for reproducibility."""
@@ -324,66 +327,32 @@ def main(cfg: DictConfig):
         logger.info(f"  - Video recording: {'ENABLED' if record_video else 'DISABLED'}")
         logger.info(f"  - HTTP streaming: {'ENABLED' if stream_video else 'DISABLED'}")
 
-        # Validate dependencies before building config
-        video_dependencies_ok = True
+        # Base video configuration - use config as single source of truth
+        video_config = {
+            "enabled": True,
+            "fps": cfg.env.videoFps,
+            "resolution": cfg.env.videoResolution,
+            "codec": cfg.env.videoCodec,
+            "maxDuration": cfg.env.videoMaxDuration,
+        }
 
+        # Add file recording config if enabled
         if record_video:
-            try:
-                import cv2  # noqa: F401
+            video_output_dir = os.path.join(output_dir, "videos")
+            os.makedirs(video_output_dir, exist_ok=True)
+            video_config["output_dir"] = video_output_dir
+            logger.info(f"  📁 Video output directory: {video_output_dir}")
 
-                logger.info("  ✓ OpenCV available for video recording")
-            except ImportError:
-                logger.error(
-                    "  ✗ OpenCV required for video recording. Install with: pip install opencv-python"
-                )
-                video_dependencies_ok = False
-
+        # Add HTTP streaming config if enabled
         if stream_video:
-            try:
-                import flask  # noqa: F401
-
-                logger.info("  ✓ Flask available for HTTP streaming")
-            except ImportError:
-                logger.error(
-                    "  ✗ Flask required for HTTP streaming. Install with: pip install flask"
-                )
-                video_dependencies_ok = False
-
-        if not video_dependencies_ok:
-            logger.error(
-                "Video feature dependencies missing. Continuing without video features."
+            video_config["stream_enabled"] = True
+            video_config["stream_host"] = cfg.env.videoStreamHost
+            video_config["stream_port"] = cfg.env.videoStreamPort
+            video_config["stream_quality"] = cfg.env.videoStreamQuality
+            video_config["stream_buffer_size"] = cfg.env.videoStreamBufferSize
+            logger.info(
+                f"  🌐 HTTP stream will be available at: http://{video_config['stream_host']}:{video_config['stream_port']}"
             )
-            record_video = False
-            stream_video = False
-            virtual_screen_capture = False
-            force_render = False
-        else:
-            # Base video configuration - use config as single source of truth
-            video_config = {
-                "enabled": True,
-                "fps": cfg.env.videoFps,
-                "resolution": cfg.env.videoResolution,
-                "codec": cfg.env.videoCodec,
-                "maxDuration": cfg.env.videoMaxDuration,
-            }
-
-            # Add file recording config if enabled
-            if record_video:
-                video_output_dir = os.path.join(output_dir, "videos")
-                os.makedirs(video_output_dir, exist_ok=True)
-                video_config["output_dir"] = video_output_dir
-                logger.info(f"  📁 Video output directory: {video_output_dir}")
-
-            # Add HTTP streaming config if enabled
-            if stream_video:
-                video_config["stream_enabled"] = True
-                video_config["stream_host"] = cfg.env.videoStreamHost
-                video_config["stream_port"] = cfg.env.videoStreamPort
-                video_config["stream_quality"] = cfg.env.videoStreamQuality
-                video_config["stream_buffer_size"] = cfg.env.videoStreamBufferSize
-                logger.info(
-                    f"  🌐 HTTP stream will be available at: http://{video_config['stream_host']}:{video_config['stream_port']}"
-                )
 
             logger.info(
                 f"  ⚙️  Render config: virtual_screen_capture={virtual_screen_capture}, force_render={force_render}"

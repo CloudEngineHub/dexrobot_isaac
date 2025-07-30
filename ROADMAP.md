@@ -20,7 +20,6 @@ Code quality improvements and architectural enhancements.
 Issue resolution and bug fixes.
 
 #### Code Quality (`refactor_*`)
-- [ ] `refactor-003-imports.md` - Clean up mid-file imports for opencv and flask
 - [ ] `refactor-007-blind-grasping.md` - Rename BoxGrasping to BlindGrasping task
 - [ ] `refactor-007-step-architecture.md` - Investigate step processing architecture consistency
 - [ ] `refactor-008-config-key-casing.md` - Unify config key naming to lower_case under task section (file currently has typo: rafactor-008-config-key-casing.md)
@@ -55,6 +54,15 @@ Project organization, tooling, and workflow improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **refactor-003-imports.md** (2025-07-30) - **MEDIUM** - Clean up mid-file imports for opencv and flask
+  - **Root Cause**: Mid-file imports with conditional checking violated fail-fast philosophy and created unnecessary defensive programming patterns
+  - **Dependencies Made Required**: Moved opencv-python>=4.5.0 and flask>=2.0.0 from extras_require to INSTALL_REQUIRES in setup.py for consistent availability
+  - **Import Cleanup**: Added cv2 and flask imports to top of train.py, removed 35+ lines of conditional import checking and dependency validation logic
+  - **Configuration Fix**: Added base/video to config.yaml defaults to ensure video configuration keys are always available
+  - **Architecture Compliance**: Eliminated defensive programming patterns, following research code fail-fast philosophy from CLAUDE.md
+  - **Testing Verified**: Both basic functionality and video features (recording/streaming) work correctly without import errors
+  - **Impact**: Cleaner code structure with ~31 net line reduction, eliminated complex conditional branching, made video dependencies consistently available for training workflows
+  - Two files modified with comprehensive testing across video recording and HTTP streaming functionality
 - ✅ **refactor-004-render.md** (2025-07-30) - **MEDIUM** - Clarify render option semantics (viewer vs background rendering)
   - **Root Cause**: Legacy render configuration was ambiguous and violated single source of truth principles with assumption-based logic
   - **Configuration Cleanup**: Removed deprecated `recordVideo: false` from config.yaml root level, eliminated all legacy video option references
