@@ -2,7 +2,7 @@
 # Test configuration with video recording (headless)
 
 defaults:
-  - config             # Inherit from main config (includes training.checkpoint)
+  - config             # Inherit from main config (includes train.checkpoint)
   - base/video         # Add video configuration
   - _self_
 
@@ -12,7 +12,7 @@ env:
   videoStream: false   # Disable HTTP streaming (can be enabled for both modes)
   numEnvs: 4           # Small number for testing
 
-training:
+train:
   test: true           # Enable test mode
   maxIterations: 10    # Short test sessions
 

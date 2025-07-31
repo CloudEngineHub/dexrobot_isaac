@@ -2,7 +2,7 @@
 # Test configuration with HTTP video streaming (headless)
 
 defaults:
-  - config             # Inherit from main config (includes training.checkpoint)
+  - config             # Inherit from main config (includes train.checkpoint)
   - base/test
   - base/video         # Add video configuration
   - /physics/fast  # Fast physics for smooth streaming

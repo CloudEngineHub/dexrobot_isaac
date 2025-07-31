@@ -33,7 +33,7 @@ Issue resolution and bug fixes.
 - [x] `fix-006-metadata-keys.md` - ✅ **COMPLETED** (2025-07-30) - Fix git metadata saving error with config keys
 - [x] `fix-007-episode-length-of-grasping.md` - ✅ **COMPLETED** (2025-07-30) - Fix BlindGrasping task early termination behavior
 - [x] `fix-008-termination-reason-logging.md` - ✅ **COMPLETED** (2025-07-31) - Fix termination reason logging to show current status instead of historical average
-- [ ] `fix-009-config-consistency.md` - Check all config files for obsolete legacy options (test_record.yaml cleanup)
+- [x] `fix-009-config-consistency.md` - ✅ **COMPLETED** (2025-07-31) - Check all config files for obsolete legacy options (test_record.yaml cleanup)
 
 #### Code Quality (`refactor_*`)
 
@@ -62,6 +62,14 @@ Project workflow and organization improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-009-config-consistency.md** (2025-07-31) - **ESSENTIAL** - Configuration files cleanup for obsolete legacy options
+  - **Root Cause**: Several configuration files contained obsolete legacy options that violated current naming conventions and architectural patterns
+  - **Legacy Issues Found**: test_record.yaml used `training:` instead of `train:` section, comments referenced obsolete `training.checkpoint` paths, train_headless.yaml used legacy `render: false` instead of `viewer: false`
+  - **Systematic Cleanup**: Examined all 19 YAML configuration files across the project, identified 4 specific legacy violations, applied consistent fixes following established conventions
+  - **Architecture Compliance**: Followed fail-fast philosophy with clean configuration patterns, maintained single source of truth principles, respected component boundaries
+  - **Testing Verified**: BaseTask configuration loads and runs successfully, BlindGrasping configuration loads correctly, all configuration hierarchy maintained
+  - **Impact**: Eliminated remaining legacy configuration inconsistencies, unified naming conventions across all config files, improved maintainability and reduced cognitive friction
+  - Comprehensive configuration cleanup with systematic examination of 19 files and targeted fixes for consistency
 - ✅ **feat-000-streaming-port.md** (2025-07-30) - **MEDIUM** - HTTP streaming port management enhancement
   - **Root Cause**: Default port 8080 was common and conflict-prone, no auto-increment functionality, localhost-only binding limited deployment flexibility
   - **Core Implementation**: Changed default port to uncommon 58080, implemented automatic port conflict resolution (tries up to 10 ports), added all-interface binding option with security warnings
