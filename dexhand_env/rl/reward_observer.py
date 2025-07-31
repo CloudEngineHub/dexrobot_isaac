@@ -68,6 +68,10 @@ class RewardComponentObserver(AlgoObserver):
         self.total_episodes = 0
         self.episodes_by_type = {"success": 0, "failure": 0, "timeout": 0}
 
+        # Track windowed episodes for current logging interval
+        self.windowed_total_episodes = 0
+        self.windowed_episodes_by_type = {"success": 0, "failure": 0, "timeout": 0}
+
         # Store reference to algorithm and writer
         self.algo = None
         self.writer = None
@@ -216,10 +220,21 @@ class RewardComponentObserver(AlgoObserver):
 
         # Update episode counters
         num_done = len(done_indices)
+        success_count = success_mask[done_indices].sum().item()
+        failure_count = failure_mask[done_indices].sum().item()
+        timeout_count = timeout_mask[done_indices].sum().item()
+
+        # Update cumulative counters
         self.total_episodes += num_done
-        self.episodes_by_type["success"] += success_mask[done_indices].sum().item()
-        self.episodes_by_type["failure"] += failure_mask[done_indices].sum().item()
-        self.episodes_by_type["timeout"] += timeout_mask[done_indices].sum().item()
+        self.episodes_by_type["success"] += success_count
+        self.episodes_by_type["failure"] += failure_count
+        self.episodes_by_type["timeout"] += timeout_count
+
+        # Update windowed counters
+        self.windowed_total_episodes += num_done
+        self.windowed_episodes_by_type["success"] += success_count
+        self.windowed_episodes_by_type["failure"] += failure_count
+        self.windowed_episodes_by_type["timeout"] += timeout_count
 
         # Track episodes for logging interval
         self.episodes_since_last_log += num_done
@@ -323,10 +338,10 @@ class RewardComponentObserver(AlgoObserver):
                     self.writer.add_scalar(episode_key, episode_mean, frame)
                     self.writer.add_scalar(step_key, step_mean, frame)
 
-        # Log termination type rates
-        if self.total_episodes > 0:
-            for term_type, count in self.episodes_by_type.items():
-                rate = count / self.total_episodes
+        # Log termination type rates using windowed statistics
+        if self.windowed_total_episodes > 0:
+            for term_type, count in self.windowed_episodes_by_type.items():
+                rate = count / self.windowed_total_episodes
                 self.writer.add_scalar(
                     f"training/termination_rates/{term_type}", rate, frame
                 )
@@ -338,6 +353,10 @@ class RewardComponentObserver(AlgoObserver):
                     "rewards": 0.0,
                     "steps": 0,
                 }
+
+        # Reset windowed episode counters for next window
+        self.windowed_total_episodes = 0
+        self.windowed_episodes_by_type = {"success": 0, "failure": 0, "timeout": 0}
 
     def after_clear_stats(self):
         """

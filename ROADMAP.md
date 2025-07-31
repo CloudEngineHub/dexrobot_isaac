@@ -32,7 +32,7 @@ Documentation improvements and illustrations.
 Issue resolution and bug fixes.
 - [x] `fix-006-metadata-keys.md` - ✅ **COMPLETED** (2025-07-30) - Fix git metadata saving error with config keys
 - [x] `fix-007-episode-length-of-grasping.md` - ✅ **COMPLETED** (2025-07-30) - Fix BlindGrasping task early termination behavior
-- [ ] `fix-008-termination-reason-logging.md` - Fix termination reason logging to show current status instead of historical average
+- [x] `fix-008-termination-reason-logging.md` - ✅ **COMPLETED** (2025-07-31) - Fix termination reason logging to show current status instead of historical average
 - [ ] `fix-009-config-consistency.md` - Check all config files for obsolete legacy options (test_record.yaml cleanup)
 
 #### Code Quality (`refactor_*`)
@@ -82,6 +82,15 @@ Project workflow and organization improvements.
   - **Architecture Compliance**: Followed two-stage initialization pattern, maintained fail-fast philosophy, single source of truth principle (FPS from physics timing)
   - **Impact**: Videos now play back at exactly correct simulation speed regardless of physics timing settings, eliminated temporal accuracy issues, simplified configuration
   - **Discovery**: Feature was already fully implemented in previous session - marking as completed after verification of complete functionality
+- ✅ **fix-008-termination-reason-logging.md** (2025-07-31) - **ESSENTIAL** - Fix termination reason logging to show current status instead of historical average
+  - **Root Cause**: Termination rates were calculated using cumulative counters (`self.total_episodes` and `self.episodes_by_type`) that accumulated from training start and never reset, creating historical averages instead of windowed statistics
+  - **Architecture Issue**: Similar to previously fixed RewardComponentObserver logging issue - termination rates showed slowly-changing overall averages instead of recent performance trends
+  - **Solution**: Implemented windowed termination rate tracking using same pattern as reward component statistics - added `windowed_total_episodes` and `windowed_episodes_by_type` counters
+  - **Implementation**: Added windowed counters in `__init__`, updated episode tracking in `_process_done_episodes_vectorized()`, changed rate calculation in `_log_to_tensorboard()` to use windowed counters, reset windowed counters after each logging interval
+  - **Architecture Compliance**: Followed existing reward component windowed statistics pattern, maintained fail-fast philosophy, preserved cumulative counters for other purposes
+  - **Testing Verified**: Training runs successfully with correct logging interval (5 episodes), RewardComponentObserver initializes properly, termination rate logging now shows windowed statistics
+  - **Impact**: Termination rates now show recent performance trends instead of slowly-changing historical averages, consistent with reward component logging behavior, better training insights for monitoring recent policy performance
+  - Minimal fix (~20 lines changed) following established patterns with comprehensive testing validation
 - ✅ **fix-006-metadata-keys.md** (2025-07-30) - **ESSENTIAL** - Fix git metadata saving error with config keys
   - **Root Cause**: `get_config_overrides()` function referenced non-existent `cfg.env.render` key (changed to `cfg.env.viewer` in refactor-004-render.md), causing "Key 'render' is not in struct" warning and breaking metadata saving
   - **Architecture Problem**: Hardcoded config key assumptions violated fail-fast philosophy and created fragile reconstruction logic that broke with configuration changes
