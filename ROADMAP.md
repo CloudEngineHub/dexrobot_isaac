@@ -30,6 +30,7 @@ Documentation improvements and illustrations.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
+- [ ] `fix-010-max-deltas.md` - Fix max_deltas scaling issue in BlindGrasping (control_dt vs physics_dt initialization bug)
 - [x] `fix-006-metadata-keys.md` - ✅ **COMPLETED** (2025-07-30) - Fix git metadata saving error with config keys
 - [x] `fix-007-episode-length-of-grasping.md` - ✅ **COMPLETED** (2025-07-30) - Fix BlindGrasping task early termination behavior
 - [x] `fix-008-termination-reason-logging.md` - ✅ **COMPLETED** (2025-07-31) - Fix termination reason logging to show current status instead of historical average
@@ -43,10 +44,15 @@ Issue resolution and bug fixes.
 Policy tuning, physics improvements, and reward engineering.
 - [ ] `rl-001-blind-grasping-task.md` - Break down blind grasping training difficulties into specific fixes
 
+#### Performance Tasks (`perf_*`)
+System performance optimization and analysis.
+- [ ] `perf-000-physics-speed.md` - Determine optimal physics accuracy for training performance
+
 #### Feature Enhancements (`feat_*`)
 New functionality and API enhancements.
 - [ ] `feat-100-bimanual.md` - Support bimanual environment with dexhand_left and dexhand_right
 - [ ] `feat-110-domain-randomization.md` - Structured domain randomization scheme
+- [ ] `feat-200-task-support.md` - Support more manipulation tasks (IsaacGymEnvs, RoboHive examples)
 - [ ] `feat-300-simulator-backend.md` - Support multiple simulators as backends with unified interface (IsaacSim/IsaacLab, Genesis, MJX/MuJoCo Playground)
 
 #### Meta Tasks (`meta_*`)
