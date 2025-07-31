@@ -8,6 +8,3 @@ defaults:
 env:
   render: false
   numEnvs: 8192
-
-train:
-  maxIterations: 10000

@@ -5,10 +5,10 @@
 # Override: python examples/dexhand_test.py task=BlindGrasping headless=true steps=500
 
 defaults:
-  - _self_
-  - task: BaseTask
   - train: BaseTaskPPO
   - base/video
+  - _self_
+  - task: BaseTask
 
 # Task and training configs will be loaded from task/ and train/ subdirectories
 # The following are runtime overrides
@@ -67,8 +67,7 @@ train:
   testGamesNum: 100   # Number of games to evaluate in test mode (0 = indefinite)
   logging:
     experimentName: null  # Auto-generated if null
-    logInterval: 10
-    rewardLogInterval: 100  # Log reward breakdown every N finished episodes (prevents TensorBoard 1000-point sampling limit)
+    rewardLogInterval: 100  # Log reward breakdown every N finished episodes (prevents TensorBoard sampling limit)
     logLevel: "info"
     noLogFile: false
   experiment:

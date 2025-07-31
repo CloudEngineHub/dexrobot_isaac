@@ -23,6 +23,11 @@ env:
       xy_range: 0.02    # ±2cm randomization
       z: 0.027          # Fixed on table (box half-size + small clearance for accurate physics)
 
+train:
+  maxIterations: 30000
+  logging:
+    rewardLogInterval: 1000
+
 # Task configuration - all RL-related settings
 task:
   name: BlindGrasping
@@ -105,7 +110,7 @@ task:
     object_stability_decay: 100.0              # Exponential decay factor for object stability
     first_three_height_consistency_decay: 50.0 # Exponential decay factor for first three fingerpad height consistency
     fingerpad_proximity_decay: 10.0            # Exponential decay factor for Stage 2 fingerpad proximity to object
-    base_stability_decay: 20.0                # Exponential decay factor for hand base stability during Stage 2
+    base_stability_decay: 3.0                # Exponential decay factor for hand base stability during Stage 2
 
   # Quality evaluation thresholds
   quality_thresholds:
@@ -132,16 +137,16 @@ task:
     s1_thumb_rotation: 0.3   # Reward for thumb rotation near 90° during Stage 1
 
     # Stage 2: Contact establishment
-    s2_thumb_contact: 0.3           # Reward for thumb contact specifically
-    s2_other_fingers_contact: 0.2   # Reward for other finger contact
-    s2_grasp_achievement: 1.0              # Grasp formation reward
-    s2_fingerpad_proximity: 0.5     # Reward for fingerpads approaching object during Stage 2
-    s2_base_stability: 0.4          # Reward for stable hand base during contact establishment
+    s2_thumb_contact: 1.5           # Reward for thumb contact specifically
+    s2_other_fingers_contact: 1.0   # Reward for other finger contact
+    s2_grasp_achievement: 5.0              # Grasp formation reward
+    s2_fingerpad_proximity: 2.5     # Reward for fingerpads approaching object during Stage 2
+    s2_base_stability: 2.0          # Reward for stable hand base during contact establishment
 
     # Stage 3: Lifting rewards
-    s3_object_height: 5.0                  # Main reward for lifting object
-    s3_grasp_maintenance: 5.0              # Reward for maintaining grasp during lift
-    s3_grasp_duration: 1.0                 # Reward for maintaining grasp duration
+    s3_object_height: 10.0                  # Main reward for lifting object
+    s3_grasp_maintenance: 10.0              # Reward for maintaining grasp during lift
+    s3_grasp_duration: 2.0                 # Reward for maintaining grasp duration
 
     # Stage completion bonuses (one-time when transitioning)
     s1_completion: 500.0            # Bonus for completing stage 1 (pre-grasp)
