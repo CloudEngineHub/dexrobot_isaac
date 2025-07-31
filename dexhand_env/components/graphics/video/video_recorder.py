@@ -10,10 +10,25 @@ import threading
 from pathlib import Path
 from queue import Queue
 from typing import Optional, Tuple, Dict, Any
+from functools import wraps
 
 import cv2
 import numpy as np
 from loguru import logger
+
+
+def require_finalized_fps(func):
+    """Decorator to ensure FPS has been finalized before method execution."""
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not hasattr(self, "_fps_finalized") or not self._fps_finalized:
+            raise RuntimeError(
+                f"{func.__name__} can only be called after finalize_fps()"
+            )
+        return func(self, *args, **kwargs)
+
+    return wrapper
 
 
 class VideoRecorder:
@@ -30,7 +45,7 @@ class VideoRecorder:
     def __init__(
         self,
         output_dir: str,
-        fps: float = 30.0,
+        fps: Optional[float] = None,
         resolution: Tuple[int, int] = (1024, 768),
         codec: str = "mp4v",
         max_duration: Optional[float] = None,
@@ -41,7 +56,7 @@ class VideoRecorder:
 
         Args:
             output_dir: Directory to save video files
-            fps: Frames per second for video output
+            fps: Frames per second for video output (None = defer until finalize_fps())
             resolution: Video resolution as (width, height)
             codec: Video codec ('mp4v', 'XVID', 'H264')
             max_duration: Maximum duration per video in seconds
@@ -54,8 +69,11 @@ class VideoRecorder:
         self.max_duration = max_duration
         self.max_frames_per_episode = max_frames_per_episode
 
-        # Calculate max frames from duration if specified
-        if max_duration and not max_frames_per_episode:
+        # Two-stage initialization state
+        self._fps_finalized = fps is not None
+
+        # Calculate max frames from duration if FPS is available
+        if max_duration and not max_frames_per_episode and fps is not None:
             self.max_frames_per_episode = int(max_duration * fps)
 
         # Video writer state
@@ -72,8 +90,42 @@ class VideoRecorder:
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"VideoRecorder initialized: {output_dir} @ {fps}fps {resolution}")
 
+        if fps is not None:
+            logger.info(
+                f"VideoRecorder initialized: {output_dir} @ {fps}fps {resolution}"
+            )
+        else:
+            logger.info(
+                f"VideoRecorder initialized: {output_dir} @ deferred_fps {resolution}"
+            )
+            logger.info("  Note: finalize_fps() must be called before recording")
+
+    def finalize_fps(self, fps: float):
+        """
+        Finalize FPS setting after simulation timing measurement.
+
+        Args:
+            fps: Measured frames per second from simulation (typically 1.0 / control_dt)
+        """
+        if self._fps_finalized:
+            raise RuntimeError("VideoRecorder FPS already finalized")
+
+        if fps <= 0:
+            raise ValueError(f"FPS must be positive, got {fps}")
+
+        self.fps = fps
+        self._fps_finalized = True
+
+        # Calculate max frames from duration if specified and not already set
+        if self.max_duration and not self.max_frames_per_episode:
+            self.max_frames_per_episode = int(self.max_duration * fps)
+
+        logger.info(f"VideoRecorder FPS finalized: {fps:.3f}fps")
+        if self.max_frames_per_episode:
+            logger.info(f"  Max frames per episode: {self.max_frames_per_episode}")
+
+    @require_finalized_fps
     def start_episode_recording(self, episode_id: Optional[int] = None) -> bool:
         """
         Start recording a new episode video.
@@ -292,7 +344,9 @@ def create_video_recorder_from_config(
     """
     return VideoRecorder(
         output_dir=output_dir,
-        fps=video_config["fps"],
+        fps=video_config.get(
+            "fps"
+        ),  # fps now optional - will be set via finalize_fps()
         resolution=tuple(video_config["resolution"]),
         codec=video_config["codec"],
         max_duration=video_config.get("maxDuration"),

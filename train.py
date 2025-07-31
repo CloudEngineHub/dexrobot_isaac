@@ -295,9 +295,9 @@ def main(cfg: DictConfig):
         logger.info(f"  - HTTP streaming: {'ENABLED' if stream_video else 'DISABLED'}")
 
         # Base video configuration - use config as single source of truth
+        # Note: fps will be automatically calculated from control_dt during initialization
         video_config = {
             "enabled": True,
-            "fps": cfg.env.videoFps,
             "resolution": cfg.env.videoResolution,
             "codec": cfg.env.videoCodec,
             "maxDuration": cfg.env.videoMaxDuration,

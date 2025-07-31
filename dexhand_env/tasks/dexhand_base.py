@@ -310,6 +310,14 @@ class DexHandBase(VecTask):
         self.action_processor.finalize_setup()
         self.task.finalize_setup()
 
+        # Finalize video recorder FPS based on measured control_dt
+        if self.video_recorder:
+            video_fps = 1.0 / self.physics_manager.control_dt
+            self.video_recorder.finalize_fps(video_fps)
+            logger.info(
+                f"Video recorder FPS set to {video_fps:.3f}fps (from control_dt={self.physics_manager.control_dt:.6f}s)"
+            )
+
         logger.info(
             f"Control cycle measurement complete: control_dt = {self.physics_manager.control_dt}"
         )

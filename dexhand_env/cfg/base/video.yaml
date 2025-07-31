@@ -16,7 +16,7 @@
 
 env:
   # Video recording configuration (requires OpenCV)
-  videoFps: 60.0                    # Frames per second for MP4 output
+  # Note: FPS is automatically calculated from simulation timing (1.0 / control_dt)
   videoResolution: [1920, 1080]    # Width x Height for both recording and streaming (Full HD)
   videoCodec: mp4v                  # Video codec (mp4v, XVID, H264)
   videoMaxDuration: 300             # Maximum duration per video file (seconds)

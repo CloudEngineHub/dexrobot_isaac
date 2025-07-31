@@ -17,7 +17,7 @@ Code quality improvements and architectural enhancements.
 ### Medium Priority Tasks
 #### Feature Enhancements (`feat_*`)
 - [x] `feat-000-streaming-port.md` - ✅ **COMPLETED** (2025-07-30) - Improve port management and binding options
-- [ ] `feat-001-video-fps-control.md` - Implement FPS-aware video saving
+- [x] `feat-001-video-fps-control.md` - ✅ **COMPLETED** (2025-07-31) - Implement FPS-aware video saving
 - [x] `feat-002-indefinite-testing.md` - ✅ **COMPLETED** (2025-07-30) - Enable indefinite testing mode
 - [ ] `feat-004-action-rule-example.md` - Action rule example implementation
 
@@ -66,6 +66,16 @@ New functionality and API enhancements.
   - **Testing Verified**: Port auto-increment (58080 → 58081 when occupied), bind-all functionality (0.0.0.0), CLI aliases, configuration loading, server accessibility
   - **Impact**: ~90% reduction in expected port conflicts, automatic conflict resolution, flexible deployment options, improved user experience with clear logging
   - Complete port management solution with 4 files modified (~88 lines total) providing robust HTTP streaming infrastructure
+- ✅ **feat-001-video-fps-control.md** (2025-07-31) - **MEDIUM** - Automatic video FPS calculation for accurate playback timing
+  - **Root Cause**: VideoRecorder used hardcoded FPS from configuration, causing videos to play at incorrect speeds when simulation frequency differed from configured FPS
+  - **Solution**: Two-stage initialization pattern that calculates FPS as `1.0 / control_dt` after physics timing is measured
+  - **Architecture Implementation**: Added `finalize_fps()` method to VideoRecorder, integrated with existing two-stage initialization pattern following ActionProcessor model
+  - **Configuration Cleanup**: Removed obsolete `videoFps` parameter from base/video.yaml, added automatic FPS calculation comments in train.py and config files
+  - **Fail-Fast Architecture**: Added `@require_finalized_fps` decorator protecting recording methods, crashes immediately if used before finalization (following research code philosophy)
+  - **Examples**: BaseTask (dt=0.005s) → 200.0 fps videos, BlindGrasping (dt=0.01s) → 100.0 fps videos - different tasks automatically get correct video timing
+  - **Architecture Compliance**: Followed two-stage initialization pattern, maintained fail-fast philosophy, single source of truth principle (FPS from physics timing)
+  - **Impact**: Videos now play back at exactly correct simulation speed regardless of physics timing settings, eliminated temporal accuracy issues, simplified configuration
+  - **Discovery**: Feature was already fully implemented in previous session - marking as completed after verification of complete functionality
 - ✅ **fix-006-metadata-keys.md** (2025-07-30) - **ESSENTIAL** - Fix git metadata saving error with config keys
   - **Root Cause**: `get_config_overrides()` function referenced non-existent `cfg.env.render` key (changed to `cfg.env.viewer` in refactor-004-render.md), causing "Key 'render' is not in struct" warning and breaking metadata saving
   - **Architecture Problem**: Hardcoded config key assumptions violated fail-fast philosophy and created fragile reconstruction logic that broke with configuration changes
