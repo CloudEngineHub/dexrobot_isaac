@@ -32,6 +32,8 @@ Documentation improvements and illustrations.
 Issue resolution and bug fixes.
 - [x] `fix-006-metadata-keys.md` - ✅ **COMPLETED** (2025-07-30) - Fix git metadata saving error with config keys
 - [x] `fix-007-episode-length-of-grasping.md` - ✅ **COMPLETED** (2025-07-30) - Fix BlindGrasping task early termination behavior
+- [ ] `fix-008-termination-reason-logging.md` - Fix termination reason logging to show current status instead of historical average
+- [ ] `fix-009-config-consistency.md` - Check all config files for obsolete legacy options (test_record.yaml cleanup)
 
 #### Code Quality (`refactor_*`)
 
@@ -45,7 +47,11 @@ Policy tuning, physics improvements, and reward engineering.
 New functionality and API enhancements.
 - [ ] `feat-100-bimanual.md` - Support bimanual environment with dexhand_left and dexhand_right
 - [ ] `feat-110-domain-randomization.md` - Structured domain randomization scheme
+- [ ] `feat-300-simulator-backend.md` - Support multiple simulators as backends with unified interface (IsaacSim/IsaacLab, Genesis, MJX/MuJoCo Playground)
 
+#### Meta Tasks (`meta_*`)
+Project workflow and organization improvements.
+- [ ] `meta-004-docs.md` - Add documentation maintenance requirement to CLAUDE.md guidelines
 
 #### Completed Meta Tasks (`meta_*`)
 - [x] `meta-000-workflow-setup.md` - ✅ **COMPLETED** - AI development workflow design and implementation
