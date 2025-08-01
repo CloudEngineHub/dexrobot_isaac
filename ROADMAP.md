@@ -27,6 +27,7 @@ Documentation improvements and illustrations.
 - [ ] `doc-001-video.md` - Video documentation
 - [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
 - [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
+- [ ] `doc-004-training.md` - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
@@ -68,6 +69,15 @@ Project workflow and organization improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **config-simplification** (2025-08-01) - **REFACTOR** - Test configuration files simplification and physics standardization
+  - **Root Cause**: Test configuration files contained redundant settings and inconsistent physics configuration choices across different test scenarios
+  - **Simplification Strategy**: Leveraged base/test inheritance pattern to eliminate duplication in test_record.yaml, removed redundant train/testing/logging sections
+  - **Physics Standardization**: Updated all test configs (test_record, test_stream, test_viewer) to use consistent /physics/default instead of mixed /physics/fast settings
+  - **Configuration Cleanup**: Removed 15 lines of duplicated configuration while maintaining identical functionality through proper inheritance
+  - **Architecture Compliance**: Followed DRY principles, maintained clear separation of concerns, respected configuration hierarchy
+  - **Testing Verified**: All test configurations load and function correctly with simplified structure
+  - **Impact**: Reduced configuration maintenance burden, eliminated inconsistent physics settings across test scenarios, improved configuration clarity
+  - Configuration refactoring with systematic simplification and standardization across 3 test files
 - ✅ **fix-010-max-deltas.md** (2025-07-31) - **RESOLVED** - max_deltas scaling investigation and configuration fix
   - **Root Cause Analysis**: Static code analysis revealed ActionProcessor implementation was architecturally correct - uses proper two-stage initialization with control_dt measurement
   - **Investigation Findings**: _precompute_max_deltas() correctly called during Stage 2 (finalize_setup()), uses property decorator for control_dt access, follows established patterns
