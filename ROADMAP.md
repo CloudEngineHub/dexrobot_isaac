@@ -19,7 +19,7 @@ Code quality improvements and architectural enhancements.
 - [x] `feat-000-streaming-port.md` - ✅ **COMPLETED** (2025-07-30) - Improve port management and binding options
 - [x] `feat-001-video-fps-control.md` - ✅ **COMPLETED** (2025-07-31) - Implement FPS-aware video saving
 - [x] `feat-002-indefinite-testing.md` - ✅ **COMPLETED** (2025-07-30) - Enable indefinite testing mode
-- [ ] `feat-004-action-rule-example.md` - Action rule example implementation
+- [x] `feat-004-action-rule-example.md` - ✅ **COMPLETED** (2025-08-01) - Action rule conceptual examples integrated into action pipeline documentation
 
 #### Documentation Tasks (`doc_*`)
 Documentation improvements and illustrations.
@@ -69,6 +69,15 @@ Project workflow and organization improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **feat-004-action-rule-example.md** (2025-08-01) - **MEDIUM** - Action rule conceptual examples integrated into action pipeline documentation
+  - **Root Cause**: Action pipeline documentation had technical implementation details but lacked conceptual understanding and natural narrative flow for readers
+  - **Document Restructure**: Completely overhauled guide-action-pipeline.md with problem → familiar solution → research extensions → technical implementation narrative
+  - **Conceptual Integration**: Added control decomposition problem explanation, demonstrated standard control modes as pipeline examples, integrated research use cases (residual learning, confidence-based control)
+  - **Natural Flow**: Created reader-oriented progression from familiar concepts (position/position_delta modes) to advanced research applications with concrete scenario explanations
+  - **Two Extension Dimensions**: Wove variety of scenarios and learning paradigms naturally into narrative instead of separate bullet-point sections
+  - **Architecture Compliance**: Maintained objective technical writing without promotional language, focused on WHAT and WHY rather than just HOW
+  - **Impact**: Enhanced documentation accessibility for both engineers extending standard control modes and researchers exploring learning paradigms, eliminated cognitive friction through logical narrative progression
+  - Complete documentation overhaul with natural narrative flow demonstrating pipeline elegance and research extensibility
 - ✅ **config-simplification** (2025-08-01) - **REFACTOR** - Test configuration files simplification and physics standardization
   - **Root Cause**: Test configuration files contained redundant settings and inconsistent physics configuration choices across different test scenarios
   - **Simplification Strategy**: Leveraged base/test inheritance pattern to eliminate duplication in test_record.yaml, removed redundant train/testing/logging sections

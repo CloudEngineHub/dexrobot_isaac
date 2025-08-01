@@ -1,6 +1,6 @@
 # Action Processing Pipeline Guide
 
-This guide explains the functional rule pipeline for action processing in DexRobot Isaac.
+This guide explains how DexRobot Isaac decomposes complex robotic control through a clean, extensible pipeline architecture.
 
 **Related Documentation:**
 - [DOF and Action Control API](reference-dof-control-api.md) - For DOF mappings and coupling details
@@ -8,71 +8,145 @@ This guide explains the functional rule pipeline for action processing in DexRob
 - [Physics Implementation](reference-physics-implementation.md) - For control_dt measurement
 - [Observation System](guide-observation-system.md) - For observation-dependent rules
 
-## Overview
+## The Control Decomposition Problem
 
-The action processing system transforms policy actions into robot DOF targets through a clean functional pipeline implemented in `ActionProcessor` (`dexhand_env/components/action_processor.py`):
+Robotic control involves coordinating multiple concerns that traditionally get tangled together: baseline behaviors (like gravity compensation or trajectory following), policy decisions, safety constraints, and physical limitations. When these concerns are hardcoded together, systems become difficult to extend, modify, or debug. A grasping policy might need to work with demonstration baselines, residual learning corrections, confidence-based selective control, or entirely different baseline behaviors - but traditional approaches require rewriting control logic for each scenario.
 
+## A Familiar Solution: Standard Control Modes
+
+You're already familiar with the solution through DexRobot's `position` and `position_delta` control modes. These aren't separate control pathways - they're implementations of a 4-stage action processing pipeline that cleanly separates concerns:
+
+When you use `position` control, the system:
+1. **Pre-action**: Establishes baseline DOF targets (often previous targets or neutral poses)
+2. **Action rule**: Scales your policy actions to DOF limits with velocity clamping
+3. **Post-action**: Enforces safety constraints like position and velocity limits
+4. **Coupling**: Maps the 18 policy-controlled DOFs to the full 26-DOF robot
+
+Similarly, `position_delta` control uses the same pipeline structure but with a different action rule that adds scaled actions to previous targets rather than replacing them. This reveals the underlying elegance: standard control modes demonstrate good pipeline design with clear separation between baseline generation, policy application, constraint enforcement, and physical coupling.
+
+The pipeline transforms policy actions through this functional sequence:
 ```
 active_prev_targets → pre_action_rule → active_rule_targets → action_rule → active_raw_targets → post_action_filters → active_next_targets → coupling_rule → full_dof_targets
 ```
 
-## Data Flow
+## Extending to Research Applications
 
-### 1. Pre-Action Rule
+This same pipeline structure naturally supports diverse research scenarios by allowing different components at each stage. The framework extends in two dimensions: variety of scenarios requiring different baseline behaviors, and variety of learning paradigms that interact with those baselines in different ways.
+
+### Residual Learning from Demonstrations
+
+Consider training a policy to improve upon expert demonstrations rather than learning from scratch. You have a dataset of successful grasping trajectories, and you want the policy to learn small corrections that handle variations the demonstrations didn't encounter.
+
+The pipeline makes this natural: the pre-action rule provides demonstration targets as baselines, the action rule adds scaled policy corrections to those targets, and post-action filters ensure the modified targets remain safe. This cleanly separates the structured prior knowledge (demonstrations) from the learned corrections (policy output) while maintaining safety guarantees. The policy focuses on learning what corrections are needed rather than learning the entire task from scratch.
+
+### Confidence-Based Selective Control
+
+Now imagine a policy that's become confident about controlling finger movements but remains uncertain about hand positioning. You want confident control where the policy performs well, but safe fallback behaviors elsewhere.
+
+The pipeline enables this through selective replacement: the pre-action rule computes safe baseline targets for all DOFs using a fallback controller, the action rule selectively overrides targets based on per-DOF confidence scores (if confidence[i] > threshold, use policy target[i], else keep fallback target[i]), and post-action filters validate the mixed result and revert problematic DOFs back to safe defaults. This creates robust mixed-initiative control where policies can gradually take over individual DOFs as they improve, with dual-layer safety through both confidence-based selection and sanity validation.
+
+### Natural Problem Decomposition
+
+Both scenarios demonstrate how the 4-stage separation creates natural problem decomposition. Complex research problems become tractable when properly separated into distinct concerns: baseline generation (pre-action), policy application (action rule), constraint enforcement (post-action), and physical coupling. Each stage serves a focused purpose, enabling composition of baseline behaviors, policy decisions, safety constraints, and physical relationships without tangling the logic together.
+
+## Technical Implementation
+
+The pipeline is implemented in `ActionProcessor` (`dexhand_env/components/action_processor.py`) through a series of functional transformations:
+
+### Stage 1: Pre-Action Rule
 - **Input**: `active_prev_targets` (18D: 6 base + 12 finger), state dict with observations
 - **Output**: `active_rule_targets` (18D)
 - **Purpose**: Generate baseline targets before policy actions are applied
 - **Implementation**: `ActionProcessor.apply_pre_action_rule()`
-- **Examples**: Gravity compensation, default poses, trajectory following
 
-### 2. Action Rule
+```python
+def gravity_compensation_rule(active_prev_targets, state):
+    """Apply gravity compensation based on hand orientation."""
+    env = state['env']
+    obs_dict = state['obs_dict']
+
+    targets = active_prev_targets.clone()
+
+    # Use hand orientation from observations
+    if 'hand_pose_quat' in obs_dict:
+        hand_quat = obs_dict['hand_pose_quat']
+        # Apply compensation logic...
+
+    return targets
+
+# Register the rule
+env.action_processor.set_pre_action_rule(gravity_compensation_rule)
+```
+
+### Stage 2: Action Rule
 - **Input**: `active_prev_targets`, `active_rule_targets`, policy `actions`, config dict
 - **Output**: `active_raw_targets` (18D)
 - **Purpose**: Apply policy actions according to control mode and masking
 - **Implementation**: `ActionProcessor.apply_action_rule()`
-- **Built-in modes**:
-  - `position`: Scale actions to DOF limits with velocity clamping
-  - `position_delta`: Add scaled actions to previous targets
 
-### 3. Post-Action Filters
+The action rule is required and must be set explicitly. Built-in modes include:
+- `position`: Scale actions to DOF limits with velocity clamping
+- `position_delta`: Add scaled actions to previous targets
+
+```python
+def position_action_rule(active_prev_targets, active_rule_targets, actions, config):
+    """Apply actions in position control mode."""
+    # Start with rule targets to preserve uncontrolled DOFs
+    targets = active_rule_targets.clone()
+
+    # Get action processor reference
+    ap = env.action_processor
+
+    # Apply actions only to policy-controlled DOFs
+    if config['policy_controls_base'] and config['policy_controls_fingers']:
+        # Full control - scale actions to DOF limits
+        scaled = ap._scale_actions_to_limits(actions)
+        # Apply with velocity clamping...
+    # Handle partial control cases...
+
+    return targets
+
+# Register the action rule (required!)
+env.action_processor.set_action_rule(position_action_rule)
+```
+
+### Stage 3: Post-Action Filters
 - **Input**: `active_prev_targets`, `active_rule_targets`, `active_raw_targets`
 - **Output**: `active_next_targets` (18D)
 - **Purpose**: Apply safety constraints and limits
 - **Implementation**: `ActionProcessor.apply_post_action_filters()`
-- **Built-in filters**:
-  - `velocity_clamp`: Limit maximum velocity between timesteps
-  - `position_clamp`: Clamp to DOF position limits
 
-### 4. Coupling Rule
+Built-in filters include:
+- `velocity_clamp`: Limit maximum velocity between timesteps
+- `position_clamp`: Clamp to DOF position limits
+
+```python
+def workspace_limit_filter(prev, rule, raw):
+    """Limit hand position to workspace bounds."""
+    filtered = raw.clone()
+    # Apply workspace constraints to base DOFs...
+    return filtered
+
+# Register custom filter
+env.action_processor.register_post_action_filter("workspace_limit", workspace_limit_filter)
+
+# Enable via config:
+# postActionFilters: ["velocity_clamp", "position_clamp", "workspace_limit"]
+```
+
+### Stage 4: Coupling Rule
 - **Input**: `active_next_targets` (18D)
 - **Output**: `full_dof_targets` (26D)
 - **Purpose**: Map active DOFs to full DOF space with physical coupling
 - **Implementation**: `ActionProcessor.apply_coupling_rule()`
-- **Example**: Finger joint coupling for underactuated joints
 
-## Two-Stage Observation Initialization
+### Two-Stage Observation Initialization
 
-The system uses a two-stage initialization process to resolve a circular dependency between observations and pre-action rules:
+The system resolves a circular dependency between observations and pre-action rules through two-stage initialization:
 
-### The Problem
-- Pre-action rules need observations to make decisions (e.g., gravity compensation based on hand orientation)
-- The policy needs to observe the output of pre-action rules (`active_rule_targets`) to understand the baseline behavior
-- This creates a circular dependency: observations → pre-action rule → active_rule_targets → observations
+1. **Partial Observations**: Compute all observations except `active_rule_targets`
+2. **Complete Observations**: Apply pre-action rule, then add resulting targets to observations
 
-### The Solution
-The observation system is updated in two stages during each timestep:
-
-1. **Stage 1 - Partial Observations**:
-   - Compute all observations EXCEPT `active_rule_targets`
-   - This includes robot state, contact forces, previous actions, etc.
-   - Pass these partial observations to the pre-action rule
-
-2. **Stage 2 - Complete Observations**:
-   - Apply the pre-action rule using partial observations
-   - Add the resulting `active_rule_targets` to the observation dictionary
-   - Concatenate all observations for the policy
-
-### Implementation in DexHandBase
 ```python
 # Stage 1: Compute partial observations (exclude active_rule_targets)
 obs_dict = self.observation_encoder.compute_observations(
@@ -90,131 +164,26 @@ obs_dict['active_rule_targets'] = active_rule_targets
 self.obs_buf = self.observation_encoder.concatenate_observations(obs_dict)
 ```
 
-This design ensures that:
-- Pre-action rules have access to all necessary state information
-- The policy can observe and learn from the baseline behavior set by rules
-- There are no circular dependencies in the computation graph
+### Configuration and Registry
 
-## Usage Example
+Post-action filters use a registry pattern for extensibility:
 
-```python
-# Define a pre-action rule for gravity compensation
-def gravity_compensation_rule(active_prev_targets, state):
-    """Apply gravity compensation based on hand orientation."""
-    env = state['env']
-    obs_dict = state['obs_dict']
-
-    targets = active_prev_targets.clone()
-
-    # Use hand orientation from observations
-    if 'hand_pose_quat' in obs_dict:
-        hand_quat = obs_dict['hand_pose_quat']
-        # Apply compensation logic...
-
-    return targets
-
-# Register the rule
-env.action_processor.set_pre_action_rule(gravity_compensation_rule)
-
-# Define a custom post-action filter
-def workspace_limit_filter(prev, rule, raw):
-    """Limit hand position to workspace bounds."""
-    filtered = raw.clone()
-    # Apply workspace constraints to base DOFs...
-    return filtered
-
-# Register the filter
-env.action_processor.register_post_action_filter("workspace_limit", workspace_limit_filter)
-
-# Enable via config:
-# postActionFilters: ["velocity_clamp", "position_clamp", "workspace_limit"]
-```
-
-## Setting Up Action Rules
-
-The action rule is required and must be set explicitly. There is no default action rule.
-
-```python
-# Define action rule for position control mode
-def position_action_rule(active_prev_targets, active_rule_targets, actions, config):
-    """Apply actions in position control mode."""
-    # Start with rule targets to preserve uncontrolled DOFs
-    targets = active_rule_targets.clone()
-
-    # Get action processor reference
-    ap = env.action_processor
-
-    # Apply actions only to policy-controlled DOFs
-    if config['policy_controls_base'] and config['policy_controls_fingers']:
-        # Full control - scale actions to DOF limits
-        scaled = ap._scale_actions_to_limits(actions)
-        # Apply with velocity clamping...
-    elif config['policy_controls_base']:
-        # Base only - update first 6 DOFs
-        targets[:, :6] = # ... scaled base actions
-    elif config['policy_controls_fingers']:
-        # Fingers only - update DOFs 6-18
-        targets[:, 6:] = # ... scaled finger actions
-
-    return targets
-
-# Register the action rule (required!)
-env.action_processor.set_action_rule(position_action_rule)
-```
-
-
-## Key Benefits
-
-1. **Composability**: Each rule is a pure function that can be tested independently
-2. **Flexibility**: Easy to add new rules without modifying core code
-3. **Clarity**: Clear data flow with explicit naming (active vs full DOF)
-4. **Safety**: Post-action filters guarantee constraints are enforced
-5. **Extensibility**: Support for custom rules and filters
-
-## Implementation Details
-
-### Pure Functions
-All rules use pure functions (no side effects) for better composability:
-- Input tensors are not modified
-- Output is always a new tensor
-- No hidden state changes
-
-### Dimension Consistency
-- Rules operate on 18D active DOF space (6 base + 12 finger)
-- Coupling maps to 26D full DOF space
-- Clear naming distinguishes active vs full DOF tensors
-
-### Configuration
-Post-action filters are configured via YAML:
 ```yaml
+# Configuration
 postActionFilters: ["velocity_clamp", "position_clamp"]
-```
-
-Existing control mode configuration is preserved:
-```yaml
 controlMode: "position"  # or "position_delta"
 policyControlsHandBase: false
 policyControlsFingers: true
 ```
 
-### Post-Action Filter Registry
+Built-in filters are automatically registered, while custom filters can be added programmatically. Filter order matters - they're applied in the sequence listed in configuration.
 
-The system uses a registry pattern for post-action filters:
+### Pure Function Design
 
-1. **Built-in filters** are automatically registered:
-   - `velocity_clamp`: Enforces velocity limits
-   - `position_clamp`: Enforces position limits
+All rules use pure functions for composability:
+- Input tensors are not modified
+- Output is always a new tensor
+- No hidden state changes
+- Clear dimension consistency (18D active DOF → 26D full DOF)
 
-2. **Custom filters** can be registered:
-   ```python
-   # Register a custom filter
-   env.action_processor.register_post_action_filter("my_filter", my_filter_fn)
-   ```
-
-3. **Enabling filters** is controlled by configuration:
-   - Via YAML: `postActionFilters: ["velocity_clamp", "my_filter"]`
-   - Only filters listed in config are applied
-
-4. **Filter order** matters - filters are applied in the order listed in configuration
-
-This registry pattern separates filter implementation from configuration, making it easy to add new filters without modifying core code.
+This functional approach enables independent testing, clear data flow, and safe composition of different rule components within the pipeline architecture.
