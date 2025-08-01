@@ -28,6 +28,7 @@ Documentation improvements and illustrations.
 - [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
 - [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 - [ ] `doc-004-training.md` - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
+- [ ] `doc-005-system-overhaul.md` - Documentation system compliance overhaul with CLAUDE.md protocol
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
