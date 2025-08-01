@@ -399,6 +399,34 @@ mv runs/BlindGrasping_train_20240101_120000 runs/pinned/best_grasping_model
 - Easy access to your best models for testing and comparison
 - Survives workspace cleanup when you exceed the recent runs limit
 
+### Alternative: Linking Experiments with `cp -P`
+
+If you want to create shortcuts to experiments without moving them from their original locations, use `cp -P` to copy symbolic links:
+
+```bash
+# Create a pinned shortcut while keeping experiment in runs/
+cp -P runs/BlindGrasping_train_20250724_120120 runs/pinned/latest_train
+
+# Update the latest_train shortcut to point to a different experiment
+cp -P runs/BlindGrasping_train_20250801_095943 runs/latest_train
+
+# Create multiple named shortcuts to the same experiment
+cp -P runs/BlindGrasping_train_20250724_120120 runs/pinned/breakthrough_model
+cp -P runs/BlindGrasping_train_20250724_120120 runs/pinned/paper_results
+```
+
+**How `cp -P` works:**
+- The `-P` flag preserves symbolic links when copying them
+- Instead of copying the target directory, it copies the link itself
+- The original experiment remains in its location (either `runs/` or `runs_all/`)
+- Creates additional access points without duplicating data
+
+**When to use `cp -P` vs `mv`:**
+- Use `cp -P` when you want the experiment to remain accessible in its original location
+- Use `cp -P` to create multiple shortcuts to the same experiment
+- Use `mv` when you want the experiment to only appear in the pinned directory
+- Use `mv` for permanent archival of experiments that cluttered the workspace
+
 ### Workspace Cleanup
 
 The system automatically maintains a clean workspace:

@@ -23,7 +23,7 @@ Code quality improvements and architectural enhancements.
 
 #### Documentation Tasks (`doc_*`)
 Documentation improvements and illustrations.
-- [ ] `doc-000-cp.md` - Documentation task
+- [x] `doc-000-cp.md` - ✅ **COMPLETED** (2025-08-01) - Documentation for `cp -P` symbolic link copying in experiment management
 - [ ] `doc-001-video.md` - Video documentation
 - [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
 - [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
@@ -69,6 +69,16 @@ Project workflow and organization improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **doc-000-cp.md** (2025-08-01) - **MEDIUM** - Documentation for `cp -P` symbolic link copying in experiment management
+  - **Root Cause**: Researchers needed a way to create experiment shortcuts without moving experiments from their original locations
+  - **Context Analysis**: Investigated existing experiment management system with `runs/` (recent symlinks), `runs_all/` (permanent archive), and `runs/pinned/` (important experiments)
+  - **Core Implementation**: Added comprehensive documentation explaining `cp -P` usage for preserving symbolic links when copying
+  - **Practical Examples**: Provided concrete examples for creating pinned shortcuts, updating latest links, and creating multiple references to same experiment
+  - **Comparative Analysis**: Explained when to use `cp -P` (preserve original location) vs `mv` (move to pinned) approaches
+  - **Architecture Compliance**: Integrated seamlessly with existing experiment management workflow in TRAINING.md
+  - **Testing Verified**: All documented examples tested and confirmed working correctly
+  - **Impact**: Researchers can now create flexible experiment organization with multiple access points while preserving original experiment locations
+  - Single documentation task adding symbolic link copying workflow to complement existing experiment pinning system
 - ✅ **feat-004-action-rule-example.md** (2025-08-01) - **MEDIUM** - Action rule conceptual examples integrated into action pipeline documentation
   - **Root Cause**: Action pipeline documentation had technical implementation details but lacked conceptual understanding and natural narrative flow for readers
   - **Document Restructure**: Completely overhauled guide-action-pipeline.md with problem → familiar solution → research extensions → technical implementation narrative
