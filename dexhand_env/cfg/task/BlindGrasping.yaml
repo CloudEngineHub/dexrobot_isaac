@@ -35,7 +35,7 @@ task:
   # Velocity limits
   max_base_linear_velocity: 0.1
   max_base_angular_velocity: 0.5
-  max_finger_joint_velocity: 0.5  # Reduced for more controlled movements
+  max_finger_joint_velocity: 1.0
 
   # Contact detection
   contact_binary_threshold: 0.1

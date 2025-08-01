@@ -30,7 +30,7 @@ Documentation improvements and illustrations.
 
 #### Bug Fixes (`fix_*`)
 Issue resolution and bug fixes.
-- [ ] `fix-010-max-deltas.md` - Fix max_deltas scaling issue in BlindGrasping (control_dt vs physics_dt initialization bug)
+- [x] `fix-010-max-deltas.md` - ✅ **COMPLETED** (2025-07-31) - Fix max_deltas scaling issue in BlindGrasping (control_dt vs physics_dt initialization bug)
 - [x] `fix-006-metadata-keys.md` - ✅ **COMPLETED** (2025-07-30) - Fix git metadata saving error with config keys
 - [x] `fix-007-episode-length-of-grasping.md` - ✅ **COMPLETED** (2025-07-30) - Fix BlindGrasping task early termination behavior
 - [x] `fix-008-termination-reason-logging.md` - ✅ **COMPLETED** (2025-07-31) - Fix termination reason logging to show current status instead of historical average
@@ -68,6 +68,14 @@ Project workflow and organization improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **fix-010-max-deltas.md** (2025-07-31) - **RESOLVED** - max_deltas scaling investigation and configuration fix
+  - **Root Cause Analysis**: Static code analysis revealed ActionProcessor implementation was architecturally correct - uses proper two-stage initialization with control_dt measurement
+  - **Investigation Findings**: _precompute_max_deltas() correctly called during Stage 2 (finalize_setup()), uses property decorator for control_dt access, follows established patterns
+  - **Actual Issue**: Configuration parameter `max_finger_joint_velocity: 0.5` in BlindGrasping was too low compared to `max_finger_joint_velocity: 1.0` in BaseTask
+  - **Configuration Fix**: Updated BlindGrasping.yaml `max_finger_joint_velocity` from 0.5 to 1.0 for consistent action scaling across tasks
+  - **Architecture Validation**: Confirmed no control_dt vs physics_dt initialization bug exists - current implementation follows fail-fast philosophy and single source of truth principles
+  - **Impact**: Resolved action scaling consistency between BaseTask and BlindGrasping, maintained proper two-stage initialization architecture
+  - Investigation task with configuration parameter adjustment and architectural validation
 - ✅ **fix-009-config-consistency.md** (2025-07-31) - **ESSENTIAL** - Configuration files cleanup for obsolete legacy options
   - **Root Cause**: Several configuration files contained obsolete legacy options that violated current naming conventions and architectural patterns
   - **Legacy Issues Found**: test_record.yaml used `training:` instead of `train:` section, comments referenced obsolete `training.checkpoint` paths, train_headless.yaml used legacy `render: false` instead of `viewer: false`
