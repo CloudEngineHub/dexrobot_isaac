@@ -24,7 +24,7 @@ Code quality improvements and architectural enhancements.
 #### Documentation Tasks (`doc_*`)
 Documentation improvements and illustrations.
 - [x] `doc-000-cp.md` - ✅ **COMPLETED** (2025-08-01) - Documentation for `cp -P` symbolic link copying in experiment management
-- [ ] `doc-001-video.md` - Video documentation
+- [x] `doc-001-video.md` - ✅ **COMPLETED** (2025-08-01) - Video documentation workflow integrated into guide-indefinite-testing.md
 - [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
 - [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 - [ ] `doc-004-training.md` - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
@@ -69,6 +69,16 @@ Project workflow and organization improvements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **guide-indefinite-testing.md** (2025-08-01) - **DOC** - Rewrite indefinite testing guide to be reader-oriented and concise
+  - **Root Cause**: Existing guide was verbose (364 lines) with too many commands, lacked focus on essential workflows, contained void "best practices" sections
+  - **Complete Rewrite**: Reduced from 364 to 110 lines focusing on reader-oriented structure organized around actual use cases rather than parameter lists
+  - **Configuration Presets**: Emphasized use of `--config-name=test_viewer` and `--config-name=test_stream` instead of long command lines
+  - **Video Workflow Integration**: Incorporated recommended two-terminal pattern from `doc-001-video.md` with server streaming and local recording approaches
+  - **Shorthand Usage**: Used aliases like `testGamesNum`, `headless`, `streamBindAll` throughout examples, removed explicit defaults
+  - **Content Elimination**: Removed verbose "best practices" and "troubleshooting" sections that added no real value
+  - **Architecture Compliance**: Maintained objective technical writing without promotional language, focused on practical workflows
+  - **Impact**: Guide now gets readers to their goal quickly with practical commands they can actually use, eliminated cognitive friction
+  - Documentation rewrite with 70% size reduction while improving clarity and practical value
 - ✅ **doc-000-cp.md** (2025-08-01) - **MEDIUM** - Documentation for `cp -P` symbolic link copying in experiment management
   - **Root Cause**: Researchers needed a way to create experiment shortcuts without moving experiments from their original locations
   - **Context Analysis**: Investigated existing experiment management system with `runs/` (recent symlinks), `runs_all/` (permanent archive), and `runs/pinned/` (important experiments)
