@@ -56,29 +56,26 @@ New functionality and API enhancements.
 - [ ] `feat-200-task-support.md` - Support more manipulation tasks (IsaacGymEnvs, RoboHive examples)
 - [ ] `feat-300-simulator-backend.md` - Support multiple simulators as backends with unified interface (IsaacSim/IsaacLab, Genesis, MJX/MuJoCo Playground)
 
-#### Meta Tasks (`meta_*`)
-Project workflow and organization improvements.
-- [ ] `meta-004-docs.md` - Add documentation maintenance requirement to CLAUDE.md guidelines
-
 #### Completed Meta Tasks (`meta_*`)
 - [x] `meta-000-workflow-setup.md` - ✅ **COMPLETED** - AI development workflow design and implementation
 - [x] `meta-001-programming-guideline.md` - ✅ **COMPLETED** - Consolidate programming guidelines to user memory
 - [x] `meta-002-backward-compatibility.md` - ✅ **COMPLETED** - Remove backward compatibility requirement from CLAUDE.md guidelines
 - [x] `meta-003-precommit.md` - ✅ **COMPLETED** - Add precommit hook handling to CLAUDE.md git workflow
+- [x] `meta-004-docs.md` - ✅ **COMPLETED** (2025-08-01) - Documentation development protocol added to CLAUDE.md guidelines
 
 ## Completed Tasks
 
 ### Recently Completed
-- ✅ **guide-indefinite-testing.md** (2025-08-01) - **DOC** - Rewrite indefinite testing guide to be reader-oriented and concise
-  - **Root Cause**: Existing guide was verbose (364 lines) with too many commands, lacked focus on essential workflows, contained void "best practices" sections
-  - **Complete Rewrite**: Reduced from 364 to 110 lines focusing on reader-oriented structure organized around actual use cases rather than parameter lists
-  - **Configuration Presets**: Emphasized use of `--config-name=test_viewer` and `--config-name=test_stream` instead of long command lines
-  - **Video Workflow Integration**: Incorporated recommended two-terminal pattern from `doc-001-video.md` with server streaming and local recording approaches
-  - **Shorthand Usage**: Used aliases like `testGamesNum`, `headless`, `streamBindAll` throughout examples, removed explicit defaults
-  - **Content Elimination**: Removed verbose "best practices" and "troubleshooting" sections that added no real value
-  - **Architecture Compliance**: Maintained objective technical writing without promotional language, focused on practical workflows
-  - **Impact**: Guide now gets readers to their goal quickly with practical commands they can actually use, eliminated cognitive friction
-  - Documentation rewrite with 70% size reduction while improving clarity and practical value
+- ✅ **guide-indefinite-testing.md** (2025-08-01) - **DOC** - Complete rewrite of indefinite testing guide with motivation-first structure and architectural explanations
+  - **Root Cause**: Documentation lacked motivation (WHY hot-reload needed), failed to explain "magic" behavior (`checkpoint=latest`), contained outdated/unverified technical details, and used commands-without-context approach
+  - **Problem-Solution Structure**: Added clear problem context (training monitoring pain points) before solution explanation, structured around deployment scenarios (local vs remote)
+  - **Architecture Explanation**: Detailed how `checkpoint=latest` works (symlink resolution → directory monitoring → dynamic checkpoint loading), integrated with experiment management system documentation
+  - **Code Validation**: Fact-checked every parameter name, default value, and command against actual implementation (config.yaml, CLI utilities, hot-reload patches)
+  - **Deployment Scenarios**: Organized around two clear contexts: (1) Local Isaac Gym viewer with checkpoint sync, (2) Remote HTTP streaming monitoring
+  - **Technical Accuracy**: Verified `reloadInterval=30` default, `testGamesNum=0` indefinite testing, `streamBindAll` parameter mapping, configuration preset names
+  - **Documentation Protocol**: Established comprehensive documentation development protocol in CLAUDE.md with motivation-first writing, architecture explanation requirements, fact-checking processes, and quality gates
+  - **Impact**: Readers understand WHY they need hot-reload, HOW the system works technically, and can choose appropriate deployment pattern for their context
+  - Complete documentation methodology overhaul with systematic validation and reader-oriented structure
 - ✅ **doc-000-cp.md** (2025-08-01) - **MEDIUM** - Documentation for `cp -P` symbolic link copying in experiment management
   - **Root Cause**: Researchers needed a way to create experiment shortcuts without moving experiments from their original locations
   - **Context Analysis**: Investigated existing experiment management system with `runs/` (recent symlinks), `runs_all/` (permanent archive), and `runs/pinned/` (important experiments)

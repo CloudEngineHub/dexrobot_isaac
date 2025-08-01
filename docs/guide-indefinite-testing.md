@@ -1,91 +1,130 @@
 # Indefinite Policy Testing with Hot-Reload
 
-Monitor your training progress in real-time by running indefinite policy testing with automatic checkpoint reloading.
+During training, you want to monitor how your policy evolves without constantly restarting test scripts or losing visual feedback. This guide shows how to set up continuous policy monitoring that automatically loads new checkpoints as training progresses.
 
-## Basic Setup
+## The Problem
 
-Use `testGamesNum=0` to run indefinitely until Ctrl+C:
+Traditional policy evaluation during training is cumbersome:
+- **Manual restarts**: Stop test script, find latest checkpoint, restart with new path
+- **Static evaluation**: Test a frozen checkpoint while training continues
+- **Visual gaps**: No continuous visual feedback on policy improvement
 
-```bash
-python train.py train.test=true testGamesNum=0 train.checkpoint=runs/MyExperiment
-```
+## The Solution: Hot-Reload Testing
 
-## Recommended Workflow
+Hot-reload testing solves this by running indefinite policy testing with automatic checkpoint discovery and reloading. The system continuously monitors your experiment directory and seamlessly loads newer checkpoints without interrupting the visual feedback loop.
 
-The most effective development pattern uses two terminals:
+**Key capabilities:**
+- **Automatic discovery**: `checkpoint=latest` finds your most recent training experiment using the [experiment management system](../TRAINING.md#experiment-management)
+- **Live reloading**: Monitors the experiment directory and loads new checkpoints every 30 seconds (configurable)
+- **Indefinite testing**: Runs until manual termination (`testGamesNum=0`)
+- **Deployment flexibility**: Works with local Isaac Gym viewer or remote HTTP streaming
 
-**Terminal 1 - Training:**
-```bash
-python train.py config=train_headless task=BlindGrasping
-```
+**The `checkpoint=latest` magic:**
+1. **Directory discovery**: Resolves to latest experiment directory via `runs/latest_train` symlink
+2. **Continuous monitoring**: Watches the resolved directory (not a static file) for new checkpoints
+3. **Dynamic loading**: Automatically loads the newest `.pth` file found in `nn/` subdirectory
 
-**Terminal 2 - Live Monitoring:**
-```bash
-python train.py config=test_viewer testGamesNum=0 checkpoint=latest
-```
+## Deployment Scenarios
 
-The test process automatically reloads newer checkpoints every 30 seconds, letting you watch the policy improve as training progresses.
+### Scenario 1: Local Workstation with Server Training
 
-## Video Monitoring
+**When to use**: You can run Isaac Gym viewer locally but training happens on a remote server.
 
-### On Remote Servers
+**Advantages**: Full Isaac Gym interactivity, better visual quality, local keyboard controls
+**Trade-offs**: Requires checkpoint synchronization, slightly more setup
 
-Use HTTP streaming to monitor training from anywhere:
-
-```bash
-# Training
-python train.py config=train_headless task=BlindGrasping
-
-# Monitoring with streaming
-python train.py config=test_stream testGamesNum=0 checkpoint=latest streamBindAll=true
-```
-
-Access the stream at `http://server-ip:58080`
-
-### On Local Workstations
-
-Use rendering on local Isaac Gym viewer with checkpoint synchronization:
-
-**Server:**
+**Server (training):**
 ```bash
 python train.py config=train_headless task=BlindGrasping
 ```
 
-**Local - Sync checkpoints:**
+**Local (checkpoint sync):**
 ```bash
-# Keep checkpoints synced
+# Option A: Simple rsync loop
 while true; do
-  rsync -av server:/path/to/runs/ ./runs
+  rsync -av server:/path/to/dexrobot_isaac/runs/ ./runs/
   sleep 30
 done &
-```
-or use file synchronization tools like `unison`.
 
-**Local - Viewing:**
+# Option B: File synchronization tools
+unison server_profile -repeat 30
+```
+
+**Local (testing):**
+```bash
+python train.py config=test_viewer testGamesNum=0 checkpoint=latest
+# Uses runs/latest_train symlink → experiment directory → newest checkpoint
+```
+
+### Scenario 2: Remote Server Monitoring
+
+**When to use**: Training and testing both happen on remote server, monitor via browser.
+
+**Advantages**: No file synchronization needed, accessible from anywhere, simpler setup
+**Trade-offs**: HTTP streaming limitations, browser-based viewing only
+
+**Server (training):**
+```bash
+python train.py config=train_headless task=BlindGrasping
+```
+
+**Server (monitoring):**
+```bash
+python train.py config=test_stream testGamesNum=0 checkpoint=latest streamBindAll=true
+# streamBindAll enables access from external IPs (security warning applies)
+```
+
+**Access**: Open `http://server-ip:58080` in browser
+
+## Basic Usage
+
+**Indefinite testing with hot-reload:**
 ```bash
 python train.py config=test_viewer testGamesNum=0 checkpoint=latest
 ```
 
-## Configuration Presets
-
-Use existing test configurations instead of long command lines:
-
-- `test_viewer.yaml` - Interactive viewer with 4 environments
-- `test_stream.yaml` - HTTP streaming for remote monitoring
-- `test.yaml` - Headless testing base configuration
-
-Override specific parameters as needed:
-
+**Customize reload timing:**
 ```bash
-python train.py config=test_viewer testGamesNum=0 numEnvs=1
+python train.py config=test_viewer testGamesNum=0 checkpoint=latest reloadInterval=60
 ```
 
-## Hot-Reload Details
+**Use specific experiment:**
+```bash
+python train.py config=test_viewer testGamesNum=0 checkpoint=runs/BlindGrasping_train_20250801_095943
+```
 
-The system monitors your experiment directory and automatically:
-1. Detects when checkpoints are updated
-2. Loads the newer model seamlessly
-3. Continues testing without interruption
-4. Logs reload events clearly
+## Configuration Reference
 
-Set `train.reloadInterval` (in seconds) to balance responsiveness vs overhead. 30-60 seconds works well for most cases.
+**Test duration control:**
+- `testGamesNum=0`: Run indefinitely until Ctrl+C (most common for monitoring)
+- `testGamesNum=25`: Run exactly 25 episodes then terminate
+
+**Hot-reload settings:**
+- `reloadInterval=30`: Check for new checkpoints every 30 seconds (default)
+- `reloadInterval=0`: Disable hot-reload, use static checkpoint
+
+**Configuration presets:**
+- `test_viewer.yaml`: Interactive Isaac Gym viewer (4 environments)
+- `test_stream.yaml`: HTTP video streaming (headless)
+- `test.yaml`: Base headless testing configuration
+
+**Parameter overrides:**
+```bash
+# Fewer environments for smoother visualization
+python train.py config=test_viewer testGamesNum=0 checkpoint=latest numEnvs=1
+
+# Longer reload interval to reduce overhead
+python train.py config=test_viewer testGamesNum=0 checkpoint=latest reloadInterval=120
+```
+
+## How Hot-Reload Works
+
+The hot-reload system uses a background thread that:
+
+1. **Resolves experiment directory**: `checkpoint=latest` → `runs/latest_train` symlink → actual experiment directory
+2. **Monitors for changes**: Uses `find_latest_checkpoint_file()` to check for new `.pth` files in the experiment's `nn/` directory
+3. **Detects updates**: Compares file modification times every `reloadInterval` seconds
+4. **Loads seamlessly**: When a newer checkpoint is found, loads the new weights into the running policy without interrupting the episode
+5. **Logs events**: Clear console output shows when reloads occur
+
+This design enables true continuous monitoring - you start the test process once and watch your policy improve throughout the entire training session.

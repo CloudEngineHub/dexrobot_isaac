@@ -112,6 +112,116 @@ When investigating issues:
 5. **Never claim success** - If testing shows intermittent results, crashes, or hangs, report the actual behavior
 6. **Distinguish between partial progress and full resolution** - Component initialization ≠ working system
 
+### Documentation Development Protocol - CRITICAL
+When writing or updating documentation, follow these principles to ensure reader-oriented, accurate, and maintainable content.
+
+#### Motivation-First Writing
+**Always explain WHY before HOW**:
+- **Problem context**: Start with the actual pain points users face
+- **Solution rationale**: Explain why the proposed approach solves those problems
+- **Trade-offs**: Be explicit about advantages and limitations of different approaches
+
+❌ WRONG - Commands without context:
+```markdown
+## Hot-Reload Testing
+Use `testGamesNum=0` to run indefinitely:
+```
+
+✅ CORRECT - Problem-motivated explanation:
+```markdown
+## The Problem
+Traditional policy evaluation during training is cumbersome:
+- Manual restarts: Stop test script, find latest checkpoint, restart with new path
+- Static evaluation: Test a frozen checkpoint while training continues
+
+## The Solution: Hot-Reload Testing
+Hot-reload testing solves this by running indefinite policy testing...
+```
+
+#### Architecture Explanation Requirements
+**Explain non-standard patterns and "magic" behavior**:
+- **Magic parameters**: Explain what `checkpoint=latest` actually does under the hood
+- **Integration points**: Reference related systems (experiment management, configuration hierarchy)
+- **Implementation details**: How hot-reload monitoring works, what triggers reloads
+
+❌ WRONG - Unexplained magic:
+```markdown
+The test process automatically reloads newer checkpoints every 30 seconds.
+```
+
+✅ CORRECT - Explained mechanism:
+```markdown
+**The `checkpoint=latest` magic:**
+1. Directory discovery: Resolves to latest experiment directory via `runs/latest_train` symlink
+2. Continuous monitoring: Watches the resolved directory for new checkpoints
+3. Dynamic loading: Automatically loads newest .pth file found
+```
+
+#### Fact-Checking and Code Validation
+**Every technical detail must be verified against actual implementation**:
+- **Parameter names**: Verify against current configuration files (`reloadInterval` not `testing.reloadInterval`)
+- **Default values**: Check actual config.yaml defaults (30 seconds, not assumed values)
+- **Command syntax**: Test all example commands to ensure they work
+- **File paths**: Verify configuration file names and locations
+
+**Validation process**:
+1. **Read actual code**: Check implementations, don't assume behavior
+2. **Verify configuration**: Look at actual YAML files for current parameter names and defaults
+3. **Test commands**: Run examples to confirm syntax and behavior
+4. **Cross-reference**: Link to related documentation appropriately
+
+#### Reader-Oriented Structure
+**Organize around user scenarios, not implementation structure**:
+- **Deployment scenarios**: Structure around different user contexts (local vs remote)
+- **Progressive disclosure**: Basic usage first, advanced configuration later
+- **Practical examples**: Real commands users can copy-paste and modify
+
+❌ WRONG - Implementation-focused:
+```markdown
+## Configuration Options
+- reloadInterval: 30
+- testGamesNum: 0
+## Hot-Reload Implementation
+```
+
+✅ CORRECT - Scenario-focused:
+```markdown
+## Deployment Scenarios
+### Scenario 1: Local Workstation with Server Training
+When to use: You can run Isaac Gym viewer locally but training happens on remote server
+Advantages: Full Isaac Gym interactivity, better visual quality
+Trade-offs: Requires checkpoint synchronization
+```
+
+#### Conciseness vs Completeness Balance
+**Be concise but not at the expense of essential context**:
+- **Essential motivation**: Always include problem context and solution rationale
+- **Sufficient detail**: Explain non-obvious design decisions and system interactions
+- **Descriptive flow**: Use paragraphs to explain concepts, not just bullet points
+- **Eliminate fluff**: Remove generic "best practices" sections that add no real value
+
+**Conciseness techniques**:
+- Use active voice and direct language
+- Structure with clear headings for scanning
+- Provide complete examples rather than explaining every option
+- Link to related documentation instead of duplicating
+
+#### Common Documentation Anti-Patterns to Avoid
+❌ **Commands without context**: Listing commands without explaining the underlying problem
+❌ **Magic without explanation**: Using special syntax without explaining how it works
+❌ **Outdated examples**: Including examples that don't match current parameter names
+❌ **Implementation assumption**: Assuming readers understand non-standard architectural patterns
+❌ **Generic advice**: Including "best practices" sections with no actionable specifics
+❌ **Missing integration**: Failing to reference related systems and documentation
+
+#### Documentation Quality Gates
+Before submitting documentation updates:
+1. **Code validation**: Every parameter name, command, and example verified against current code
+2. **Motivation check**: Problem context clearly explained before presenting solutions
+3. **Architecture explanation**: Any non-standard or "magic" behavior clearly explained
+4. **Cross-references**: Appropriate links to related documentation and systems
+5. **Practical completeness**: Users can accomplish their goals using only the provided information
+
 ## Critical Design Caveats
 
 ### Fixed Base with Relative Motion
