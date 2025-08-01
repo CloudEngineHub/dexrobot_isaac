@@ -3,21 +3,12 @@
 
 defaults:
   - config             # Inherit from main config (includes train.checkpoint)
+  - base/test
   - base/video         # Add video configuration
+  - /physics/default
   - _self_
 
 env:
   viewer: false        # Explicitly headless
-  videoRecord: true    # Enable video recording
-  videoStream: false   # Disable HTTP streaming (can be enabled for both modes)
-  numEnvs: 4           # Small number for testing
-
-train:
-  test: true           # Enable test mode
-  maxIterations: 10    # Short test sessions
-
-testing:
-  reloadInterval: 30   # Hot-reload for testing
-
-logging:
-  logLevel: "info"     # Standard logging level for tests
+  videoRecord: true    # Enable file recording
+  videoStream: false   # Disable HTTP streaming
