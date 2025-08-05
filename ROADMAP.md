@@ -4,15 +4,19 @@ Task tracking and project status for the DexRobot Isaac development. See @CLAUDE
 
 ## Active Sprint
 
-Sprint focus: **System Stability & Bug Fixes**
-With major architectural improvements complete (episode length config, graphics component alignment, action processing timing), focusing on core system stability and essential debugging capabilities.
+Sprint focus: **Core Documentation & System Polish**
+Critical timing consistency bug in reset_idx resolved successfully. System architecture now maintains deterministic control_dt assumptions. Focus shifts to completing documentation illustrations and system polish tasks.
 
 ## Backlog
 
 ### High Priority Tasks
 
-#### Core Architecture Fixes (`refactor_*`)
-Code quality improvements and architectural enhancements.
+#### Documentation Tasks (`doc_*`)
+Documentation improvements and illustrations.
+- [ ] `doc-002-control-dt-illustration.md` - **UPDATED PRD** - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement
+- [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
+- [ ] `doc-004-training.md` - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
+- [ ] `doc-005-system-overhaul.md` - Documentation system compliance overhaul with CLAUDE.md protocol
 
 ### Medium Priority Tasks
 #### Feature Enhancements (`feat_*`)
@@ -25,13 +29,20 @@ Code quality improvements and architectural enhancements.
 Documentation improvements and illustrations.
 - [x] `doc-000-cp.md` - ✅ **COMPLETED** (2025-08-01) - Documentation for `cp -P` symbolic link copying in experiment management
 - [x] `doc-001-video.md` - ✅ **COMPLETED** (2025-08-01) - Video documentation workflow integrated into guide-indefinite-testing.md
-- [ ] `doc-002-control-dt-illustration.md` - Control dt illustration documentation
+- [ ] `doc-002-control-dt-illustration.md` - **UPDATED PRD** - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement
 - [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 - [ ] `doc-004-training.md` - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
 - [ ] `doc-005-system-overhaul.md` - Documentation system compliance overhaul with CLAUDE.md protocol
 
-#### Bug Fixes (`fix_*`)
-Issue resolution and bug fixes.
+#### Bug Fixes (`fix_*`) - Completed
+- [x] `fix-011-reset-idx-timing-consistency.md` - ✅ **COMPLETED** (2025-08-05) - Fix reset_idx timing consistency bug that breaks deterministic control_dt
+  - **Root Cause**: Early return `if len(env_ids) == 0: return True` in reset_manager.py skipped essential step_physics() call, creating inconsistent timing that corrupted control_dt measurement and action scaling
+  - **Solution**: Removed early return entirely - PyTorch operations handle empty slices gracefully as no-ops, so no conditionals needed
+  - **Architecture Fix**: Ensured unconditional step_physics() call maintains timing consistency across all control cycles regardless of reset scenarios
+  - **Key Insight**: GPU parallel simulation constraint requires ALL environments to step together, making physics step unconditional
+  - **Impact**: Restored deterministic control_dt measurement, fixed action scaling corruption, maintained architectural invariants with minimal code changes
+  - **Files Modified**: `dexhand_env/components/reset/reset_manager.py` - removed defensive early return, added comprehensive architectural documentation
+  - Critical architectural fix aligning with fail-fast philosophy and parallel simulation requirements
 - [x] `fix-010-max-deltas.md` - ✅ **COMPLETED** (2025-07-31) - Fix max_deltas scaling issue in BlindGrasping (control_dt vs physics_dt initialization bug)
 - [x] `fix-006-metadata-keys.md` - ✅ **COMPLETED** (2025-07-30) - Fix git metadata saving error with config keys
 - [x] `fix-007-episode-length-of-grasping.md` - ✅ **COMPLETED** (2025-07-30) - Fix BlindGrasping task early termination behavior

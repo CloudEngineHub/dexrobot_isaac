@@ -91,7 +91,17 @@ class ResetManager:
 
     def reset_idx(self, env_ids):
         """
-        Reset specified environments.
+        Reset specified environments - physics step runs unconditionally for timing consistency.
+
+        CRITICAL ARCHITECTURAL NOTE:
+        The step_physics() call at the end is UNCONDITIONAL to maintain timing consistency.
+        Every reset_idx() call must take the same number of physics steps regardless of whether
+        any environments actually need resetting, because:
+        1. All environments step together on GPU (parallel simulation constraint)
+        2. control_dt measurement depends on consistent physics_steps_per_control_step
+        3. ActionProcessor scaling coefficients depend on deterministic control_dt
+
+        PyTorch operations handle empty env_ids gracefully as no-ops, so no conditionals needed.
 
         Args:
             env_ids: Tensor of environment IDs to reset
@@ -100,10 +110,6 @@ class ResetManager:
             Boolean indicating success
         """
         try:
-            if len(env_ids) == 0:
-                # No environments to reset
-                return True
-
             # Reset episode step count for reset environments
             self.episode_step_count[env_ids] = 0
 
@@ -167,8 +173,10 @@ class ResetManager:
             current_dof_positions = self.dof_state[env_ids, :, 0]  # Position column
             self.action_processor.reset_targets(env_ids, current_dof_positions)
 
-            # Run a physics step to integrate the DOF changes
-            # This is critical to ensure rigid body positions are updated to match DOF states
+            # CRITICAL: Unconditional physics step for timing consistency
+            # This ensures ALL control cycles take the same number of physics steps
+            # regardless of whether any specific environments actually need reset.
+            # The step_physics() call affects ALL environments on GPU simultaneously.
             self.physics_manager.step_physics(refresh_tensors=True)
 
             # Reset completed successfully
