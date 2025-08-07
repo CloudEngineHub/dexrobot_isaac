@@ -13,7 +13,16 @@ Critical timing consistency bug in reset_idx resolved successfully. System archi
 
 #### Documentation Tasks (`doc_*`)
 Documentation improvements and illustrations.
-- [ ] `doc-002-control-dt-illustration.md` - **UPDATED PRD** - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement
+- [x] `doc-002-control-dt-illustration.md` - ✅ **COMPLETED** (2025-08-07) - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement
+  - **Root Cause**: Users consistently misunderstood control_dt measurement system - assumed physics_steps_per_control_step was configurable, didn't understand parallel GPU simulation constraint, thought physics steps varied per control cycle
+  - **Core Deliverables**: Created `docs/control-dt-timing-diagram.md` with motivation-first structure explaining WHY measurement is necessary, created `docs/assets/control-dt-timeline.svg` (900x400px) visual timeline showing parallel constraint and deterministic timing
+  - **Visual Innovation**: Implemented two-shade red system - Dark red (reset driver actually needs these steps) vs Light red (parallel followers forced to execute due to GPU constraint), clearly shows architectural overhead vs actual necessity
+  - **Key Architectural Insights**: Demonstrated that ALL environments execute identical physics step count every control cycle regardless of individual reset needs, worst-case reset scenario determines permanent timing pattern, deterministic timing essential for consistent action scaling
+  - **Timeline Story**: Control Step 1 (Env 0 drives reset), Control Step 2 (Env 1 drives reset), Control Step 3 (no reset needed but maintains 4-step timing for consistency)
+  - **Cross-References**: Added links from `guide-component-initialization.md` and `reference-physics-implementation.md` to new timing diagram for comprehensive documentation flow
+  - **Language Precision**: Replaced "wasted work" terminology with "architectural overhead" to accurately reflect necessity of parallel constraint
+  - **Impact**: Users now understand WHY control_dt measurement is essential, HOW parallel simulation constraint works, and WHAT the deterministic timing guarantees provide for action scaling consistency
+  - Complete visual documentation solution addressing core architectural concept with systematic user education approach
 - [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 - [ ] `doc-004-training.md` - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
 - [ ] `doc-005-system-overhaul.md` - Documentation system compliance overhaul with CLAUDE.md protocol
@@ -29,7 +38,7 @@ Documentation improvements and illustrations.
 Documentation improvements and illustrations.
 - [x] `doc-000-cp.md` - ✅ **COMPLETED** (2025-08-01) - Documentation for `cp -P` symbolic link copying in experiment management
 - [x] `doc-001-video.md` - ✅ **COMPLETED** (2025-08-01) - Video documentation workflow integrated into guide-indefinite-testing.md
-- [ ] `doc-002-control-dt-illustration.md` - **UPDATED PRD** - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement
+- [x] `doc-002-control-dt-illustration.md` - ✅ **COMPLETED** (2025-08-07) - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement (moved to High Priority completed section above)
 - [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 - [ ] `doc-004-training.md` - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
 - [ ] `doc-005-system-overhaul.md` - Documentation system compliance overhaul with CLAUDE.md protocol
@@ -78,6 +87,17 @@ New functionality and API enhancements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **doc-002-control-dt-illustration.md** (2025-08-07) - **DOC** - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement
+  - **Root Cause**: Users consistently misunderstood control_dt measurement system - assumed physics_steps_per_control_step was configurable, didn't understand parallel GPU simulation constraint, thought physics steps varied per control cycle
+  - **Core Deliverables**: Created `docs/control-dt-timing-diagram.md` with motivation-first structure explaining WHY measurement is necessary, created `docs/assets/control-dt-timeline.svg` (900x400px) visual timeline showing parallel constraint and deterministic timing
+  - **Visual Innovation**: Implemented two-shade red system - Dark red (reset driver actually needs these steps) vs Light red (parallel followers forced to execute due to GPU constraint), clearly shows architectural overhead vs actual necessity
+  - **Key Architectural Insights**: Demonstrated that ALL environments execute identical physics step count every control cycle regardless of individual reset needs, worst-case reset scenario determines permanent timing pattern, deterministic timing essential for consistent action scaling
+  - **Timeline Story**: Control Step 1 (Env 0 drives reset), Control Step 2 (Env 1 drives reset), Control Step 3 (no reset needed but maintains 4-step timing for consistency)
+  - **Cross-References**: Added links from `guide-component-initialization.md` and `reference-physics-implementation.md` to new timing diagram for comprehensive documentation flow
+  - **Language Precision**: Replaced "wasted work" terminology with "architectural overhead" to accurately reflect necessity of parallel constraint
+  - **User Feedback Integration**: Removed development tracking references, improved SVG layout (800px→900px), enhanced visual distinction between reset drivers and parallel followers
+  - **Impact**: Users now understand WHY control_dt measurement is essential, HOW parallel simulation constraint works, and WHAT the deterministic timing guarantees provide for action scaling consistency
+  - Complete visual documentation solution addressing core architectural concept with systematic user education approach and iterative refinement based on feedback
 - ✅ **guide-indefinite-testing.md** (2025-08-01) - **DOC** - Complete rewrite of indefinite testing guide with motivation-first structure and architectural explanations
   - **Root Cause**: Documentation lacked motivation (WHY hot-reload needed), failed to explain "magic" behavior (`checkpoint=latest`), contained outdated/unverified technical details, and used commands-without-context approach
   - **Problem-Solution Structure**: Added clear problem context (training monitoring pain points) before solution explanation, structured around deployment scenarios (local vs remote)

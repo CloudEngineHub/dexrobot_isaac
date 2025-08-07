@@ -56,6 +56,8 @@ cd assets/dexrobot_mujoco/scripts
 
 ## Physics Step Management
 
+**📊 Conceptual Overview**: For a visual explanation of the parallel simulation constraint and measurement process, see [`control-dt-timing-diagram.md`](control-dt-timing-diagram.md).
+
 ### Why Auto-Detection is Necessary
 
 The physics step auto-detection system solves several critical challenges:

@@ -23,6 +23,8 @@ The DexHand environment uses a **two-stage initialization pattern** that is a co
 - GPU pipeline timing variations
 - Multi-environment synchronization effects
 
+**📊 Visual Explanation**: See [`control-dt-timing-diagram.md`](control-dt-timing-diagram.md) for a detailed explanation of the parallel simulation constraint and measurement process with timeline illustrations.
+
 ### The Two-Stage Lifecycle
 
 **Stage 1: Construction + Basic Initialization**
