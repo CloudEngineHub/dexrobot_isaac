@@ -351,6 +351,6 @@ def _compute_task_observations(self):
 ## Related Documentation
 
 - **Component Initialization**: [`guide-component-initialization.md`](guide-component-initialization.md) - Dependency management and initialization order
-- **Design Decisions**: [`design_decisions.md`](design_decisions.md) - Critical design caveats
-- **DOF/Action Reference**: [`api_dof_control.md`](api_dof_control.md) - DOF indices and action mapping
+- **Design Decisions**: [`DESIGN_DECISIONS.md`](DESIGN_DECISIONS.md) - Critical design caveats
+- **DOF/Action Reference**: [`reference-dof-control-api.md`](reference-dof-control-api.md) - DOF indices and action mapping
 - **Physics Implementation**: [`reference-physics-implementation.md`](reference-physics-implementation.md) - Technical implementation details

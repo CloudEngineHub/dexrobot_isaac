@@ -1,8 +1,36 @@
 # DOF and Action Control API Reference
 
-Complete reference for DOF indices, joint names, and action mapping for the DexHand021 model.
+This reference explains the complex DOF-to-action mapping that enables intuitive control of a 26-DOF dexterous hand with just 12-18 actions.
 
-## DOF Structure Overview
+## The Problem: Too Many DOFs for Direct Control
+
+The DexHand021 has 26 degrees of freedom:
+- 6 DOFs for hand position/orientation in 3D space
+- 20 DOFs across 5 fingers (4 joints per finger)
+
+Directly controlling 26 DOFs creates several problems:
+1. **Action space explosion**: RL algorithms struggle with high-dimensional actions
+2. **Unnatural control**: Humans don't think about individual joint angles
+3. **Redundant DOFs**: Many finger joints move together naturally (like when making a fist)
+4. **Stability issues**: Independent control of coupled joints leads to unnatural poses
+
+## The Solution: Intelligent Action Coupling
+
+The system reduces 26 DOFs to just 12-18 intuitive actions through biomechanically-inspired coupling:
+
+### Action Space Design
+- **12 Actions (default)**: Natural finger control patterns
+- **18 Actions (with base)**: Add 6 DOFs for hand movement
+
+### Key Innovation: Finger Coupling
+Instead of controlling each joint independently, actions map to natural grasp patterns:
+- **DIP coupling**: Fingertip joints move together (you can't bend just your fingertip)
+- **Spread coupling**: Multiple fingers spread together (like opening your hand)
+- **Scale coupling**: Pinky spreads twice as much as other fingers (anatomically correct)
+
+## Complete DOF Mapping
+
+### DOF Structure Overview
 
 **Total DOFs**: 26
 - **Base DOFs (0-5)**: Hand translation and rotation
@@ -12,7 +40,7 @@ Complete reference for DOF indices, joint names, and action mapping for the DexH
 - **Base Actions (0-5)**: Optional base control
 - **Finger Actions (6-17)**: 12 coupled finger controls
 
-## Complete DOF Mapping
+### Detailed DOF Table
 
 | DOF Index | Joint Name      | Type   | Description                    | Controlled by Action |
 |-----------|-----------------|--------|--------------------------------|---------------------|
@@ -25,28 +53,36 @@ Complete reference for DOF indices, joint names, and action mapping for the DexH
 | 6         | r_f_joint1_1    | FINGER | Thumb Joint 1                  | 6 (or 0 if base disabled) |
 | 7         | r_f_joint1_2    | FINGER | Thumb Joint 2                  | 7 (or 1 if base disabled) |
 | 8         | r_f_joint1_3    | FINGER | Thumb Joint 3                  | 8 (or 2 if base disabled) |
-| 9         | r_f_joint1_4    | FINGER | Thumb Joint 4 (tip)            | ❌ Not controlled |
-| 10        | r_f_joint2_1    | FINGER | Index Joint 1 (spread)         | 9 (or 3 if base disabled) via coupling |
+| 9         | r_f_joint1_4    | FINGER | Thumb Joint 4 (tip)            | ❌ Coupled with joint 3 |
+| 10        | r_f_joint2_1    | FINGER | Index Joint 1 (spread)         | 9 (or 3 if base disabled) |
 | 11        | r_f_joint2_2    | FINGER | Index Joint 2                  | 10 (or 4 if base disabled) |
 | 12        | r_f_joint2_3    | FINGER | Index Joint 3                  | 11 (or 5 if base disabled) |
-| 13        | r_f_joint2_4    | FINGER | Index Joint 4 (tip)            | ❌ Not controlled |
+| 13        | r_f_joint2_4    | FINGER | Index Joint 4 (tip)            | ❌ Coupled with joint 3 |
 | 14        | r_f_joint3_1    | FINGER | Middle Joint 1 (fixed)         | ❌ Fixed joint |
 | 15        | r_f_joint3_2    | FINGER | Middle Joint 2                 | 12 (or 6 if base disabled) |
 | 16        | r_f_joint3_3    | FINGER | Middle Joint 3                 | 13 (or 7 if base disabled) |
-| 17        | r_f_joint3_4    | FINGER | Middle Joint 4 (tip)           | ❌ Not controlled |
-| 18        | r_f_joint4_1    | FINGER | Ring Joint 1 (spread)          | 9 (or 3 if base disabled) via coupling |
+| 17        | r_f_joint3_4    | FINGER | Middle Joint 4 (tip)           | ❌ Coupled with joint 3 |
+| 18        | r_f_joint4_1    | FINGER | Ring Joint 1 (spread)          | 9 (or 3 if base disabled) |
 | 19        | r_f_joint4_2    | FINGER | Ring Joint 2                   | 14 (or 8 if base disabled) |
 | 20        | r_f_joint4_3    | FINGER | Ring Joint 3                   | 15 (or 9 if base disabled) |
-| 21        | r_f_joint4_4    | FINGER | Ring Joint 4 (tip)             | ❌ Not controlled |
-| 22        | r_f_joint5_1    | FINGER | Pinky Joint 1 (spread)         | 9 (or 3 if base disabled) via coupling 2x |
+| 21        | r_f_joint4_4    | FINGER | Ring Joint 4 (tip)             | ❌ Coupled with joint 3 |
+| 22        | r_f_joint5_1    | FINGER | Pinky Joint 1 (spread)         | 9 (or 3 if base disabled) 2x |
 | 23        | r_f_joint5_2    | FINGER | Pinky Joint 2                  | 16 (or 10 if base disabled) |
 | 24        | r_f_joint5_3    | FINGER | Pinky Joint 3                  | 17 (or 11 if base disabled) |
-| 25        | r_f_joint5_4    | FINGER | Pinky Joint 4 (tip)            | ❌ Not controlled |
+| 25        | r_f_joint5_4    | FINGER | Pinky Joint 4 (tip)            | ❌ Coupled with joint 3 |
 
-## Action-to-DOF Coupling
+## Action-to-DOF Coupling System
 
-### Finger Coupling System
-The 12 finger actions control 19 finger DOFs through coupling:
+### Why Coupling Matters
+
+Natural hand movements involve coordinated joint motion:
+- When you curl a finger, the tip joints move together
+- When you spread your fingers, they move in a coordinated pattern
+- The pinky finger naturally spreads more than other fingers
+
+The coupling system encodes these biomechanical constraints.
+
+### Finger Coupling Details
 
 | Action (base enabled/disabled) | Control Name | Primary DOF | Coupled DOFs | Coupling Scale |
 |-------------------------------|--------------|-------------|--------------|----------------|
@@ -63,23 +99,37 @@ The 12 finger actions control 19 finger DOFs through coupling:
 | 16 / 10 | lf_mcp | r_f_joint5_2 | None | 1.0 |
 | 17 / 11 | lf_dip | r_f_joint5_3 | r_f_joint5_4 | 1.0, 1.0 |
 
-### Control Naming Convention:
-- **th_**: Thumb controls (rot=rotation/spread, mcp=metacarpophalangeal, dip=distal interphalangeal)
-- **ff_**: First finger (index) controls (spr=spread, mcp, dip)
-- **mf_**: Middle finger controls (mcp, dip)
-- **rf_**: Ring finger controls (mcp, dip)
-- **lf_**: Little finger (pinky) controls (mcp, dip)
+### Control Naming Convention
+- **th_**: Thumb (rot=rotation/spread, mcp=metacarpophalangeal, dip=distal interphalangeal)
+- **ff_**: First finger/index (spr=spread, mcp, dip)
+- **mf_**: Middle finger (mcp, dip)
+- **rf_**: Ring finger (mcp, dip)
+- **lf_**: Little finger/pinky (mcp, dip)
 
-### Key Coupling Details:
-- **DIP Controls**: Each finger's `*_dip` control simultaneously moves both the `*_3` and `*_4` joints (coupled 1:1)
-- **Finger Spread (Action 9/3)**: Controls spread motion of index, ring, and pinky fingers simultaneously
-  - r_f_joint2_1 (index) moves with 1.0x scale
-  - r_f_joint4_1 (ring) moves with 1.0x scale
-  - r_f_joint5_1 (pinky) moves with 2.0x scale (twice the motion)
+### Key Coupling Behaviors
 
-## Action Scaling Formula
+#### DIP Coupling (Fingertip Control)
+Each finger's `*_dip` action controls both distal joints together:
+```
+Action th_dip → r_f_joint1_3 + r_f_joint1_4 (move together)
+Action ff_dip → r_f_joint2_3 + r_f_joint2_4 (move together)
+```
+This mirrors human anatomy where you can't bend just your fingertip independently.
 
-Actions are scaled from `[-1, +1]` to DOF limit ranges:
+#### Spread Coupling (Hand Opening)
+Action 9/3 (`ff_spr`) controls multiple fingers spreading:
+```
+One action → Three fingers spread:
+- Index finger: 1.0x motion
+- Ring finger: 1.0x motion
+- Pinky finger: 2.0x motion (anatomically correct)
+```
+
+## Action Scaling Mathematics
+
+### From Actions to Joint Angles
+
+Actions range from -1 to +1 and map to joint limits:
 
 ```python
 # Map action from [-1, +1] to [dof_min, dof_max]
@@ -87,124 +137,83 @@ scaled_action = (action_value + 1.0) * 0.5 * (dof_max - dof_min) + dof_min
 final_target = scaled_action * coupling_scale
 ```
 
-### DOF Limit Examples
-- **Spread joints (2_1, 4_1)**: `[0.0, 0.3]` radians
-- **Spread joint (5_1)**: `[0.0, 0.6]` radians (accommodates 2x coupling scale)
-- **Bend joints**: `[0.0, 1.57]` radians (π/2)
+### Example: Finger Spread Control
 
-### Action Examples for Finger Spread (Action 9/3)
-- `action = -1.0`:
-  - r_f_joint2_1 → 0.0 rad
-  - r_f_joint4_1 → 0.0 rad
-  - r_f_joint5_1 → 0.0 rad
-- `action = 0.0`:
-  - r_f_joint2_1 → 0.15 rad
-  - r_f_joint4_1 → 0.15 rad
-  - r_f_joint5_1 → 0.3 rad (2x scale)
-- `action = +1.0`:
-  - r_f_joint2_1 → 0.3 rad
-  - r_f_joint4_1 → 0.3 rad
-  - r_f_joint5_1 → 0.6 rad (2x scale)
+For the spread action (Action 9/3):
+- **Action = -1.0** (closed hand):
+  - Index spread: 0.0 rad
+  - Ring spread: 0.0 rad
+  - Pinky spread: 0.0 rad
+
+- **Action = 0.0** (neutral):
+  - Index spread: 0.15 rad
+  - Ring spread: 0.15 rad
+  - Pinky spread: 0.3 rad (2x scale)
+
+- **Action = +1.0** (spread fingers):
+  - Index spread: 0.3 rad
+  - Ring spread: 0.3 rad
+  - Pinky spread: 0.6 rad (2x scale)
 
 ## Control Configuration
 
-### Base Control Toggle
+### Enabling/Disabling Control Groups
+
 ```yaml
-env:
-  controlHandBase: true   # Enable base DOF control (actions 0-5)
-  controlFingers: true    # Enable finger DOF control (actions 6-17 or 0-11)
+task:
+  policy_controls_hand_base: true   # Enable base DOF control (actions 0-5)
+  policy_controls_fingers: true     # Enable finger DOF control (actions 6-17 or 0-11)
 ```
 
 ### Control Modes
-- **Position Control**: Actions specify absolute position targets
-- **Position Delta Control**: Actions specify incremental changes from current position
 
-## Related Observations
+**Position Control**: Actions specify absolute target positions
+- Good for precise, repeatable motions
+- Actions directly map to desired joint angles
 
-See [`guide-observation-system.md`](guide-observation-system.md) for complete observation documentation.
+**Position Delta Control**: Actions specify relative changes
+- Better for smooth, reactive control
+- Actions add to current positions each timestep
 
-Key observations for DOF control:
-- `base_dof_pos/vel/target`: Base DOF states (6D each)
-- `active_finger_dof_pos/vel/target`: Active finger states (12D each)
-- `hand_pose_arr_aligned`: Hand pose with orientation aligned to ARR DOFs (7D)
+## Key Observations for Control
 
-## Method Signatures
+The observation system provides feedback for closed-loop control:
 
-### ActionProcessor Core Methods
+- **`base_dof_pos/vel/target`**: Current base state (6D each)
+- **`active_finger_dof_pos/vel/target`**: Current finger state (12D each)
+- **`hand_pose_arr_aligned`**: Hand pose aligned with ARR DOFs (see DESIGN_DECISIONS.md)
 
-#### `process_actions(actions: torch.Tensor, active_rule_targets: torch.Tensor) -> bool`
-**File**: `dexhand_env/components/action_processor.py`
+## Implementation Reference
 
-Process policy actions through the complete action pipeline.
+### Core Methods
 
-**Parameters**:
-- `actions`: Action tensor from policy `[num_envs, num_actions]`
-- `active_rule_targets`: Pre-computed rule targets `[num_envs, 18]` (6 base + 12 finger)
+#### `process_actions(actions, active_rule_targets) -> bool`
+Main entry point for action processing. Handles scaling, coupling, and applies to simulation.
 
-**Returns**: Success flag
-
-**Usage**:
-```python
-# Typical usage in environment step
-success = self.action_processor.process_actions(actions, rule_targets)
-```
-
-#### `apply_pre_action_rule(active_prev_targets: torch.Tensor, state: Dict[str, Any]) -> torch.Tensor`
-**File**: `dexhand_env/components/action_processor.py`
-
-Apply pre-action rule to compute rule-based targets before action processing.
-
-**Parameters**:
-- `active_prev_targets`: Previous active targets `[num_envs, 18]`
-- `state`: State dictionary with `'obs_dict'` and `'env'` keys
-
-**Returns**: Rule-based targets `[num_envs, 18]`
-
-**Usage**:
-```python
-# Called before process_actions
-rule_targets = self.action_processor.apply_pre_action_rule(prev_targets, state)
-```
+#### `apply_pre_action_rule(active_prev_targets, state) -> Tensor`
+Applies rule-based behaviors before policy actions (e.g., default positions, safety constraints).
 
 #### `finalize_setup() -> None`
-**File**: `dexhand_env/components/action_processor.py`
+Completes two-stage initialization after control_dt measurement.
 
-Complete two-stage initialization after `control_dt` is available.
-
-**Usage**:
-```python
-# Called after control_dt measurement
-self.action_processor.finalize_setup()
-```
-
-### Action Scaling and Limits
-
-#### `_precompute_active_limits() -> None`
-**File**: `dexhand_env/components/action_processor.py`
-
-Precompute DOF limits for active DOFs maintaining full 6D+12D structure.
-
-**Internal method** - called during initialization to establish action space scaling.
-
-### DOF Target Properties
-
-#### `current_targets -> torch.Tensor`
-**File**: `dexhand_env/components/action_processor.py`
-
-Access current DOF targets applied to simulation.
-
-**Returns**: Current DOF targets `[num_envs, num_dofs]`
-
-**Usage**:
-```python
-# Access current targets for observations
-targets = self.action_processor.current_targets
-```
-
-## Implementation Locations
-
-- **Action Processing**: `ActionProcessor.process_actions()`
-- **Coupling System**: `ActionRules.apply_coupling_rule()`
-- **DOF Initialization**: `HandInitializer.get_dof_names()`
+### Key Files
+- **Action Processing**: `dexhand_env/components/action_processor.py`
+- **Coupling Rules**: `dexhand_env/components/action_rules.py`
 - **Configuration**: `dexhand_env/cfg/task/BaseTask.yaml`
-- **Observation System**: `ObservationEncoder.compute_observations()`
+
+## Summary
+
+The DOF control system transforms 26 raw degrees of freedom into 12-18 intuitive actions through biomechanically-inspired coupling. This design enables:
+
+1. **Natural control**: Actions map to human-like grasping patterns
+2. **Efficient learning**: Reduced action space accelerates RL training
+3. **Stable behavior**: Coupled joints prevent unnatural configurations
+4. **Flexible deployment**: Easy to add task-specific action rules
+
+The coupling system is the key innovation that makes learning dexterous manipulation tractable.
+
+## See Also
+
+- **[Observation System](guide-observation-system.md)** - Feedback for closed-loop control
+- **[Design Decisions](DESIGN_DECISIONS.md)** - Why coordinates work this way
+- **[Component Initialization](guide-component-initialization.md)** - Two-stage initialization details

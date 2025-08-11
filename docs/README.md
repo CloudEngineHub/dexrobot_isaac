@@ -60,7 +60,7 @@ Welcome to the DexHand documentation. This directory contains comprehensive guid
 **High-level design and decisions:**
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture overview
-- **[design_decisions.md](design_decisions.md)** - Critical design decisions and caveats
+- **[DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)** - Critical design decisions and caveats
 - **[GLOSSARY.md](GLOSSARY.md)** - Terminology definitions
 
 ## Recommended Reading Paths
@@ -74,7 +74,7 @@ Welcome to the DexHand documentation. This directory contains comprehensive guid
 
 ### For Developers
 1. [ARCHITECTURE.md](ARCHITECTURE.md) → [guide-component-initialization.md](guide-component-initialization.md)
-2. [design_decisions.md](design_decisions.md) for understanding constraints
+2. [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) for understanding constraints
 3. [reference-coordinate-systems.md](reference-coordinate-systems.md) for coordinate quirks
 
 ### For Researchers

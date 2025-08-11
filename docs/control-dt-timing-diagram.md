@@ -173,8 +173,8 @@ All environments process in perfect parallel synchronization:
 ## Related Documentation
 
 ### Technical Implementation
-- **Component Initialization**: [`guide-component-initialization.md`](guide-component-initialization.md#two-stage-initialization-pattern) - Two-stage pattern and control_dt dependencies
-- **Physics Implementation**: [`reference-physics-implementation.md`](reference-physics-implementation.md#physics-step-management) - Technical stepping details and auto-detection algorithm
+- **Component Initialization**: [`guide-component-initialization.md`](guide-component-initialization.md) - Two-stage pattern and control_dt dependencies
+- **Physics Implementation**: [`reference-physics-implementation.md`](reference-physics-implementation.md) - Technical stepping details and auto-detection algorithm
 
 ### System Integration
 - **Action Pipeline**: [`guide-action-pipeline.md`](guide-action-pipeline.md) - How control_dt affects action scaling and control modes

@@ -163,7 +163,7 @@ For detailed training instructions, hyperparameter tuning, and advanced usage, s
 - **[Terminology Glossary](docs/GLOSSARY.md)** - Definitions of project-specific terms and concepts
 - **[Component Debugging](docs/guide-debugging.md)** - Troubleshooting component interaction issues
 - **[Coordinate Systems](docs/reference-coordinate-systems.md)** - Fixed base motion and coordinate quirks
-- **[Design Decisions](docs/design_decisions.md)** - Critical caveats and architectural decisions
+- **[Design Decisions](docs/DESIGN_DECISIONS.md)** - Critical caveats and architectural decisions
 - **[DOF Control API](docs/reference-dof-control-api.md)** - Reference for degrees of freedom and control modes
 - **[Observation System](docs/guide-observation-system.md)** - How observations are structured and encoded
 - **[Component Initialization](docs/guide-component-initialization.md)** - Two-stage initialization pattern details

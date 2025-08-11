@@ -626,7 +626,7 @@ Research code should break fast and embrace current best practices:
 See [ROADMAP.md](ROADMAP.md) for detailed project status, completed features, and future development plans.
 
 ## Essential Documentation
-- **Critical Caveats**: [`docs/design_decisions.md`](docs/design_decisions.md) - READ FIRST!
-- **DOF/Action Reference**: [`docs/api_dof_control.md`](docs/api_dof_control.md)
+- **Critical Caveats**: [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md) - READ FIRST!
+- **DOF/Action Reference**: [`docs/reference-dof-control-api.md`](docs/reference-dof-control-api.md)
 - **Observation System**: [`docs/guide-observation-system.md`](docs/guide-observation-system.md)
 - **Component Init**: [`docs/guide-component-initialization.md`](docs/guide-component-initialization.md)

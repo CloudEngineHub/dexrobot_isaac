@@ -2,6 +2,24 @@
 
 This document defines project-specific terminology and concepts used throughout the DexHand codebase and documentation.
 
+## The Problem: Domain-Specific Language Barriers
+
+Robotics RL research sits at the intersection of multiple specialized domains:
+- **Robotics terminology**: DOFs, rigid bodies, joint spaces, quaternions
+- **RL concepts**: Episodes, policies, observation spaces, reward shaping
+- **GPU computing jargon**: Vectorization, tensor operations, kernel synchronization
+- **Software architecture patterns**: Components, decorators, dependency injection
+
+Researchers waste time decoding terminology instead of understanding concepts, and miscommunication about technical terms leads to implementation errors.
+
+## The Solution: Unified Terminology with Clear Definitions
+
+This glossary provides authoritative definitions that:
+1. **Bridge domains**: Connect robotics, RL, and software concepts
+2. **Clarify project-specific usage**: Define how standard terms apply here
+3. **Provide context**: Explain why certain terms matter
+4. **Enable precise communication**: Reduce ambiguity in technical discussions
+
 > **How to Use:** This glossary supports all other documentation. See [System Architecture](ARCHITECTURE.md) for design overview, [Task Creation Guide](guide-task-creation.md) for implementation details, and [TRAINING.md](../TRAINING.md) for usage workflows.
 
 ## Core Concepts
@@ -129,7 +147,7 @@ Hydra's ability to combine multiple YAML files (base configs, task configs, trai
 A saved model state that can be loaded for testing or resumed training. Supports smart resolution (e.g., `checkpoint=latest` automatically finds the most recent checkpoint).
 
 ### **Test Mode**
-A training script mode (`training.test=true`) that loads a checkpoint and runs the policy without further training, typically with rendering enabled.
+A training script mode (`train.test=true`) that loads a checkpoint and runs the policy without further training, typically with rendering enabled.
 
 ### **Hot Reload**
 A test mode feature that automatically reloads checkpoints at specified intervals, useful for debugging during training.

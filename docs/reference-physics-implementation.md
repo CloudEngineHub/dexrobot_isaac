@@ -366,7 +366,7 @@ Get measured physics steps per control step.
 
 ## See Also
 
-- [`design_decisions.md`](design_decisions.md) - Critical design caveats
+- [`DESIGN_DECISIONS.md`](DESIGN_DECISIONS.md) - Critical design caveats
 - [`guide-component-initialization.md`](guide-component-initialization.md) - Component initialization and dependency management
 - [`guide-physics-tuning.md`](guide-physics-tuning.md) - Parameter tuning guide
-- [`api_dof_control.md`](api_dof_control.md) - DOF and action reference
+- [`reference-dof-control-api.md`](reference-dof-control-api.md) - DOF and action reference

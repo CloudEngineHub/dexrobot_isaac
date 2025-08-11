@@ -2,6 +2,24 @@
 
 This guide provides comprehensive solutions to common issues encountered when working with the DexHand environment.
 
+## The Problem: RL Debugging Complexity
+
+Debugging reinforcement learning systems combines the worst aspects of multiple domains:
+- **Black-box failures**: GPU kernels crash with minimal error information
+- **Cascading issues**: A small config error can manifest as training instability hours later
+- **Hidden state corruption**: Defensive programming masks bugs that corrupt entire training runs
+- **Multi-layer complexity**: Issues can originate in physics, RL algorithms, or system integration
+
+Traditional debugging approaches fail when a single wrong parameter can waste days of GPU time.
+
+## The Solution: Systematic Troubleshooting with Clear Failure Points
+
+DexHand's fail-fast architecture makes debugging tractable by:
+1. **Immediate error detection**: Crashes at the source rather than propagating corruption
+2. **Clear component boundaries**: Issues isolated to specific system parts
+3. **Explicit error messages**: Components validate their requirements upfront
+4. **Reproducible failures**: Deterministic behavior enables systematic debugging
+
 > **Quick Links:** For Isaac Gym installation and graphics issues, see [Isaac Gym troubleshooting](https://developer.nvidia.com/isaac-gym). For general training troubleshooting, see [rl_games documentation](https://github.com/Denys88/rl_games).
 
 ## Setup Issues
@@ -201,7 +219,7 @@ ls -la assets/dexrobot_mujoco/
 **Symptom**: Training runs much slower than expected
 **Common Causes**:
 1. **Too many environments with rendering**: Reduce `env.numEnvs` when using `env.viewer=true`
-2. **Single environment training**: Use `training.test=true` for single environment debugging
+2. **Single environment training**: Use `train.test=true` for single environment debugging
 3. **GPU memory issues**: Reduce batch size or number of environments
 **Solution**: Profile training to identify bottlenecks and adjust configuration accordingly
 

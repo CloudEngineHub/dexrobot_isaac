@@ -14,7 +14,7 @@ Traditional policy evaluation during training is cumbersome:
 Hot-reload testing solves this by running indefinite policy testing with automatic checkpoint discovery and reloading. The system continuously monitors your experiment directory and seamlessly loads newer checkpoints without interrupting the visual feedback loop.
 
 **Key capabilities:**
-- **Automatic discovery**: `checkpoint=latest` finds your most recent training experiment using the [experiment management system](../TRAINING.md#experiment-management)
+- **Automatic discovery**: `checkpoint=latest` finds your most recent training experiment using the experiment management system (see [TRAINING.md](../TRAINING.md))
 - **Live reloading**: Monitors the experiment directory and loads new checkpoints every 30 seconds (configurable)
 - **Indefinite testing**: Runs until manual termination (`testGamesNum=0`)
 - **Deployment flexibility**: Works with local Isaac Gym viewer or remote HTTP streaming

@@ -4,62 +4,12 @@ Task tracking and project status for the DexRobot Isaac development. See @CLAUDE
 
 ## Active Sprint
 
-Sprint focus: **Core Documentation & System Polish**
-Critical timing consistency bug in reset_idx resolved successfully. System architecture now maintains deterministic control_dt assumptions. Focus shifts to completing documentation illustrations and system polish tasks.
+Sprint focus: **Research & Performance Optimization**
+Documentation system overhaul completed successfully. All documentation now follows motivation-first protocol with accurate parameter names and cross-references. Focus shifts to research tasks and performance optimization.
 
 ## Backlog
 
 ### High Priority Tasks
-
-#### Documentation Tasks (`doc_*`)
-Documentation improvements and illustrations.
-- [x] `doc-002-control-dt-illustration.md` - ✅ **COMPLETED** (2025-08-07) - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement
-  - **Root Cause**: Users consistently misunderstood control_dt measurement system - assumed physics_steps_per_control_step was configurable, didn't understand parallel GPU simulation constraint, thought physics steps varied per control cycle
-  - **Core Deliverables**: Created `docs/control-dt-timing-diagram.md` with motivation-first structure explaining WHY measurement is necessary, created `docs/assets/control-dt-timeline.svg` (900x400px) visual timeline showing parallel constraint and deterministic timing
-  - **Visual Innovation**: Implemented two-shade red system - Dark red (reset driver actually needs these steps) vs Light red (parallel followers forced to execute due to GPU constraint), clearly shows architectural overhead vs actual necessity
-  - **Key Architectural Insights**: Demonstrated that ALL environments execute identical physics step count every control cycle regardless of individual reset needs, worst-case reset scenario determines permanent timing pattern, deterministic timing essential for consistent action scaling
-  - **Timeline Story**: Control Step 1 (Env 0 drives reset), Control Step 2 (Env 1 drives reset), Control Step 3 (no reset needed but maintains 4-step timing for consistency)
-  - **Cross-References**: Added links from `guide-component-initialization.md` and `reference-physics-implementation.md` to new timing diagram for comprehensive documentation flow
-  - **Language Precision**: Replaced "wasted work" terminology with "architectural overhead" to accurately reflect necessity of parallel constraint
-  - **Impact**: Users now understand WHY control_dt measurement is essential, HOW parallel simulation constraint works, and WHAT the deterministic timing guarantees provide for action scaling consistency
-  - Complete visual documentation solution addressing core architectural concept with systematic user education approach
-- [x] `doc-004-training.md` - ✅ **COMPLETED** (2025-08-11) - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
-- [ ] `doc-005-system-overhaul.md` - Documentation system compliance overhaul with CLAUDE.md protocol
-
-### Medium Priority Tasks
-#### Feature Enhancements (`feat_*`)
-- [x] `feat-000-streaming-port.md` - ✅ **COMPLETED** (2025-07-30) - Improve port management and binding options
-- [x] `feat-001-video-fps-control.md` - ✅ **COMPLETED** (2025-07-31) - Implement FPS-aware video saving
-- [x] `feat-002-indefinite-testing.md` - ✅ **COMPLETED** (2025-07-30) - Enable indefinite testing mode
-- [x] `feat-004-action-rule-example.md` - ✅ **COMPLETED** (2025-08-01) - Action rule conceptual examples integrated into action pipeline documentation
-
-#### Documentation Tasks (`doc_*`)
-Documentation improvements and illustrations.
-- [x] `doc-000-cp.md` - ✅ **COMPLETED** (2025-08-01) - Documentation for `cp -P` symbolic link copying in experiment management
-- [x] `doc-001-video.md` - ✅ **COMPLETED** (2025-08-01) - Video documentation workflow integrated into guide-indefinite-testing.md
-- [x] `doc-002-control-dt-illustration.md` - ✅ **COMPLETED** (2025-08-07) - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement (moved to High Priority completed section above)
-- [x] `doc-003-action-processing-illustration.md` - ✅ **COMPLETED** (2025-08-11) - Action processing illustration documentation (moved to Recently Completed section)
-- [x] `doc-004-training.md` - ✅ **COMPLETED** (2025-08-11) - TRAINING.md integration and outdated options fix (moved to Recently Completed section)
-- [ ] `doc-005-system-overhaul.md` - Documentation system compliance overhaul with CLAUDE.md protocol
-
-#### Bug Fixes (`fix_*`) - Completed
-- [x] `fix-011-reset-idx-timing-consistency.md` - ✅ **COMPLETED** (2025-08-05) - Fix reset_idx timing consistency bug that breaks deterministic control_dt
-  - **Root Cause**: Early return `if len(env_ids) == 0: return True` in reset_manager.py skipped essential step_physics() call, creating inconsistent timing that corrupted control_dt measurement and action scaling
-  - **Solution**: Removed early return entirely - PyTorch operations handle empty slices gracefully as no-ops, so no conditionals needed
-  - **Architecture Fix**: Ensured unconditional step_physics() call maintains timing consistency across all control cycles regardless of reset scenarios
-  - **Key Insight**: GPU parallel simulation constraint requires ALL environments to step together, making physics step unconditional
-  - **Impact**: Restored deterministic control_dt measurement, fixed action scaling corruption, maintained architectural invariants with minimal code changes
-  - **Files Modified**: `dexhand_env/components/reset/reset_manager.py` - removed defensive early return, added comprehensive architectural documentation
-  - Critical architectural fix aligning with fail-fast philosophy and parallel simulation requirements
-- [x] `fix-010-max-deltas.md` - ✅ **COMPLETED** (2025-07-31) - Fix max_deltas scaling issue in BlindGrasping (control_dt vs physics_dt initialization bug)
-- [x] `fix-006-metadata-keys.md` - ✅ **COMPLETED** (2025-07-30) - Fix git metadata saving error with config keys
-- [x] `fix-007-episode-length-of-grasping.md` - ✅ **COMPLETED** (2025-07-30) - Fix BlindGrasping task early termination behavior
-- [x] `fix-008-termination-reason-logging.md` - ✅ **COMPLETED** (2025-07-31) - Fix termination reason logging to show current status instead of historical average
-- [x] `fix-009-config-consistency.md` - ✅ **COMPLETED** (2025-07-31) - Check all config files for obsolete legacy options (test_record.yaml cleanup)
-
-#### Code Quality (`refactor_*`)
-
-### Low Priority Tasks
 
 #### Research Tasks (`rl_*`)
 Policy tuning, physics improvements, and reward engineering.
@@ -69,10 +19,17 @@ Policy tuning, physics improvements, and reward engineering.
 System performance optimization and analysis.
 - [ ] `perf-000-physics-speed.md` - Determine optimal physics accuracy for training performance
 
+### Medium Priority Tasks
+
 #### Feature Enhancements (`feat_*`)
 New functionality and API enhancements.
 - [ ] `feat-100-bimanual.md` - Support bimanual environment with dexhand_left and dexhand_right
 - [ ] `feat-110-domain-randomization.md` - Structured domain randomization scheme
+
+### Low Priority Tasks
+
+#### Feature Enhancements (`feat_*`)
+Advanced features and ecosystem integration.
 - [ ] `feat-200-task-support.md` - Support more manipulation tasks (IsaacGymEnvs, RoboHive examples)
 - [ ] `feat-300-simulator-backend.md` - Support multiple simulators as backends with unified interface (IsaacSim/IsaacLab, Genesis, MJX/MuJoCo Playground)
 
@@ -86,6 +43,17 @@ New functionality and API enhancements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **doc-005-system-overhaul.md** (2025-08-11) - **DOC** - Documentation system compliance overhaul with CLAUDE.md protocol
+  - **Root Cause**: Documentation violated CLAUDE.md protocol with incorrect parameter names (maxIter, render, training), missing motivation-first structure, and incorrect file naming conventions
+  - **Phase 1 - Critical Violations**: Fixed all parameter naming issues across 5 documents (maxIter→maxIterations, render→viewer, training→train, controlHandBase→policy_controls_hand_base)
+  - **Phase 2 - Architectural Documents**: Complete rewrite of ARCHITECTURE.md, DESIGN_DECISIONS.md, and reference-dof-control-api.md with motivation-first structure
+  - **Phase 3 - Protocol Compliance**: Added problem-solution structure to GETTING_STARTED.md, TROUBLESHOOTING.md, and GLOSSARY.md
+  - **Phase 4 - Validation**: Verified all cross-references, fixed broken links, validated command examples
+  - **File Renaming**: design_decisions.md → DESIGN_DECISIONS.md with 11 cross-reference updates
+  - **Key Transformations**: Transformed technical documentation from command-focused to motivation-first narratives explaining WHY before HOW
+  - **Documentation Philosophy**: Established pattern of explaining problems (complexity barriers) before solutions throughout all guides
+  - **Impact**: Users now understand the reasoning behind design decisions, documentation follows consistent motivation-first protocol, all commands and parameters are accurate
+  - Complete 4-phase documentation overhaul affecting 15+ files with systematic protocol compliance
 - ✅ **doc-003-action-processing-illustration.md** (2025-08-11) - **DOC** - Action processing illustration and documentation enhancements
   - **Requirements Analysis**: Task required updating SVG to show specific tensor variable names, complete data dependencies for all stages, and removing promotional architecture summary box
   - **SVG Enhancements**: Updated `docs/assets/action-processing-timeline.svg` with complete tensor flow labels (active_prev_targets, active_rule_targets, actions, active_raw_targets, active_next_targets, full_dof_targets)

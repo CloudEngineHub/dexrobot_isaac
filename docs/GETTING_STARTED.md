@@ -2,6 +2,24 @@
 
 This guide will get you from zero to your first trained RL policy in under 10 minutes.
 
+## The Problem: RL Environment Setup Complexity
+
+Setting up reinforcement learning environments for robotics research is typically a multi-day ordeal:
+- **Simulator installation**: Complex dependency chains and GPU driver compatibility issues
+- **Environment configuration**: Dozens of parameters to understand before first run
+- **Debug cycles**: Cryptic error messages that require deep system knowledge
+- **First success uncertainty**: Days of setup before knowing if it even works
+
+Research time should be spent on algorithms, not fighting with setup.
+
+## The Solution: Streamlined Setup with Fail-Fast Design
+
+DexHand provides a 10-minute path to your first working policy through:
+1. **Minimal dependencies**: Only Isaac Gym and Python required
+2. **Smart defaults**: Pre-tuned configurations that just work
+3. **Fail-fast validation**: Clear error messages at each setup step
+4. **Immediate visual feedback**: See your hand moving in minutes
+
 **Next Steps:**
 - [TRAINING.md](../TRAINING.md) - Complete training and testing guide
 - [Component Initialization](guide-component-initialization.md) - Understanding the system architecture
@@ -163,7 +181,7 @@ python train.py task=BaseTask numEnvs=2048
 python train.py task=BaseTask seed=123
 
 # Train for longer
-python train.py task=BaseTask maxIter=20000
+python train.py task=BaseTask maxIterations=20000
 ```
 
 ### Create Your Own Task
@@ -206,7 +224,7 @@ git submodule update --init --recursive
 tensorboard --logdir runs/
 
 # Train for longer (default is 10000 iterations)
-python train.py maxIter=20000
+python train.py maxIterations=20000
 ```
 
 **Problem**: Training is very slow
@@ -225,7 +243,7 @@ python train.py viewer=false
 **Solution**: Train longer or check checkpoint
 ```bash
 # Train for more iterations
-python train.py maxIter=15000
+python train.py maxIterations=15000
 
 # Test with specific checkpoint
 python train.py test=true checkpoint=runs/BaseTask_train_YYMMDD_HHMMSS/nn/BaseTask.pth

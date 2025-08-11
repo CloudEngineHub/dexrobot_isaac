@@ -296,7 +296,7 @@ python examples/dexhand_test.py
 
 ```bash
 # Run basic training test
-python train.py task=BlindGrasping env.numEnvs=4 training.maxIterations=10
+python train.py task=BlindGrasping env.numEnvs=4 train.maxIterations=10
 
 # Should complete without asset loading errors
 ```
