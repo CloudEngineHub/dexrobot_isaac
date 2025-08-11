@@ -14,6 +14,12 @@ Welcome to the DexHand documentation. This directory contains comprehensive guid
 
 ## Documentation Categories
 
+### 📋 Training & Configuration
+
+**Complete guide for training RL policies and managing experiments:**
+
+- **[../TRAINING.md](../TRAINING.md)** - Comprehensive training workflows, configuration options, and experiment management
+
 ### 📚 Core Guides
 
 **Essential reading for understanding the DexHand system:**
@@ -61,9 +67,10 @@ Welcome to the DexHand documentation. This directory contains comprehensive guid
 
 ### For New Users
 1. [GETTING_STARTED.md](GETTING_STARTED.md) → [../README.md](../README.md) → [ARCHITECTURE.md](ARCHITECTURE.md)
-2. [guide-environment-lifecycle.md](guide-environment-lifecycle.md) for understanding component interactions
-3. [guide-task-creation.md](guide-task-creation.md) for implementing custom tasks
-4. [guide-debugging.md](guide-debugging.md) when things go wrong
+2. [../TRAINING.md](../TRAINING.md) for comprehensive training workflows
+3. [guide-environment-lifecycle.md](guide-environment-lifecycle.md) for understanding component interactions
+4. [guide-task-creation.md](guide-task-creation.md) for implementing custom tasks
+5. [guide-debugging.md](guide-debugging.md) when things go wrong
 
 ### For Developers
 1. [ARCHITECTURE.md](ARCHITECTURE.md) → [guide-component-initialization.md](guide-component-initialization.md)
@@ -103,7 +110,6 @@ For topics not covered here, see:
 
 - **[Isaac Gym Documentation](https://developer.nvidia.com/isaac-gym)** - Physics simulation setup
 - **[rl_games Documentation](https://github.com/Denys88/rl_games)** - Training algorithms
-- **[../TRAINING.md](../TRAINING.md)** - Training workflows and configuration
 
 ---
 

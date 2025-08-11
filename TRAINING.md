@@ -52,7 +52,7 @@ python train.py task=BlindGrasping test=true checkpoint=runs/BlindGrasping_20250
 python train.py test=true checkpoint=latest viewer=false
 
 # Hot-reload test mode (reloads checkpoint every 30 seconds)
-python train.py test=true checkpoint=path/to/checkpoint.pth testing.reloadInterval=30
+python train.py test=true checkpoint=path/to/checkpoint.pth train.reloadInterval=30
 ```
 
 ### CLI Alias Reference
@@ -63,12 +63,12 @@ The training script supports convenient aliases that map to full Hydra configura
 |-------|-----------|-------------|
 | `config` | `--config-name` | Configuration file to use |
 | `numEnvs` | `env.numEnvs` | Number of parallel environments |
-| `test` | `training.test` | Enable test mode |
-| `checkpoint` | `training.checkpoint` | Checkpoint path for testing |
-| `seed` | `training.seed` | Random seed |
+| `test` | `train.test` | Enable test mode |
+| `checkpoint` | `train.checkpoint` | Checkpoint path for testing |
+| `seed` | `train.seed` | Random seed |
 | `viewer` | `env.viewer` | Enable visualization |
 | `device` | `env.device` | CUDA device (e.g., "cuda:0") |
-| `maxIter` | `training.maxIterations` | Maximum training iterations |
+| `maxIterations` | `train.maxIterations` | Maximum training iterations |
 | `logLevel` | `logging.logLevel` | Logging level for entire system (debug, info, warning) |
 
 > **Note**: The `logLevel` setting controls logging for both the training script and the environment/simulation. This provides a unified logging experience across the entire system.
@@ -140,17 +140,20 @@ python train.py +defaults=[config,/physics/fast] viewer=true
 
 ### Training Parameters
 
-- `training.seed`: Random seed, use -1 for random (default: 42)
-- `training.torch_deterministic`: Use deterministic algorithms for reproducibility
-- `training.checkpoint`: Path to checkpoint to resume from
-- `training.test`: Run in test mode (no training)
-- `training.max_iterations`: Maximum training iterations (default: 10000)
-- `testing.reloadInterval`: Checkpoint hot-reload interval in test mode (seconds)
+- `train.seed`: Random seed, use -1 for random (default: 42)
+- `train.torchDeterministic`: Use deterministic algorithms for reproducibility
+- `train.checkpoint`: Path to checkpoint to resume from
+- `train.test`: Run in test mode (no training)
+- `train.maxIterations`: Maximum training iterations (default: 10000)
+- `train.reloadInterval`: Checkpoint hot-reload interval in test mode (seconds)
 
 ### Experiment Management Parameters
 
-- `experiment.maxRecentRuns`: Maximum recent experiments to show in workspace (default: 10)
+- `experiment.maxTrainRuns`: Maximum recent training runs to keep in workspace (default: 10)
+- `experiment.maxTestRuns`: Maximum recent testing runs to keep in workspace (default: 10)
 - `experiment.useCleanWorkspace`: Enable workspace management system (default: true)
+
+> **Note**: Previously `experiment.maxRecentRuns` was a single parameter, now split into separate limits for training and testing runs.
 
 ### Logging Parameters
 
@@ -202,7 +205,7 @@ python train.py task=BlindGrasping env.numEnvs=1024 sim.dt=0.005 task.episodeLen
 python train.py task=BaseTask checkpoint=runs/BaseTask_20240101_120000
 
 # Using full path
-python train.py task=BaseTask training.checkpoint=runs/BaseTask_20240101_120000/nn/checkpoint_1000.pth
+python train.py task=BaseTask train.checkpoint=runs/BaseTask_20240101_120000/nn/checkpoint_1000.pth
 ```
 
 ### Test a Trained Policy
@@ -215,7 +218,7 @@ python train.py task=BaseTask test=true checkpoint=latest
 python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000
 
 # Test with hot-reload (checkpoint reloads every 30 seconds)
-python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000 testing.reloadInterval=30
+python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000 train.reloadInterval=30
 ```
 
 ### Indefinite Testing and Test Duration Control
@@ -431,7 +434,7 @@ cp -P runs/BlindGrasping_train_20250724_120120 runs/pinned/paper_results
 
 The system automatically maintains a clean workspace:
 
-- Only 10 most recent experiments shown in `runs/` (configurable via `experiment.maxRecentRuns`)
+- Only 10 most recent experiments shown in `runs/` (configurable via `experiment.maxTrainRuns` and `experiment.maxTestRuns`)
 - Older experiments automatically moved to archive symlinks
 - All experiment data preserved permanently in `runs_all/`
 - Pinned experiments in `runs/pinned/` never auto-cleaned
