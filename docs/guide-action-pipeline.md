@@ -49,6 +49,76 @@ The pipeline enables this through selective replacement: the pre-action rule com
 
 Both scenarios demonstrate how the 4-stage separation creates natural problem decomposition. Complex research problems become tractable when properly separated into distinct concerns: baseline generation (pre-action), policy application (action rule), constraint enforcement (post-action), and physical coupling. Each stage serves a focused purpose, enabling composition of baseline behaviors, policy decisions, safety constraints, and physical relationships without tangling the logic together.
 
+## Timing and Execution Flow
+
+The 4-stage pipeline is implemented using a two-phase execution pattern that aligns with standard RL framework expectations and creates cleaner separation between observation preparation and action processing.
+
+### The Timing Challenge
+
+Traditional robotic control systems often bundle all action processing into a single pre-physics step. This creates timing misalignment with RL frameworks, which expect observations for step N to be available before step N begins. When baseline generation (Stage 1: Pre-Action Rule) depends on current observations, it must execute during observation computation rather than during action processing.
+
+The core issue: pre-action rules need access to fresh state information to compute meaningful baselines (gravity compensation, trajectory following, etc.), but this computation must complete before the policy network runs. Bundling everything in pre_physics would mean computing observations twice or using stale data.
+
+### Two-Phase Solution
+
+The pipeline splits execution across two timing phases to resolve this dependency:
+
+**post_physics (Step N-1):**
+- Compute observations for the next step (Step N)
+- Execute Stage 1 (Pre-Action Rule) using these fresh observations
+- Generate `active_rule_targets` baseline for step N
+- Complete observations by including the computed rule targets
+
+**pre_physics (Step N):**
+- Policy network forward pass using complete observations from Step N-1
+- Execute Stage 2 (Action Rule) using:
+  - `actions` from policy output
+  - `active_rule_targets` from observations (computed in Step N-1)
+  - `active_prev_targets` for continuity
+- Execute Stage 3 (Post-Action Filters) to enforce constraints
+- Execute Stage 4 (Coupling Rule) to map 18D active DOFs to 26D full robot
+- Apply final targets to physics simulation
+
+![Action Processing Timeline](assets/action-processing-timeline.svg)
+
+*Note: The dimensions shown in the diagram (18D and 26D) are specific to the DexHand-021 single-hand configuration. The pipeline architecture generalizes to other configurations - for example, bimanual setups or different hand models would have different dimensions but follow the same 4-stage processing structure.*
+
+### Data Flow Through the Pipeline
+
+Each stage transforms specific tensors through the pipeline:
+
+1. **Stage 1 inputs**: `active_prev_targets` (18D) + state dict → outputs `active_rule_targets` (18D)
+2. **Policy inputs**: observations with `active_rule_targets` → outputs `actions` (policy dimension)
+3. **Stage 2 inputs**: `active_prev_targets`, `active_rule_targets`, `actions` → outputs `active_raw_targets` (18D)
+4. **Stage 3 inputs**: `active_prev_targets`, `active_rule_targets`, `active_raw_targets` → outputs `active_next_targets` (18D)
+5. **Stage 4 inputs**: `active_next_targets` (18D) → outputs `full_dof_targets` (26D)
+
+Note that Stage 2 (Action Rule) receives multiple inputs because it needs to:
+- Know the previous targets for delta-based control modes
+- Access the baseline targets for selective override patterns
+- Apply the policy's actions according to the control mode logic
+
+The policy output can represent anything - absolute positions, deltas, forces, or abstract commands. The action rule determines how to interpret these values and update the DOF targets accordingly.
+
+### RL Framework Alignment
+
+This timing pattern matches standard RL rollout expectations:
+- Observations for step N are fully computed in step N-1
+- Policy receives complete observations at step N start
+- Action processing occurs entirely within step N
+- Clear temporal separation between observation prep and action execution
+
+The two-phase approach ensures that baseline generation can access current state information while maintaining the clean action processing flow that policies expect. This architectural choice enables both reactive baseline behaviors (that respond to current conditions) and predictable action processing timing (that policies can rely on).
+
+### Stage Mapping to Execution Phases
+
+The 4-stage conceptual pipeline maps cleanly to the 2-phase execution:
+
+- **Observation Phase (post_physics)**: Stage 1 executes alongside observation computation, providing rule targets that become part of the observation vector
+- **Action Phase (pre_physics)**: Policy forward pass followed by Stages 2-4 executing sequentially, transforming policy output through interpretation, safety filtering, and physical coupling
+
+This split respects the natural data dependencies while maintaining efficient execution. The observation phase prepares all information the policy needs, while the action phase handles all transformations from policy output to robot commands.
+
 ## Technical Implementation
 
 The pipeline is implemented in `ActionProcessor` (`dexhand_env/components/action_processor.py`) through a series of functional transformations:

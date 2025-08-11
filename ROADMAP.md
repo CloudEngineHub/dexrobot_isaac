@@ -23,7 +23,6 @@ Documentation improvements and illustrations.
   - **Language Precision**: Replaced "wasted work" terminology with "architectural overhead" to accurately reflect necessity of parallel constraint
   - **Impact**: Users now understand WHY control_dt measurement is essential, HOW parallel simulation constraint works, and WHAT the deterministic timing guarantees provide for action scaling consistency
   - Complete visual documentation solution addressing core architectural concept with systematic user education approach
-- [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
 - [ ] `doc-004-training.md` - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
 - [ ] `doc-005-system-overhaul.md` - Documentation system compliance overhaul with CLAUDE.md protocol
 
@@ -39,7 +38,7 @@ Documentation improvements and illustrations.
 - [x] `doc-000-cp.md` - ✅ **COMPLETED** (2025-08-01) - Documentation for `cp -P` symbolic link copying in experiment management
 - [x] `doc-001-video.md` - ✅ **COMPLETED** (2025-08-01) - Video documentation workflow integrated into guide-indefinite-testing.md
 - [x] `doc-002-control-dt-illustration.md` - ✅ **COMPLETED** (2025-08-07) - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement (moved to High Priority completed section above)
-- [ ] `doc-003-action-processing-illustration.md` - Action processing illustration documentation
+- [x] `doc-003-action-processing-illustration.md` - ✅ **COMPLETED** (2025-08-11) - Action processing illustration documentation (moved to Recently Completed section)
 - [ ] `doc-004-training.md` - Where does TRAINING.md fit in the doc system? Also, it has some outdated options.
 - [ ] `doc-005-system-overhaul.md` - Documentation system compliance overhaul with CLAUDE.md protocol
 
@@ -87,6 +86,16 @@ New functionality and API enhancements.
 ## Completed Tasks
 
 ### Recently Completed
+- ✅ **doc-003-action-processing-illustration.md** (2025-08-11) - **DOC** - Action processing illustration and documentation enhancements
+  - **Requirements Analysis**: Task required updating SVG to show specific tensor variable names, complete data dependencies for all stages, and removing promotional architecture summary box
+  - **SVG Enhancements**: Updated `docs/assets/action-processing-timeline.svg` with complete tensor flow labels (active_prev_targets, active_rule_targets, actions, active_raw_targets, active_next_targets, full_dof_targets)
+  - **Data Dependency Visualization**: Added curved arrows showing Stage 2 receives three inputs (active_prev_targets, active_rule_targets, actions), clarified all stage inputs/outputs with specific tensor dimensions
+  - **Documentation Updates**: Enhanced "Timing and Execution Flow" section in `guide-action-pipeline.md` with detailed data flow explanation, stage mapping rationale, and policy interpretation clarification
+  - **Key Improvements**: Explained WHY timing split is necessary (fresh observations for baseline generation), documented complete tensor transformations through pipeline, clarified policy output interpretation flexibility
+  - **Visual Refinements**: Removed architecture summary box per requirements, maintained clean linear stage flow, added initial inputs and state dict visualization
+  - **Technical Accuracy**: Verified all tensor names and dimensions against implementation, ensured alignment with refactor-006 timing changes
+  - **Impact**: Users now understand complete data dependencies in action pipeline, how policy output gets interpreted through stages, and why two-phase execution enables reactive baselines
+  - Comprehensive documentation and visualization update providing clear technical understanding of action processing data flow
 - ✅ **doc-002-control-dt-illustration.md** (2025-08-07) - **DOC** - Control dt vs physics_dt illustration showing parallel simulation constraint and deterministic measurement
   - **Root Cause**: Users consistently misunderstood control_dt measurement system - assumed physics_steps_per_control_step was configurable, didn't understand parallel GPU simulation constraint, thought physics steps varied per control cycle
   - **Core Deliverables**: Created `docs/control-dt-timing-diagram.md` with motivation-first structure explaining WHY measurement is necessary, created `docs/assets/control-dt-timeline.svg` (900x400px) visual timeline showing parallel constraint and deterministic timing

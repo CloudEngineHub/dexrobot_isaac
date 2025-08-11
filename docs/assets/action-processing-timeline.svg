@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1100" height="450" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .title-text { font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; fill: #2c3e50; }
+      .phase-text { font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; fill: #34495e; }
+      .stage-text { font-family: Arial, sans-serif; font-size: 12px; font-weight: bold; fill: #2c3e50; }
+      .stage-desc { font-family: Arial, sans-serif; font-size: 10px; fill: #34495e; }
+      .data-text { font-family: Arial, sans-serif; font-size: 11px; fill: #34495e; }
+      .data-text-small { font-family: Arial, sans-serif; font-size: 10px; fill: #7f8c8d; }
+      .step-text { font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; fill: #2c3e50; }
+      .policy-text { font-family: Arial, sans-serif; font-size: 12px; font-weight: bold; fill: #ffffff; }
+
+      .post-phase-bg { fill: #f8fbff; stroke: #3498db; stroke-width: 1; stroke-dasharray: 5,5; opacity: 0.7; }
+      .pre-phase-bg { fill: #fffcf5; stroke: #e67e22; stroke-width: 1; stroke-dasharray: 5,5; opacity: 0.7; }
+      .policy-bg { fill: #9b59b6; stroke: #8e44ad; stroke-width: 2; }
+      .stage-bg { fill: #ffffff; stroke: #34495e; stroke-width: 2; }
+
+      .timeline-line { stroke: #34495e; stroke-width: 2; }
+      .arrow { stroke: #2c3e50; stroke-width: 3; fill: none; marker-end: url(#arrowhead); }
+      .data-flow-aux { stroke: #95a5a6; stroke-width: 1.5; fill: none; stroke-dasharray: 5,3; marker-end: url(#arrowhead-gray); }
+    </style>
+
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2c3e50" />
+    </marker>
+
+    <marker id="arrowhead-gray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#95a5a6" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="550" y="30" class="title-text" text-anchor="middle">Action Processing Pipeline: Timing and Execution Flow</text>
+
+  <!-- Timeline -->
+  <line x1="50" y1="70" x2="1050" y2="70" class="timeline-line"/>
+  <text x="200" y="60" class="step-text">Step N-1</text>
+  <text x="750" y="60" class="step-text">Step N</text>
+
+  <!-- Phase background zones (subtle) -->
+  <!-- post_physics phase -->
+  <rect x="60" y="90" width="340" height="200" class="post-phase-bg" rx="8"/>
+  <text x="230" y="110" class="phase-text" text-anchor="middle">post_physics</text>
+
+  <!-- pre_physics phase -->
+  <rect x="410" y="90" width="630" height="200" class="pre-phase-bg" rx="8"/>
+  <text x="725" y="110" class="phase-text" text-anchor="middle">pre_physics</text>
+
+  <!-- Linear stage progression -->
+
+  <!-- Stage 1: Pre-Action Rule -->
+  <rect x="80" y="140" width="140" height="80" class="stage-bg" rx="5"/>
+  <text x="150" y="155" class="stage-text" text-anchor="middle">Stage 1</text>
+  <text x="150" y="170" class="stage-text" text-anchor="middle">Pre-Action Rule</text>
+  <text x="90" y="190" class="stage-desc">• Baseline generation</text>
+  <text x="90" y="205" class="stage-desc">• Rule targets (18D)</text>
+
+  <!-- Policy Network (properly inside pre_physics) -->
+  <rect x="430" y="150" width="100" height="60" class="policy-bg" rx="5"/>
+  <text x="480" y="175" class="policy-text" text-anchor="middle">Policy</text>
+  <text x="480" y="190" class="policy-text" text-anchor="middle">Forward</text>
+
+  <!-- Stage 2: Action Rule -->
+  <rect x="560" y="140" width="120" height="80" class="stage-bg" rx="5"/>
+  <text x="620" y="155" class="stage-text" text-anchor="middle">Stage 2</text>
+  <text x="620" y="170" class="stage-text" text-anchor="middle">Action Rule</text>
+  <text x="570" y="190" class="stage-desc">• Interpret policy</text>
+  <text x="570" y="205" class="stage-desc">• Apply control mode</text>
+
+  <!-- Stage 3: Post-Action Filters -->
+  <rect x="720" y="140" width="120" height="80" class="stage-bg" rx="5"/>
+  <text x="780" y="155" class="stage-text" text-anchor="middle">Stage 3</text>
+  <text x="780" y="170" class="stage-text" text-anchor="middle">Filters</text>
+  <text x="730" y="190" class="stage-desc">• Safety limits</text>
+  <text x="730" y="205" class="stage-desc">• Constraints</text>
+
+  <!-- Stage 4: Coupling Rule -->
+  <rect x="880" y="140" width="120" height="80" class="stage-bg" rx="5"/>
+  <text x="940" y="155" class="stage-text" text-anchor="middle">Stage 4</text>
+  <text x="940" y="170" class="stage-text" text-anchor="middle">Coupling</text>
+  <text x="890" y="190" class="stage-desc">• 18D → 26D map</text>
+  <text x="890" y="205" class="stage-desc">• Physical coupling</text>
+
+  <!-- Main pipeline flow arrows (prominent) -->
+  <line x1="220" y1="180" x2="430" y2="180" class="arrow"/>
+  <line x1="530" y1="180" x2="560" y2="180" class="arrow"/>
+  <line x1="680" y1="180" x2="720" y2="180" class="arrow"/>
+  <line x1="840" y1="180" x2="880" y2="180" class="arrow"/>
+
+  <!-- Variable labels on main flow (lifted well above blocks) -->
+  <text x="325" y="120" class="data-text" text-anchor="middle">observations enriched</text>
+  <text x="325" y="135" class="data-text" text-anchor="middle">with active_rule_targets</text>
+  <text x="325" y="150" class="data-text-small" text-anchor="middle">(includes 18D targets)</text>
+
+  <text x="545" y="125" class="data-text" text-anchor="middle">actions</text>
+
+  <text x="700" y="125" class="data-text" text-anchor="middle">active_raw_targets</text>
+  <text x="700" y="140" class="data-text-small" text-anchor="middle">(18D)</text>
+
+  <text x="860" y="125" class="data-text" text-anchor="middle">active_next_targets</text>
+  <text x="860" y="140" class="data-text-small" text-anchor="middle">(18D)</text>
+
+  <!-- Initial inputs to Stage 1 -->
+  <line x1="40" y1="180" x2="80" y2="180" class="arrow"/>
+  <text x="35" y="175" class="data-text" text-anchor="end">active_prev_targets</text>
+  <text x="35" y="190" class="data-text-small" text-anchor="end">(18D)</text>
+
+  <!-- State dict input to Stage 1 (auxiliary) -->
+  <polyline points="40,240 60,240 60,200 80,200" class="data-flow-aux"/>
+  <text x="35" y="235" class="data-text" text-anchor="end">state dict</text>
+  <text x="35" y="250" class="data-text-small" text-anchor="end">(observations)</text>
+
+  <!-- Auxiliary inputs to Stage 2 (widely spaced) -->
+  <!-- active_prev_targets to Stage 2 -->
+  <polyline points="150,220 150,240 620,240 620,220" class="data-flow-aux"/>
+  <text x="220" y="235" class="data-text-small">active_prev_targets</text>
+
+  <!-- active_rule_targets to Stage 2 -->
+  <polyline points="325,195 325,265 580,265 580,220" class="data-flow-aux"/>
+  <text x="410" y="260" class="data-text-small">active_rule_targets</text>
+
+  <!-- config to Stage 2 -->
+  <polyline points="545,290 560,290 560,220" class="data-flow-aux"/>
+  <text x="540" y="285" class="data-text-small" text-anchor="end">config</text>
+
+  <!-- Auxiliary inputs to Stage 3 (widely spaced) -->
+  <!-- active_prev_targets to Stage 3 -->
+  <polyline points="150,220 150,310 780,310 780,220" class="data-flow-aux"/>
+  <text x="350" y="305" class="data-text-small">active_prev_targets</text>
+
+  <!-- active_rule_targets to Stage 3 -->
+  <polyline points="325,195 325,335 740,335 740,220" class="data-flow-aux"/>
+  <text x="500" y="330" class="data-text-small">active_rule_targets</text>
+
+  <!-- Note about observations flow -->
+
+  <!-- Final output -->
+  <line x1="1000" y1="180" x2="1040" y2="180" class="arrow"/>
+  <text x="1045" y="175" class="data-text">full_dof_targets</text>
+  <text x="1045" y="190" class="data-text-small">(26D)</text>
+
+  <!-- Additional context labels -->
+  <text x="150" y="355" class="data-text-small">Data flows: Main pipeline (bold) shows primary transformations.</text>
+  <text x="150" y="370" class="data-text-small">Auxiliary inputs (dashed) provide additional context to stages.</text>
+
+  <!-- Dimension explanation box -->
+  <rect x="150" y="385" width="800" height="55" fill="#f8f9fa" stroke="#dee2e6" stroke-width="1" rx="3"/>
+  <text x="160" y="400" class="data-text-small" font-weight="bold">Dimensions shown are for DexHand-021 single-hand configuration:</text>
+  <text x="160" y="415" class="data-text-small">• 18D = 6 (hand base) + 12 (fingers active control)</text>
+  <text x="160" y="430" class="data-text-small">• 26D = 6 (hand base) + 20 (fingers full DOF)     Note: Actual dimensions may vary for other configurations (e.g., bimanual setups).</text>
+</svg>
