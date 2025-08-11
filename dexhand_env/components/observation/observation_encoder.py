@@ -750,13 +750,6 @@ class ObservationEncoder:
         fingerpad_poses_hand = self._extract_fingerpad_poses_hand()
         obs_dict["fingerpad_poses_hand"] = fingerpad_poses_hand
 
-        # Compute first three fingerpad centroid (for BlindGrasping task)
-        # Extract fingerpad positions from world poses
-        fingerpad_positions = fingerpad_poses_world[:, :15].reshape(self.num_envs, 5, 3)
-        obs_dict["first_three_fingerpad_centroid"] = torch.mean(
-            fingerpad_positions[:, :3, :], dim=1
-        )  # Shape: (num_envs, 3)
-
         # Episode time in seconds (use existing API from parent)
         obs_dict["episode_time"] = self.episode_time.unsqueeze(
             1
