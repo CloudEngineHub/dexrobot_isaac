@@ -1,0 +1,10 @@
+# @package _global_
+# Training configuration with headless mode for fast training
+
+defaults:
+  - config
+  - _self_
+
+env:
+  viewer: false
+  numEnvs: 8192

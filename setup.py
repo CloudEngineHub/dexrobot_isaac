@@ -1,4 +1,4 @@
-"""Installation script for the 'DexHandEnv' python package."""
+"""Installation script for the 'dexhand' python package."""
 
 from __future__ import absolute_import
 from __future__ import print_function
@@ -21,24 +21,37 @@ INSTALL_REQUIRES = [
     "jinja2",
     "hydra-core>=1.2",
     "rl-games>=1.6.0",
+    "tensorboard",  # For training metrics logging
     "pyvirtualdisplay",
     "urdfpy==0.0.22",
     "pysdf==0.1.9",
     "warp-lang==0.10.1",
     "trimesh==3.23.5",
+    # Video dependencies (now required for training workflows)
+    "opencv-python>=4.5.0",  # For video recording
+    "flask>=2.0.0",  # For HTTP video streaming
 ]
+
+# Optional dependencies for additional features (backward compatibility)
+# Note: video dependencies are now required in INSTALL_REQUIRES above
+EXTRAS_REQUIRE = {
+    "streaming": [],  # Flask now required by default
+    "video": [],  # OpenCV now required by default
+    "all": [],  # All video features now included by default
+}
 
 
 # Installation operation
 setup(
-    name="DexHandEnv",
-    author="NVIDIA",
-    version="1.5.1",
-    description="Benchmark environments for high-speed robot learning in NVIDIA IsaacGym.",
-    keywords=["robotics", "rl"],
+    name="dexhand_env",
+    author="DexRobot Inc.",
+    version="0.1.0",
+    description="Reinforcement learning environment for dexterous manipulation with robotic hands",
+    keywords=["robotics", "rl", "dexterous", "manipulation"],
     include_package_data=True,
     python_requires=">=3.6",
     install_requires=INSTALL_REQUIRES,
+    extras_require=EXTRAS_REQUIRE,
     packages=find_packages("."),
     classifiers=[
         "Natural Language :: English",

@@ -1,0 +1,129 @@
+# @package _global_
+# Base Task Configuration File
+defaults:
+  - /physics/default    # Import default physics settings
+  - _self_
+
+# Simulation timing and physics engine
+sim:
+  physics_engine: "physx"         # Physics engine selection
+  dt: 0.005                       # 200 Hz - task-specific RL timing
+  # substeps, gravity, physx params now inherited from physics/default.yaml
+
+# Environment and world setup
+env:
+  envSpacing: 2.0                 # Environment spacing in meters (distance between environment centers)
+  # Initial pose
+  initialHandPos: [0.0, 0.0, 0.5] # Initial hand position
+  initialHandRot: [0.0, 0.0, 0.0, 1.0]  # Initial hand rotation (quaternion)
+  episodeLength: 300              # Maximum number of steps per episode
+  # Graphics configuration (defaults for BaseTask)
+  viewer: false                   # Interactive visualization window
+  videoRecord: false              # Save video files to disk
+  videoStream: false              # Stream video over network
+
+# Task configuration - all RL-related settings
+task:
+  name: BaseTask
+  # Task parameters
+
+  # Action space configuration
+  controlMode: "position_delta"   # position or position_delta
+  policy_controls_hand_base: true    # Whether the policy controls the hand base (6 DOFs) - when false, use rule-based control
+  policy_controls_fingers: true     # Whether the policy controls the finger joints (12 controls) - when false, use rule-based control
+
+  # Default targets for uncontrolled DOFs (fallback if task doesn't provide them)
+  # These are used only if the task's get_task_dof_targets method doesn't return targets
+  # NOTE: Base targets are RELATIVE displacements from spawn position (0 = stay at spawn point)
+  default_base_targets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default base targets [x, y, z, rx, ry, rz]
+  default_finger_targets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # Default finger targets (12 controls)
+
+  # Component-wise velocity limits for position_delta mode action scaling
+  # These limits are applied PER COMPONENT (each joint/axis independently)
+  max_finger_joint_velocity: 1.0     # Maximum velocity for each finger joint (rad/s) - applied per joint
+  max_base_linear_velocity: 0.5      # Maximum velocity for each base linear axis (m/s) - applied per x/y/z axis
+  max_base_angular_velocity: 1.5     # Maximum velocity for each base angular axis (rad/s) - applied per rx/ry/rz axis
+
+  # Termination criteria (for BaseTask)
+  termination:
+    # Specify which criteria are active (empty means use all available)
+    active_success_criteria: []
+    active_failure_criteria: []
+
+    # Height thresholds for ground collision detection
+    height_safety:
+      handbase_threshold: 0.0
+      fingertip_threshold: 0.0
+      fingerpad_threshold: 0.0
+
+  # Reward weights configuration (empty for BaseTask)
+  reward_weights:
+    # Common rewards (implemented in RewardCalculator)
+    alive: 0.1                    # Small constant reward per timestep
+    height_safety: 1.0            # Penalize fingertips too close to ground
+    finger_velocity: 0.1          # Penalize high finger joint velocities
+    hand_velocity: 0.1            # Penalize high hand movement speed
+    hand_angular_velocity: 0.1    # Penalize high rotational speed
+    joint_limit: 0.5              # Penalize joints near their limits
+    finger_acceleration: 0.05     # Penalize rapid finger velocity changes
+    hand_acceleration: 0.05       # Penalize rapid hand velocity changes
+    hand_angular_acceleration: 0.05  # Penalize rapid angular velocity changes
+    contact_stability: 0.2        # Reward consistent contacts
+
+    # Termination rewards (explicit configuration required)
+    termination_success: 10.0           # Reward for successful task completion
+    termination_failure_penalty: 5.0   # Penalty for task failure
+    termination_timeout_penalty: 0.0   # Penalty for episode timeout (neutral for BaseTask)
+
+  enable_component_debug_logs: false # Enable detailed debug logs for component internals
+
+  # Curriculum learning parameters
+  max_consecutive_successes: 50       # Maximum consecutive successes before increasing difficulty
+
+  # Bodies to monitor for contact force observations
+  contact_force_bodies:
+    - "r_f_link1_4"  # thumb distal phalanx
+    - "r_f_link2_4"  # index distal phalanx
+    - "r_f_link3_4"  # middle distal phalanx
+    - "r_f_link4_4"  # ring distal phalanx
+    - "r_f_link5_4"  # pinky distal phalanx
+
+  # Contact detection thresholds
+  contact_binary_threshold: 1.0       # Force threshold (N) for binary contact detection (reduces sim2real gap)
+
+  # Contact force visualization settings
+  contact_visualization:
+    enabled: true                  # Enable/disable contact force visualization
+    forceThreshold: 0.1           # Minimum force (N) to trigger visualization
+    forceMaxIntensity: 10.0       # Force (N) at which color intensity is maximum
+    baseColor: [1.0, 0.2, 0.2]    # RGB color for contact visualization (red)
+    defaultColor: [0.7, 0.7, 0.7] # RGB color for no contact (light gray)
+
+  # Observation configuration
+  policy_observation_keys:        # List of observation components to include in final observation tensor
+    - "base_dof_pos"            # Base DOF positions (6 DOFs: x, y, z, rx, ry, rz)
+    - "base_dof_vel"            # Base DOF velocities (6 DOFs: x, y, z, rx, ry, rz)
+    - "active_finger_dof_pos"   # Active finger DOF positions (12 active finger controls) - for RL
+    - "active_finger_dof_vel"   # Active finger DOF velocities (12 active finger controls) - for RL
+    - "hand_pose"               # Hand root pose (position + orientation)
+    - "contact_binary"          # Binary contact indicators (0/1 for each finger) - reduces sim2real gap
+    - "prev_actions"            # Previous actions
+    - "base_dof_target"         # Base DOF targets (6 DOFs: x, y, z, rx, ry, rz)
+    - "active_finger_dof_target" # Active finger DOF targets (12 active finger controls) - for RL
+    - "fingertip_poses_world"   # Fingertip poses in world frame (5 fingers × 7 pose dimensions = 35)
+    - "fingertip_poses_hand"    # Fingertip poses in hand frame (5 fingers × 7 pose dimensions = 35)
+    - "fingerpad_poses_world"   # Fingerpad poses in world frame (5 fingers × 7 pose dimensions = 35)
+    - "fingerpad_poses_hand"    # Fingerpad poses in hand frame (5 fingers × 7 pose dimensions = 35)
+
+    # Disabled observation keys (available in obs_dict but not included in RL observation tensor)
+    # Uncomment any of these to include them in the RL observation tensor:
+
+    # Note: The following are always available in obs_dict for semantic access regardless of whether
+    # they are included in policyObservationKeys. They are commented out to avoid redundancy in RL tensor.
+
+    # - "all_finger_dof_pos"     # All finger DOF positions (20 finger DOFs) - semantic access only
+    # - "all_finger_dof_vel"     # All finger DOF velocities (20 finger DOFs) - semantic access only
+    # - "all_finger_dof_target"  # All finger DOF targets (20 finger DOFs) - semantic access only
+    # - "contact_forces"         # Contact forces (3D force for each finger) - for tasks needing exact forces
+    # - "contact_force_magnitude" # Contact force magnitude (scalar for each finger) - for tasks needing exact forces
+    # - "contact_duration"       # Contact duration (seconds for each contact body) - for temporal contact criteria

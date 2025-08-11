@@ -1,0 +1,14 @@
+# @package _global_
+# Debug configuration with verbose logging and small scale
+
+defaults:
+  - config
+  - base/debug
+  - base/test
+  - _self_
+
+env:
+  viewer: true
+
+train:
+  maxIterations: 100  # Override for shorter debug sessions

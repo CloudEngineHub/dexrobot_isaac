@@ -1,0 +1,17 @@
+# @package _global_
+# Base test configuration
+# Contains common settings for test mode environments
+
+
+# Environment settings for testing
+env:
+  numEnvs: 4           # Small number for testing
+
+# Training settings for test mode
+train:
+  test: true           # Enable test mode
+  maxIterations: 1000  # Reasonable default for testing
+  seed: 42             # Random seed for reproducible testing
+  testGamesNum: 50     # Number of games for test configurations (0 = indefinite)
+  logging:
+    logLevel: "info"   # Standard logging level for tests

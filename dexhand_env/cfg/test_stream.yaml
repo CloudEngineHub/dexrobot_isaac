@@ -1,0 +1,14 @@
+# @package _global_
+# Test configuration with HTTP video streaming (headless)
+
+defaults:
+  - config             # Inherit from main config (includes train.checkpoint)
+  - base/test
+  - base/video         # Add video configuration
+  - /physics/default
+  - _self_
+
+env:
+  viewer: false        # Explicitly headless
+  videoRecord: false   # Disable file recording
+  videoStream: true    # Enable HTTP streaming

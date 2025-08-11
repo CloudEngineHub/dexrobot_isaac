@@ -1,0 +1,75 @@
+# Main Hydra configuration for DexHand training and testing
+# Training: python train.py
+# Testing: python examples/dexhand_test.py
+# Override: python train.py task=BlindGrasping env.numEnvs=2048
+# Override: python examples/dexhand_test.py task=BlindGrasping headless=true steps=500
+
+defaults:
+  - train: BaseTaskPPO
+  - base/video
+  - _self_
+  - task: BaseTask
+
+# Task and training configs will be loaded from task/ and train/ subdirectories
+# The following are runtime overrides
+
+device: "cuda:0"       # Device for simulation and RL
+
+# Physics engine at root level (required by VecTask)
+physics_engine: physx
+
+# Simulation configuration
+sim:
+  substeps: 4
+  gravity: [0.0, 0.0, -9.81]
+  num_client_threads: 0
+  physx:
+    solver_type: 1
+    num_position_iterations: 16
+    num_velocity_iterations: 0
+    contact_offset: 0.001
+    rest_offset: 0.0005
+    bounce_threshold_velocity: 0.15
+    max_depenetration_velocity: 0.2
+    default_buffer_size_multiplier: 4.0
+    num_subscenes: 0
+    contact_collection: 1
+    gpu_contact_pairs_per_env: 512
+    always_use_articulations: true
+    num_threads: 4
+  dt: 0.005
+  graphicsDeviceId: 0      # Graphics device ID for rendering
+
+# Environment configuration
+env:
+  numEnvs: 1024  # Basic config for training, can be overridden
+  device: "cuda:0"
+  viewer: false          # Interactive visualization window
+  videoRecord: false     # Save video files to disk
+  videoStream: false     # Stream video over network
+  controlMode: "position"  # Control mode (position/position_delta) - can be overridden by tasks
+  clipObservations: .inf  # Observation clipping limit (inf = no clipping)
+  clipActions: .inf       # Action clipping limit (inf = no clipping)
+
+
+# Task configuration (RL task definition only)
+# Task-specific settings inherited from task/ configs
+
+# Training configuration (algorithm and training process)
+train:
+  seed: 42
+  torchDeterministic: false
+  maxIterations: 10000
+  test: false
+  checkpoint: null
+  envName: "rlgpu_dexhand"  # RL Games environment name
+  reloadInterval: 30  # Seconds between checkpoint reloads in test mode
+  testGamesNum: 100   # Number of games to evaluate in test mode (0 = indefinite)
+  logging:
+    experimentName: null  # Auto-generated if null
+    rewardLogInterval: 100  # Log reward breakdown every N finished episodes (prevents TensorBoard sampling limit)
+    logLevel: "info"
+    noLogFile: false
+  experiment:
+    maxTrainRuns: 10       # Maximum number of recent training runs to keep in workspace
+    maxTestRuns: 10        # Maximum number of recent testing runs to keep in workspace

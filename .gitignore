@@ -1,7 +1,6 @@
 videos
 cloud
 recorded_frames
-/DexHandEnv/logs
 *train_dir*
 *ige_logs*
 *.egg-info
@@ -11,24 +10,52 @@ recorded_frames
 /shaders
 ._tmptext.txt
 __pycache__/
-/DexHandEnv/tasks/__pycache__
-/DexHandEnv/utils/__pycache__
-/DexHandEnv/tasks/base/__pycache__
 /tools/format/.lastrun
 *.pyc
 _doxygen
-/rlDexHandEnvgpu/logs
-/DexHandEnv/benchmarks/results
-/DexHandEnv/simpletests/results
 *.pxd2
-/tests/logs
-/DexHandEnv/balance_bot.xml
-/DexHandEnv/quadcopter.xml
-/DexHandEnv/ingenuity.xml
 logs*
 nn/
 runs/
+runs_all/
 .idea
 outputs/
+
+# Preserve directory structure with .gitkeep files
+!**/.gitkeep
 *.hydra*
-/DexHandEnv/wandb
+CLAUDE.md
+.unison.*
+~
+
+# Directories to ignore
+legacy/
+reference/
+assets/dexrobot_urdf/
+
+# Python
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# OS specific
+.DS_Store
+
+# Temporary debug files
+patch_rlgames_timing.py

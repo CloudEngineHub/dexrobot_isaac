@@ -1,0 +1,11 @@
+# @package _global_
+# Test configuration with rendering enabled
+
+defaults:
+  - config
+  - base/test
+  - /physics/default
+  - _self_
+
+env:
+  viewer: true

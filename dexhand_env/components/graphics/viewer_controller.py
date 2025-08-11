@@ -1,0 +1,659 @@
+"""
+Viewer controller component for DexHand environment.
+
+This module provides viewer interaction functionality for the DexHand environment,
+including keyboard shortcuts for camera control, robot selection, and environment resets.
+
+Keyboard Shortcuts:
+    R     - Reset all environments
+    E     - Reset current Environment (the one being followed)
+    F     - Toggle between Follow mode (single robot) and global view
+    UP    - Previous robot (in single robot mode)
+    DOWN  - Next robot (in single robot mode)
+    SPACE - Toggle random actions mode
+    C     - Toggle contact force visualization
+"""
+
+# Import IsaacGym first
+from isaacgym import gymapi
+
+# Then import PyTorch
+import torch
+
+# Import numpy
+
+# Import loguru
+from loguru import logger
+
+
+class ViewerController:
+    """
+    Handles viewer interactions and keyboard shortcuts for the DexHand environment.
+
+    This component provides functionality to:
+    - Toggle between different camera views (free, rear, right, bottom)
+    - Switch between single robot follow and global view modes
+    - Navigate between different robots in the environment
+    - Reset selected environments
+    - Update camera position based on the current mode
+    """
+
+    def __init__(self, parent):
+        """
+        Initialize the viewer controller and create the viewer.
+
+        Args:
+            parent: Parent object (typically DexHandBase) that provides shared properties
+        """
+        self.parent = parent
+
+        # Create viewer if viewer is enabled in config
+        # Handle both dict and DictConfig access patterns
+        if hasattr(self.parent.cfg, "env"):
+            viewer_enabled = self.parent.cfg.env.viewer
+        else:
+            viewer_enabled = self.parent.cfg["env"]["viewer"]
+
+        if viewer_enabled:
+            self.viewer = self._create_viewer()
+        else:
+            self.viewer = None
+
+        # Camera control state
+        self.camera_view_mode = "free"  # Options: "free", "rear", "right", "bottom"
+        self.camera_follow_mode = (
+            "global"  # Options: "single" (follow one robot), "global" (overview)
+        )
+        self.follow_robot_index = 0  # Which robot to follow in single mode
+
+        # Random actions toggle state
+        self.random_actions_enabled = False
+
+        # Track whether keyboard events have been subscribed
+        self._keyboard_subscribed = False
+
+        # Contact force visualization settings - load from config
+        contact_viz_config = parent.task_cfg.get("contact_visualization", {})
+        self.enable_contact_visualization = contact_viz_config["enabled"]
+        self.contact_force_threshold = contact_viz_config["forceThreshold"]  # Newtons
+        self.contact_force_max_intensity = contact_viz_config[
+            "forceMaxIntensity"
+        ]  # Newtons
+
+        # Load colors from config
+        default_color = contact_viz_config["defaultColor"]
+        self.default_body_color = gymapi.Vec3(
+            default_color[0], default_color[1], default_color[2]
+        )
+
+        # Load base color from config
+        base_color = contact_viz_config["baseColor"]
+        self.contact_base_color = gymapi.Vec3(
+            base_color[0], base_color[1], base_color[2]
+        )
+
+        # Initialize keyboard events if viewer is available
+        if self.viewer is not None:
+            self.subscribe_keyboard_events()
+
+        # Initialize camera caching variables
+        self._camera_target_cache = torch.zeros(3, device="cpu")
+        self._last_camera_mode = None
+        self._last_follow_index = None
+        self._frame_count = 0
+        self._global_view_initialized = False
+
+        # Contact visualization state
+        self._had_contacts = False
+        self._prev_colors = None
+
+    @property
+    def headless(self):
+        """Backward compatibility property - returns inverse of viewer configuration."""
+        # Handle both dict and DictConfig access patterns
+        if hasattr(self.parent.cfg, "env"):
+            return not self.parent.cfg.env.viewer
+        else:
+            return not self.parent.cfg["env"]["viewer"]
+
+    def _create_viewer(self):
+        """Create the viewer and set initial camera position."""
+        # Create viewer
+        viewer = self.gym.create_viewer(self.sim, gymapi.CameraProperties())
+
+        # Subscribe to base keyboard shortcuts
+        self.gym.subscribe_viewer_keyboard_event(viewer, gymapi.KEY_ESCAPE, "QUIT")
+
+        # Set initial camera position to match "rear view" perspective
+        # This gives users a familiar starting view while keeping camera free to move
+        sim_params = self.gym.get_sim_params(self.sim)
+        if sim_params.up_axis == gymapi.UP_AXIS_Z:
+            # Position camera behind and above origin, looking at world center
+            cam_pos = gymapi.Vec3(
+                -1.5, 0.0, 1.0
+            )  # Behind (-X), centered (Y), above (Z)
+            cam_target = gymapi.Vec3(0.0, 0.0, 0.0)  # Look at world origin
+        else:
+            # Y-up axis case (less common)
+            cam_pos = gymapi.Vec3(-1.5, 1.0, 0.0)
+            cam_target = gymapi.Vec3(0.0, 0.0, 0.0)
+
+        self.gym.viewer_camera_look_at(viewer, None, cam_pos, cam_target)
+
+        return viewer
+
+    @property
+    def gym(self):
+        """Access gym from parent (single source of truth)."""
+        return self.parent.gym
+
+    @property
+    def sim(self):
+        """Access sim from parent (single source of truth)."""
+        return self.parent.sim
+
+    @property
+    def envs(self):
+        """Get environments from parent."""
+        return self.parent.envs
+
+    @property
+    def graphics_manager(self):
+        """Access graphics_manager from parent (single source of truth)."""
+        return self.parent.graphics_manager
+
+    @property
+    def num_envs(self):
+        """Get number of environments from parent."""
+        return self.parent.num_envs
+
+    @property
+    def device(self):
+        """Get device from parent."""
+        return self.parent.device
+
+    @property
+    def contact_force_local_body_indices(self):
+        """Access contact force local body indices from parent (single source of truth)."""
+        return self.parent.contact_force_local_body_indices
+
+    @property
+    def rigid_body_states(self):
+        """Access rigid body states from parent (single source of truth)."""
+        return self.parent.rigid_body_states
+
+    def subscribe_keyboard_events(self):
+        """
+        Subscribe to keyboard events for interactive control in the viewer.
+
+        Sets up keyboard shortcuts for:
+        - Enter: Toggle camera view mode (free, rear, right, bottom)
+        - F: Toggle between single robot follow and global view
+        - Up/Down arrows: Navigate to previous/next robot to follow (in single mode)
+        - E: Reset the currently selected environment
+        - Space: Toggle random actions mode
+        - C: Toggle contact force visualization
+        """
+        if self.viewer is None:
+            return
+
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_ENTER, "toggle view mode"
+        )
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_F, "toggle follow mode"
+        )
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_UP, "previous robot"
+        )
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_DOWN, "next robot"
+        )
+        # Use KEY_E for "reset Environment" (single env) to avoid confusion with Pause
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_E, "reset environment"
+        )
+        # Spacebar to toggle random actions
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_SPACE, "toggle random actions"
+        )
+        # C to toggle contact force visualization
+        self.gym.subscribe_viewer_keyboard_event(
+            self.viewer, gymapi.KEY_C, "toggle contact visualization"
+        )
+
+        self._keyboard_subscribed = True
+
+    def check_keyboard_events(self, reset_callback=None):
+        """
+        Process keyboard events for interactive control.
+
+        Args:
+            reset_callback: Callback function to reset environments, takes env_ids as argument
+
+        Returns:
+            Boolean indicating whether any keyboard events were processed
+        """
+        if self.viewer is None:
+            return False
+
+        # Make sure keyboard events are subscribed
+        if not self._keyboard_subscribed:
+            self.subscribe_keyboard_events()
+
+        try:
+            # Process all queued events
+            events_processed = False
+            for evt in self.gym.query_viewer_action_events(self.viewer):
+                events_processed = True
+
+                if evt.action == "toggle view mode" and evt.value > 0:
+                    # Cycle through view modes: free -> rear -> right -> bottom -> free
+                    view_modes = ["free", "rear", "right", "bottom"]
+                    current_idx = view_modes.index(self.camera_view_mode)
+                    self.camera_view_mode = view_modes[
+                        (current_idx + 1) % len(view_modes)
+                    ]
+
+                    # Display current camera state
+                    view_names = {
+                        "free": "Free Camera",
+                        "rear": "Rear View",
+                        "right": "Right View",
+                        "bottom": "Bottom View",
+                    }
+                    follow_text = (
+                        f"following robot {self.follow_robot_index}"
+                        if self.camera_follow_mode == "single"
+                        else "global view"
+                    )
+                    logger.info(
+                        f"Camera: {view_names[self.camera_view_mode]} ({follow_text})"
+                    )
+                elif evt.action == "toggle follow mode" and evt.value > 0:
+                    # Toggle between single robot follow and global view
+                    self.camera_follow_mode = (
+                        "global" if self.camera_follow_mode == "single" else "single"
+                    )
+                    follow_text = (
+                        f"following robot {self.follow_robot_index}"
+                        if self.camera_follow_mode == "single"
+                        else "global view"
+                    )
+                    view_names = {
+                        "free": "Free Camera",
+                        "rear": "Rear View",
+                        "right": "Right View",
+                        "bottom": "Bottom View",
+                    }
+                    logger.info(
+                        f"Camera: {view_names[self.camera_view_mode]} ({follow_text})"
+                    )
+                elif evt.action == "previous robot" and evt.value > 0:
+                    # Move to previous robot (only in single mode)
+                    if self.camera_follow_mode == "single":
+                        self.follow_robot_index = (
+                            self.follow_robot_index - 1
+                        ) % self.num_envs
+                        logger.info(f"Following robot {self.follow_robot_index}")
+                    else:
+                        logger.warning(
+                            "Cannot change robot in global view mode. Press F to switch to single robot mode."
+                        )
+                elif evt.action == "next robot" and evt.value > 0:
+                    # Move to next robot (only in single mode)
+                    if self.camera_follow_mode == "single":
+                        self.follow_robot_index = (
+                            self.follow_robot_index + 1
+                        ) % self.num_envs
+                        logger.info(f"Following robot {self.follow_robot_index}")
+                    else:
+                        logger.warning(
+                            "Cannot change robot in global view mode. Press F to switch to single robot mode."
+                        )
+                elif (
+                    evt.action == "reset environment"
+                    and evt.value > 0
+                    and reset_callback is not None
+                ):
+                    # Reset only the selected environment
+                    logger.info(f"Resetting robot {self.follow_robot_index}")
+                    reset_callback(
+                        torch.tensor([self.follow_robot_index], device=self.device)
+                    )
+                elif evt.action == "toggle random actions" and evt.value > 0:
+                    # Toggle random actions mode
+                    self.random_actions_enabled = not self.random_actions_enabled
+                    state_text = (
+                        "ENABLED" if self.random_actions_enabled else "DISABLED"
+                    )
+                    logger.info(f"Random actions {state_text} (press SPACE to toggle)")
+                elif evt.action == "toggle contact visualization" and evt.value > 0:
+                    # Toggle contact force visualization
+                    self.enable_contact_visualization = (
+                        not self.enable_contact_visualization
+                    )
+                    if self.enable_contact_visualization:
+                        logger.info(
+                            f"Contact force visualization ENABLED (press C to toggle) - "
+                            f"Threshold: {self.contact_force_threshold}N, "
+                            f"Max intensity: {self.contact_force_max_intensity}N"
+                        )
+                    else:
+                        logger.info(
+                            "Contact force visualization DISABLED (press C to toggle)"
+                        )
+
+            return events_processed
+        except Exception:
+            # Handle exceptions silently - this can happen during initialization
+            return False
+
+    def update_camera_position(self, hand_positions):
+        """
+        Update camera position based on the following mode.
+
+        Args:
+            hand_positions: Tensor of hand positions for all environments
+
+        Returns:
+            Boolean indicating whether camera was updated
+        """
+        if self.viewer is None:
+            return False
+
+        # Only update camera if we're not in free mode
+        if self.camera_view_mode == "free":
+            return False
+
+        # Safety check for valid input and index
+        if hand_positions is None or hand_positions.shape[0] == 0:
+            return False
+
+        # Define different camera positions based on the viewing mode
+        camera_offsets = {
+            "rear": gymapi.Vec3(-1.0, 0.0, 0.6),  # Behind the hand
+            "right": gymapi.Vec3(0.0, -1.0, 0.6),  # From the right side
+            "bottom": gymapi.Vec3(0.0, 0.3, -1.0),  # Looking up from below
+        }
+        camera_offset = camera_offsets[self.camera_view_mode]
+
+        # Cache target position to avoid redundant CPU transfers
+
+        # Check if we need to update camera target
+        mode_changed = self._last_camera_mode != (
+            self.camera_follow_mode,
+            self.camera_view_mode,
+        )
+        follow_changed = (
+            self.camera_follow_mode == "single"
+            and self._last_follow_index != self.follow_robot_index
+        )
+
+        # Determine camera target based on follow mode
+        if self.camera_follow_mode == "single":
+            # Follow a specific robot
+            safe_index = min(self.follow_robot_index, hand_positions.shape[0] - 1)
+
+            # Only transfer to CPU if mode/target changed or every N frames
+            if mode_changed or follow_changed or (self._frame_count % 10 == 0):
+                self._camera_target_cache = hand_positions[safe_index].cpu()
+
+            target_pos = self._camera_target_cache.numpy()
+        else:
+            # Global view - use fixed position at world origin
+            # Don't update based on robot positions to avoid oscillation
+            if not self._global_view_initialized or mode_changed:
+                # Initialize to a fixed position (world origin)
+                self._camera_target_cache = torch.zeros(3, device="cpu")
+                self._global_view_initialized = True
+
+            target_pos = self._camera_target_cache.numpy()
+
+            # For global view, use closer camera distance (as if looking at first robot)
+            camera_offset = gymapi.Vec3(
+                -1.5,  # Closer position behind
+                0.0,  # Centered
+                1.0,  # Lower height for closer view
+            )
+
+        # Update tracking variables
+        self._last_camera_mode = (self.camera_follow_mode, self.camera_view_mode)
+        self._last_follow_index = self.follow_robot_index
+        self._frame_count += 1
+
+        try:
+            # Set camera position and target
+            cam_pos = gymapi.Vec3(
+                target_pos[0] + camera_offset.x,
+                target_pos[1] + camera_offset.y,
+                target_pos[2] + camera_offset.z,
+            )
+            cam_target = gymapi.Vec3(target_pos[0], target_pos[1], target_pos[2])
+
+            # Determine which environment to use for camera coordinate system
+            if self.camera_follow_mode == "single" and self.envs:
+                # Use the specific environment we're following
+                safe_index = min(self.follow_robot_index, len(self.envs) - 1)
+                env_handle = self.envs[safe_index]
+
+                # Debug: Log camera positioning for environment switching
+                from loguru import logger
+
+                if self._last_follow_index != safe_index:
+                    logger.debug(
+                        f"Camera switching from env {self._last_follow_index} to env {safe_index}"
+                    )
+                    logger.debug(
+                        f"  Target position: [{target_pos[0]:.3f}, {target_pos[1]:.3f}, {target_pos[2]:.3f}]"
+                    )
+                self._last_follow_index = safe_index
+            else:
+                # For global view or if no env handles available, use None (world coordinates)
+                env_handle = None
+
+            # Update camera with correct environment coordinate system
+            self.gym.viewer_camera_look_at(self.viewer, env_handle, cam_pos, cam_target)
+            return True
+        except Exception:
+            # Handle exceptions silently - this can happen during initialization
+            return False
+
+    def update_contact_force_colors(self, contact_force_magnitudes):
+        """
+        Update body colors based on contact force magnitudes.
+
+        Colors bodies red with intensity proportional to contact force magnitude.
+        Bodies with forces below threshold return to default color.
+
+        Args:
+            contact_force_magnitudes: Tensor of contact force magnitudes [num_envs, num_bodies]
+
+        Returns:
+            Boolean indicating whether colors were updated
+        """
+        if self.viewer is None or not self.enable_contact_visualization:
+            return False
+
+        # Get LOCAL contact force body indices from parent
+        contact_body_local_indices = self.contact_force_local_body_indices
+        if not contact_body_local_indices:
+            return False
+
+        # Get number of bodies per environment for global index computation
+        num_bodies_per_env = self.rigid_body_states.shape[1]
+
+        # Expect pre-computed force magnitudes - fail fast if wrong format
+        if contact_force_magnitudes.dim() != 2:
+            raise RuntimeError(
+                f"Expected contact_force_magnitudes tensor with 2 dimensions [num_envs, num_bodies], got shape: {contact_force_magnitudes.shape}"
+            )
+
+        # Extract force magnitudes only for bodies with valid indices
+        # contact_body_local_indices contains only bodies that resolved to valid indices
+        force_magnitudes = contact_force_magnitudes[
+            :, : len(contact_body_local_indices)
+        ]
+        has_contact = force_magnitudes > self.contact_force_threshold
+
+        # Early exit if no contacts
+        if not has_contact.any():
+            # Reset all colors to default if we had previous contacts
+            if self._had_contacts:
+                self._reset_all_colors_to_default(
+                    contact_body_local_indices, num_bodies_per_env
+                )
+                self._had_contacts = False
+            return False
+
+        self._had_contacts = True
+
+        # Vectorized normalization of forces
+        normalized_forces = (force_magnitudes - self.contact_force_threshold) / (
+            self.contact_force_max_intensity - self.contact_force_threshold
+        )
+        normalized_forces = torch.clamp(normalized_forces, 0.0, 1.0)  # Clamp to [0, 1]
+
+        # Pre-compute color differences for vectorized interpolation
+        color_diff_r = self.contact_base_color.x - self.default_body_color.x
+        color_diff_g = self.contact_base_color.y - self.default_body_color.y
+        color_diff_b = self.contact_base_color.z - self.default_body_color.z
+
+        # Compute all colors vectorized on GPU
+        # Shape: [num_envs, num_bodies, 3]
+        all_colors = torch.zeros(
+            (self.num_envs, len(contact_body_local_indices), 3),
+            device=contact_force_magnitudes.device,
+        )
+
+        # Set default colors
+        all_colors[:, :, 0] = self.default_body_color.x
+        all_colors[:, :, 1] = self.default_body_color.y
+        all_colors[:, :, 2] = self.default_body_color.z
+
+        # Update colors where there's contact
+        # has_contact and normalized_forces are [num_envs, num_bodies]
+        # all_colors is [num_envs, num_bodies, 3]
+        # Use proper tensor indexing to update RGB channels
+        all_colors[:, :, 0] += has_contact * color_diff_r * normalized_forces
+        all_colors[:, :, 1] += has_contact * color_diff_g * normalized_forces
+        all_colors[:, :, 2] += has_contact * color_diff_b * normalized_forces
+
+        # Track which bodies need color updates to minimize API calls
+        if self._prev_colors is None:
+            self._prev_colors = torch.full_like(
+                all_colors, -1.0
+            )  # Initialize with invalid color
+
+        # Find which colors have changed
+        color_changed = ~torch.isclose(all_colors, self._prev_colors, atol=0.01).all(
+            dim=-1
+        )
+        if not color_changed.any():
+            return True  # No color changes needed
+
+        # Store current colors for next comparison
+        self._prev_colors = all_colors.clone()
+
+        # Batch extract color components to minimize .item() calls
+        # Flatten the color data and move to CPU in one operation
+        colors_flat = all_colors.reshape(-1, 3).cpu()
+
+        # Pre-extract all color values at once
+        color_values = colors_flat.numpy()  # Single CPU transfer
+
+        # Update colors only for bodies that changed
+        bodies_to_update = torch.nonzero(color_changed).cpu().numpy()
+
+        for update_idx in range(len(bodies_to_update)):
+            env_idx = bodies_to_update[update_idx, 0]
+            body_idx = bodies_to_update[update_idx, 1]
+            local_body_idx = contact_body_local_indices[body_idx]
+
+            # Compute global body index for Isaac Gym API
+            global_body_idx = env_idx * num_bodies_per_env + local_body_idx
+
+            # Get color values from pre-extracted array
+            flat_idx = env_idx * len(contact_body_local_indices) + body_idx
+            color = gymapi.Vec3(
+                float(color_values[flat_idx, 0]),
+                float(color_values[flat_idx, 1]),
+                float(color_values[flat_idx, 2]),
+            )
+
+            # Set the rigid body color
+            self.gym.set_rigid_body_color(
+                self.envs[env_idx],
+                self.parent.hand_handles[env_idx],
+                global_body_idx,
+                gymapi.MESH_VISUAL,
+                color,
+            )
+
+        return True
+
+    def _reset_all_colors_to_default(
+        self, contact_body_local_indices, num_bodies_per_env
+    ):
+        """Reset all contact body colors to default when no contacts detected."""
+        for env_idx in range(self.num_envs):
+            for body_idx, local_body_idx in enumerate(contact_body_local_indices):
+                global_body_idx = env_idx * num_bodies_per_env + local_body_idx
+                self.gym.set_rigid_body_color(
+                    self.envs[env_idx],
+                    self.parent.hand_handles[env_idx],
+                    global_body_idx,
+                    gymapi.MESH_VISUAL,
+                    self.default_body_color,
+                )
+
+    def render(self, mode="rgb_array", reset_callback=None, obs_dict=None):
+        """
+        Handle viewer rendering and keyboard events.
+
+        Args:
+            mode: Rendering mode (currently only supports "rgb_array")
+            reset_callback: Callback function to reset environments, takes env_ids as argument
+            obs_dict: Observation dictionary containing contact force data
+
+        Returns:
+            None or image array if in rgb_array mode
+        """
+        if self.viewer is None:
+            return None
+
+        # Check for window closed
+        if self.gym.query_viewer_has_closed(self.viewer):
+            import sys
+
+            sys.exit()
+
+        # Process all keyboard events using check_keyboard_events
+        # This handles E, G, UP, DOWN keys properly
+        self.check_keyboard_events(reset_callback=reset_callback)
+
+        # Fetch results if using GPU
+        if self.parent.device != "cpu":
+            self.gym.fetch_results(self.sim, True)
+
+        # Update contact force visualization if enabled
+        if self.enable_contact_visualization:
+            if obs_dict is None:
+                raise RuntimeError(
+                    "obs_dict is None - contact visualization requires observation data"
+                )
+            if "contact_force_magnitude" not in obs_dict:
+                raise RuntimeError(
+                    "contact_force_magnitude missing from obs_dict - observation system initialization failed"
+                )
+            # Use pre-computed contact force magnitudes from obs_dict
+            self.update_contact_force_colors(obs_dict["contact_force_magnitude"])
+
+        # Update viewer via GraphicsManager
+        # Note: GraphicsManager.step_graphics() should be called by DexHandBase before this
+        self.graphics_manager.update_viewer(self.viewer)
+
+        # ViewerController only handles on-screen display and interaction
+        # Video capture is handled by VideoManager (unified path)
+        # Real-time synchronization is handled at DexHandBase level
+        return None

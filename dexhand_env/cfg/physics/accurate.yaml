@@ -1,0 +1,11 @@
+# @package sim
+# Accurate physics configuration - maximum precision for training
+defaults:
+  - default    # Inherit from default.yaml
+  - _self_     # Override with accurate-specific settings
+
+# Only override precision-specific parameters
+substeps: 32                    # Enhanced substeps for stability
+
+physx:
+  num_position_iterations: 32   # Enhanced for penetration mitigation
