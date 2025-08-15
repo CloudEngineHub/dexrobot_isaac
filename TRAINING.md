@@ -1,463 +1,226 @@
-# Training DexHand RL Policies
+# Training and Testing Guide
 
-This document describes how to train reinforcement learning policies for the DexHand environment using the rl_games library.
-
-**Related Documentation:**
-- [Getting Started](docs/GETTING_STARTED.md) - Quick setup and first training run
-- [Configuration System Guide](docs/guide-configuration-system.md) - 4-section hierarchy and physics configs
-- [System Architecture](docs/ARCHITECTURE.md) - Design principles and component structure
-- [Task Creation Guide](docs/guide-task-creation.md) - Creating custom manipulation tasks
-- [DOF and Action Control API](docs/reference-dof-control-api.md) - Understanding action spaces
-- [Terminology Glossary](docs/GLOSSARY.md) - Definitions of key concepts
+Get your RL policies training in 30 seconds. This guide covers the essentials - for deep configuration details, see [docs/guide-configuration-system.md](docs/guide-configuration-system.md).
 
 ## Quick Start
 
-### Basic Training
-
-To start training a policy with default settings:
+### 1. Basic Training
 
 ```bash
-python train.py
+python train.py config=train_headless task=BlindGrasping
 ```
 
-### Training with Custom Configuration
+**What this does:**
+- `config=train_headless` → Loads `train_headless.yaml` which sets:
+  - Training mode with PPO algorithm
+  - 8192 parallel environments for fast training
+  - No viewer (headless) for maximum performance
+- `task=BlindGrasping` → Loads `BlindGrasping.yaml` which defines:
+  - Task-specific rewards, observations, and termination criteria
+  - Episode length, control mode, and physics settings
 
-The project uses Hydra for configuration management. You can override any configuration parameter using either full paths or simplified aliases:
+### 2. Basic Testing
 
 ```bash
-# Train with different task and environment count
-python train.py task=BlindGrasping numEnvs=2048
-
-# Training with visualization (fewer environments for better performance)
-python train.py viewer=true numEnvs=64
-
-# Use predefined configuration
-python train.py config=train_headless
+python train.py config=test_viewer task=BlindGrasping checkpoint=latest
 ```
 
-> **CLI Aliases:** The training script supports convenient aliases that map to full Hydra configuration paths. See the alias reference table below for the complete mapping.
+**What this does:**
+- `config=test_viewer` → Loads `test_viewer.yaml` which sets:
+  - Test mode (`train.test=true`)
+  - 4 environments for smooth visualization
+  - Isaac Gym viewer enabled
+- `task=BlindGrasping` → Same task configuration as training
+- `checkpoint=latest` → Automatically finds your most recent training run:
+  - Reads `runs/latest_train` symlink
+  - Loads newest checkpoint from `nn/` subdirectory
+  - Hot-reloads new checkpoints every 30 seconds during training
 
-### Test Mode with Automatic Rendering
+**Alternative test configs:**
+- `config=test_stream` - HTTP video streaming (access at `http://localhost:58080`)
+- `config=test_record` - Save videos to disk
 
-Test mode automatically enables rendering by default:
+### 3. Training with Simple Customization
 
 ```bash
-# Test mode (renders by default) with smart checkpoint resolution
-python train.py test=true checkpoint=latest
-
-# Test specific task with directory auto-resolution
-python train.py task=BlindGrasping test=true checkpoint=runs/BlindGrasping_20250707_183716
-
-# Force headless in test mode
-python train.py test=true checkpoint=latest viewer=false
-
-# Hot-reload test mode (reloads checkpoint every 30 seconds)
-python train.py test=true checkpoint=path/to/checkpoint.pth train.reloadInterval=30
+python train.py config=train_headless task=BlindGrasping numEnvs=1024
 ```
 
-### CLI Alias Reference
+**CLI overrides:** Any config value can be overridden directly. Common aliases:
 
-The training script supports convenient aliases that map to full Hydra configuration paths:
+| Alias | Full Path | Example |
+|-------|-----------|---------|
+| `numEnvs` | `env.numEnvs` | `numEnvs=2048` |
+| `viewer` | `env.viewer` | `viewer=true` |
+| `maxIterations` | `train.maxIterations` | `maxIterations=5000` |
+| `seed` | `train.seed` | `seed=123` |
+| `device` | `env.device` | `device=cuda:1` |
+| `testGamesNum` | `train.testGamesNum` | `testGamesNum=0` (indefinite) |
+| `checkpoint` | `train.checkpoint` | `checkpoint=runs/my_experiment/nn/last.pth` |
 
-| Alias | Full Path | Description |
-|-------|-----------|-------------|
-| `config` | `--config-name` | Configuration file to use |
-| `numEnvs` | `env.numEnvs` | Number of parallel environments |
-| `test` | `train.test` | Enable test mode |
-| `checkpoint` | `train.checkpoint` | Checkpoint path for testing |
-| `seed` | `train.seed` | Random seed |
-| `viewer` | `env.viewer` | Enable visualization |
-| `device` | `env.device` | CUDA device (e.g., "cuda:0") |
-| `maxIterations` | `train.maxIterations` | Maximum training iterations |
-| `logLevel` | `logging.logLevel` | Logging level for entire system (debug, info, warning) |
-
-> **Note**: The `logLevel` setting controls logging for both the training script and the environment/simulation. This provides a unified logging experience across the entire system.
-
-**Usage Examples:**
-```bash
-# Using aliases (recommended for simplicity)
-python train.py task=BlindGrasping numEnvs=1024 viewer=true
-
-# Control logging level for entire system
-python train.py logLevel=debug  # Enable debug logging everywhere
-python train.py logLevel=warning  # Only show warnings and errors
-
-# Using full paths (equivalent)
-python train.py task=BlindGrasping env.numEnvs=1024 env.viewer=true
-
-# Smart checkpoint resolution:
-checkpoint=latest                    # Auto-finds latest training experiment
-checkpoint=latest_train              # Explicit latest training experiment
-checkpoint=latest_test               # Explicit latest testing experiment
-checkpoint=runs/experiment_dir       # Auto-finds .pth file in directory
-```
-
-## Configuration Structure
-
-The DexHand system uses a clean 4-section configuration hierarchy. See the [Configuration System Guide](docs/guide-configuration-system.md) for detailed information.
-
-### Main Configuration Sections
-
-- **`sim`**: Physics simulation parameters (dt, substeps, PhysX settings)
-- **`env`**: Environment setup (numEnvs, device, viewer, task objects)
-- **`task`**: RL task definition (episodes, observations, rewards, termination)
-- **`train`**: Training algorithm configuration (rl_games parameters, logging)
-
-### Physics Configuration Selection
-
-Choose physics configuration based on your use case:
+### 4. Full Customization
 
 ```bash
-# High precision training (slower but more accurate)
-python train.py task=BlindGrasping +defaults=[config,/physics/accurate]
-
-# Fast physics for visualization (faster but less precise)
-python train.py -cn test_viewer   # Uses /physics/fast automatically
-
-# Custom physics selection
-python train.py +defaults=[config,/physics/accurate]
-python train.py +defaults=[config,/physics/fast] viewer=true
+python train.py config=train_headless task=BlindGrasping task.reward_weights.object_height=0.5
 ```
 
-**Available Physics Configs:**
-- `physics/default`: Balanced quality/performance for BaseTask
-- `physics/fast`: ~2-3x faster for real-time visualization
-- `physics/accurate`: ~2-3x slower but higher precision for training
+**Nested overrides:** Use dot notation to override any nested config value:
+- `task.reward_weights.object_height=0.5` - Adjust specific reward weight
+- `sim.physx.num_position_iterations=32` - Increase physics accuracy
+- `task.episodeLength=1000` - Longer episodes
+- `env.box.size=0.08` - Larger grasping object
 
-### Available Tasks
+This enables controlled experiments - change one parameter at a time to measure impact.
 
-- `BaseTask`: Basic environment for testing and development
-- `BlindGrasping`: Grasping and manipulation task with box objects
+## How the Config System Works
 
-### Environment Parameters
+The configuration uses [Hydra](https://hydra.cc/) with a clean hierarchy:
 
-- `env.numEnvs`: Number of parallel environments (default: 1024)
-- `env.device`: Device for simulation and RL algorithm (default: "cuda:0")
-- `env.graphicsDeviceId`: Graphics device ID (default: 0)
-- `env.viewer`: Interactive visualization window (true/false)
-- `env.videoRecord`: Enable video recording to disk (true/false)
-- `env.videoStream`: Enable video streaming over network (true/false)
+```
+config=train_headless  →  Selects base configuration preset
+task=BlindGrasping     →  Loads task-specific settings
+numEnvs=1024          →  CLI override (alias expanded to env.numEnvs)
+```
 
-### Training Parameters
+**Config composition order:**
+1. Base `config.yaml` (defaults)
+2. Selected config file (e.g., `train_headless.yaml`)
+3. Task file (e.g., `task/BlindGrasping.yaml`)
+4. CLI overrides (highest priority)
 
-- `train.seed`: Random seed, use -1 for random (default: 42)
-- `train.torchDeterministic`: Use deterministic algorithms for reproducibility
-- `train.checkpoint`: Path to checkpoint to resume from
-- `train.test`: Run in test mode (no training)
-- `train.maxIterations`: Maximum training iterations (default: 10000)
-- `train.reloadInterval`: Checkpoint hot-reload interval in test mode (seconds)
+**The checkpoint=latest resolution process:**
+1. `checkpoint=latest` → defaults to `checkpoint=latest_train`
+2. Follows `runs/latest_train` symlink to actual experiment directory
+3. Searches `nn/` subdirectory for newest `.pth` file
+4. Returns full path to that checkpoint file
 
-### Experiment Management Parameters
+**Other checkpoint shortcuts:**
+- `checkpoint=latest_test` - finds most recent test run
+- `checkpoint=runs/BlindGrasping_train_20240101` - auto-finds `.pth` in directory
+- `checkpoint=runs/experiment/nn/specific.pth` - direct path to file
 
-- `experiment.maxTrainRuns`: Maximum recent training runs to keep in workspace (default: 10)
-- `experiment.maxTestRuns`: Maximum recent testing runs to keep in workspace (default: 10)
-- `experiment.useCleanWorkspace`: Enable workspace management system (default: true)
+**With hot-reload enabled:** The system monitors the resolved directory every 30 seconds (configurable via `reloadInterval`) and automatically loads newer checkpoints as they appear
 
-> **Note**: Previously `experiment.maxRecentRuns` was a single parameter, now split into separate limits for training and testing runs.
+See [docs/guide-indefinite-testing.md](docs/guide-indefinite-testing.md) for continuous monitoring setup.
 
-### Logging Parameters
+## Common Training Scenarios
 
-- `logging.experiment_name`: Name for the experiment (auto-generated if null)
-- `logging.log_interval`: Logging interval in episodes (default: 10)
-
-## Configuration Examples
-
-### Physics Configuration Override
-
+### Debug Training
 ```bash
-# Training examples with different physics configs
-python train.py task=BlindGrasping +defaults=[config,/physics/accurate]  # Explicit accurate physics
-python train.py task=BaseTask                       # Uses default physics
-python train.py +defaults=[config,/physics/fast]   # Override with fast physics
-
-# Test mode with visualization
-python train.py test=true viewer=true -cn test_viewer  # Uses fast physics automatically
-
-# Custom physics + other overrides
-python train.py task=BlindGrasping numEnvs=512 viewer=true +defaults=[config,/physics/accurate]
+# Few environments with visualization
+python train.py config=train_headless task=BlindGrasping numEnvs=4 viewer=true
 ```
 
-### Configuration Hierarchy Overrides
-
+### Fast Iteration
 ```bash
-# Override sim section (physics)
-python train.py sim.dt=0.01 sim.substeps=8
-
-# Override env section (environment)
-python train.py env.numEnvs=2048 env.viewer=true
-
-# Override task section (RL parameters)
-python train.py task.episodeLength=300 task.rewardWeights.object_height=2.0
-
-# Override train section (training algorithm)
-python train.py train.seed=123 train.maxIterations=5000
-
-# Complex override example
-python train.py task=BlindGrasping env.numEnvs=1024 sim.dt=0.005 task.episodeLength=400
+# Quick training runs for testing changes
+python train.py config=train_headless task=BlindGrasping maxIterations=100 numEnvs=256
 ```
 
-## Training Examples
-
-### Resume Training from Checkpoint
-
+### Production Training
 ```bash
-# Using simplified syntax with smart checkpoint resolution
-python train.py task=BaseTask checkpoint=runs/BaseTask_20240101_120000
-
-# Using full path
-python train.py task=BaseTask train.checkpoint=runs/BaseTask_20240101_120000/nn/checkpoint_1000.pth
+# Maximum performance with accurate physics
+python train.py config=train_headless task=BlindGrasping numEnvs=8192 +defaults=[config,/physics/accurate]
 ```
 
-### Test a Trained Policy
-
+### Continuous Monitoring
 ```bash
-# Using simplified syntax
-python train.py task=BaseTask test=true checkpoint=latest
+# Terminal 1: Training
+python train.py config=train_headless task=BlindGrasping
 
-# Test with specific checkpoint
-python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000
-
-# Test with hot-reload (checkpoint reloads every 30 seconds)
-python train.py task=BaseTask test=true checkpoint=runs/BaseTask_20240101_120000 train.reloadInterval=30
+# Terminal 2: Live testing with auto-reload
+python train.py config=test_viewer task=BlindGrasping checkpoint=latest testGamesNum=0
 ```
 
-### Indefinite Testing and Test Duration Control
-
-By default, testing runs for a finite number of games (100) then terminates. You can control test duration using the `testGamesNum` parameter:
-
+### Experiment Comparison
 ```bash
-# Finite testing: run exactly 25 games
-python train.py task=BaseTask test=true checkpoint=latest testGamesNum=25
+# Run 1: Baseline
+python train.py config=train_headless task=BlindGrasping
 
-# Indefinite testing: run until manual termination (Ctrl+C)
-python train.py task=BaseTask test=true checkpoint=latest testGamesNum=0
+# Run 2: Higher reward weight
+python train.py config=train_headless task=BlindGrasping task.reward_weights.object_height=2.0
 
-# Indefinite testing with hot-reload: powerful development workflow
-python train.py task=BaseTask test=true checkpoint=latest testGamesNum=0 reloadInterval=30 env.viewer=true
-
-# Headless indefinite testing for extended evaluation
-python train.py task=BaseTask test=true checkpoint=latest testGamesNum=0 headless=true env.numEnvs=32
+# Run 3: Different physics
+python train.py config=train_headless task=BlindGrasping +defaults=[config,/physics/accurate]
 ```
 
-**Test Duration Options:**
-- `testGamesNum=N` (N > 0): Run exactly N games then terminate
-- `testGamesNum=0`: Run indefinitely until manual termination with Ctrl+C
-- Combined with `reloadInterval=30`: Automatically reload newer checkpoints every 30 seconds
+## Test Mode Options
 
-**Indefinite Testing Use Cases:**
-- **Live Policy Development**: Watch policy behavior update in real-time as training progresses
-- **Extended Evaluation**: Long-running tests to assess policy stability and performance
-- **Interactive Debugging**: Manual observation of policy behavior over extended periods
-- **Demo and Presentation**: Continuous policy demonstration for showcasing results
+### Interactive Viewer
+```bash
+python train.py config=test_viewer task=BlindGrasping checkpoint=latest
+# Keyboard controls available, 4 environments, local display
+```
 
-**Best Practices:**
-- Use `env.viewer=true` for interactive observation
-- Use `headless=true` for background/overnight testing
-- Scale `env.numEnvs` based on GPU memory for better statistics
-- Always terminate indefinite testing with Ctrl+C for clean shutdown
-
-> **Advanced Workflow:** For comprehensive indefinite testing workflows including automated scripts and development integration, see [Indefinite Testing Guide](docs/guide-indefinite-testing.md).
+### HTTP Streaming
+```bash
+python train.py config=test_stream task=BlindGrasping checkpoint=latest streamBindAll=true
+# Access at http://server-ip:58080, no local display needed
+```
 
 ### Video Recording
-
 ```bash
-# Record video in headless mode
-python train.py task=BlindGrasping test=true checkpoint=latest env.viewer=false env.videoRecord=true
-
-# Record video with rendering
-python train.py task=BlindGrasping test=true checkpoint=latest env.viewer=true env.videoRecord=true
+python train.py config=test_record task=BlindGrasping checkpoint=latest
+# Saves MP4 files to runs/{experiment}/videos/
 ```
 
-> **Video Output:** Videos are saved in MP4 format to the Hydra output directory, typically `outputs/<YYYY-MM-DD>/<HH-MM-SS>/videos/`. Video recording may have a minor impact on performance but is useful for debugging and visualization.
+## Experiment Management
 
-### Multi-GPU Training
-
-For multi-GPU training, use PyTorch's distributed launch:
-
-```bash
-python -m torch.distributed.launch --nproc_per_node=2 train.py task=BaseTask env.numEnvs=2048 env.viewer=false
-```
-
-## Training Configuration
-
-Training hyperparameters are defined in YAML configuration files located in `dexhand_env/cfg/train/`. See the [rl_games documentation](https://github.com/Denys88/rl_games) for parameter descriptions.
-
-### Creating Custom Training Configs
-
-To create a custom training configuration:
-
-1. Copy an existing config file:
-   ```bash
-   cp dexhand_env/cfg/train/BaseTaskPPO.yaml dexhand_env/cfg/train/MyTaskPPO.yaml
-   ```
-
-2. Modify the hyperparameters as needed
-
-3. Use it for training:
-   ```bash
-   python train.py task=MyTask train=MyTaskPPO
-   ```
-
-## Output Structure
-
-Training outputs use an intelligent workspace management system:
+The system uses intelligent workspace management to keep experiments organized:
 
 ```
-runs_all/                   # Permanent archive (all experiments)
-├── BaseTask_20240101_120000/
-│   ├── config.yaml        # Complete configuration
-│   ├── train.log         # Training logs
-│   └── nn/               # Neural network checkpoints
-│       ├── checkpoint_100.pth
-│       └── checkpoint_best.pth
-└── BlindGrasping_20240102_150000/
-    └── ...
+runs/                          # Clean workspace (recent runs + symlinks)
+├── BlindGrasping_train_...    # → symlink to runs_all/
+├── latest_train               # → always points to newest training
+└── latest_test                # → always points to newest test
 
-runs/                      # Clean workspace (recent experiments + latest symlinks)
-├── BaseTask_train_20240101_120000/     # symlink → runs_all/BaseTask_train_20240101_120000/
-├── BlindGrasping_test_20240102_150000/   # symlink → runs_all/BlindGrasping_test_20240102_150000/
-├── ... (more recent symlinks)
-├── latest_train                        # symlink → latest training experiment
-└── latest_test                         # symlink → latest testing experiment
+runs_all/                      # Permanent archive (never deleted)
+└── BlindGrasping_train_...    # Actual experiment data
+    ├── config.yaml
+    ├── train.log
+    └── nn/
+        └── checkpoint_*.pth
 ```
 
-### Workspace Management Features
-
-- **Clean workspace**: `runs/` shows recent training and testing experiments as symlinks
-- **Full archive**: `runs_all/` contains all experiments permanently (never auto-deleted)
-- **Separate limits**: Configurable limits for training runs (`maxTrainRuns`) and testing runs (`maxTestRuns`)
-- **Latest symlinks**: `runs/latest_train` and `runs/latest_test` always point to most recent experiments
-- **Automatic cleanup**: Old symlinks are removed automatically to maintain configured limits
-- **Smart checkpoint resolution**: CLI tools find checkpoints in both locations automatically
-
-## Monitoring Training
-
-### TensorBoard
-
-Training metrics are automatically logged to TensorBoard:
-
-```bash
-tensorboard --logdir runs/
-```
-
-### Console Output
-
-The training script prints statistics every `log_interval` episodes:
-- Average reward
-- Episode length
-- Learning rate
-- Policy loss
-- Value loss
-- Entropy
-
-## Using Custom Reward Functions
-
-To use custom reward functions in your training:
-
-1. **Configure reward weights** in your task config file:
-   ```yaml
-   # In your custom task config: my_custom_task.yaml
-   reward:
-     # Standard rewards
-     alive: 1.0
-     height_safety: -10.0
-     # Custom task-specific rewards
-     my_custom_reward: 2.0
-     distance_penalty: -0.5
-   ```
-
-2. **Implement the reward logic** in your task class - see the [Task Creation Guide](docs/guide-task-creation.md) for detailed implementation examples and [System Architecture](docs/ARCHITECTURE.md) for component interaction patterns.
-
-> **Fail-Fast Training:** The training script performs extensive configuration checks before launching Isaac Sim. If it detects an error, it will exit immediately. This 'fail-fast' approach saves you from waiting for the simulation to load only to have it crash seconds later due to a simple typo in a config file.
-
-## Troubleshooting Training Issues
-
-**Enable Debug Logging:** For detailed troubleshooting, enable debug logging across the entire system:
-```bash
-python train.py logLevel=debug
-```
-This will show detailed information from both the training script and the environment/simulation.
-
-For comprehensive troubleshooting including component initialization, reward system problems, action space mismatches, and performance issues, see the **[Troubleshooting Guide](docs/TROUBLESHOOTING.md)**.
-
-For general rl_games troubleshooting, see [rl_games documentation](https://github.com/Denys88/rl_games).
-
-## Organizing Your Experiments
+**Key features:**
+- **Auto-cleanup**: Only keeps 10 recent runs visible in `runs/` (configurable)
+- **Permanent archive**: All experiments preserved in `runs_all/`
+- **Latest symlinks**: `checkpoint=latest` uses `runs/latest_train`
+- **Smart resolution**: CLI finds checkpoints in both locations automatically
 
 ### Pinning Important Experiments
 
-When you find an experiment worth keeping permanently visible:
+Keep your best models easily accessible:
 
 ```bash
-# After training completes, pin your favorite experiment
-mv runs/BlindGrasping_excellent_results_20240101_120000 runs/pinned/
+# Pin a successful experiment
+mv runs/BlindGrasping_excellent_20240101_120000 runs/pinned/best_model
 
-# Or give it a meaningful name when pinning
-mv runs/BlindGrasping_train_20240101_120000 runs/pinned/best_grasping_model
+# Create shortcut without moving (using cp -P to copy symlink)
+cp -P runs/BlindGrasping_train_20240101_120000 runs/pinned/paper_results
 ```
-
-**Benefits of pinning:**
-- Pinned experiments remain in `runs/pinned/` permanently
-- They don't get moved to archive or cleaned up automatically
-- Easy access to your best models for testing and comparison
-- Survives workspace cleanup when you exceed the recent runs limit
-
-### Alternative: Linking Experiments with `cp -P`
-
-If you want to create shortcuts to experiments without moving them from their original locations, use `cp -P` to copy symbolic links:
-
-```bash
-# Create a pinned shortcut while keeping experiment in runs/
-cp -P runs/BlindGrasping_train_20250724_120120 runs/pinned/latest_train
-
-# Update the latest_train shortcut to point to a different experiment
-cp -P runs/BlindGrasping_train_20250801_095943 runs/latest_train
-
-# Create multiple named shortcuts to the same experiment
-cp -P runs/BlindGrasping_train_20250724_120120 runs/pinned/breakthrough_model
-cp -P runs/BlindGrasping_train_20250724_120120 runs/pinned/paper_results
-```
-
-**How `cp -P` works:**
-- The `-P` flag preserves symbolic links when copying them
-- Instead of copying the target directory, it copies the link itself
-- The original experiment remains in its location (either `runs/` or `runs_all/`)
-- Creates additional access points without duplicating data
-
-**When to use `cp -P` vs `mv`:**
-- Use `cp -P` when you want the experiment to remain accessible in its original location
-- Use `cp -P` to create multiple shortcuts to the same experiment
-- Use `mv` when you want the experiment to only appear in the pinned directory
-- Use `mv` for permanent archival of experiments that cluttered the workspace
-
-### Workspace Cleanup
-
-The system automatically maintains a clean workspace:
-
-- Only 10 most recent experiments shown in `runs/` (configurable via `experiment.maxTrainRuns` and `experiment.maxTestRuns`)
-- Older experiments automatically moved to archive symlinks
-- All experiment data preserved permanently in `runs_all/`
-- Pinned experiments in `runs/pinned/` never auto-cleaned
 
 ### Finding Old Experiments
 
-All experiments are always preserved and accessible:
-
 ```bash
-# Search in full archive
+# Search archive
 ls runs_all/ | grep BlindGrasping
 
-# Smart checkpoint resolution works with archived experiments
-python train.py test=true checkpoint=runs_all/old_experiment_20231201_100000
-
-# Latest checkpoint resolution searches both locations automatically
-python train.py test=true checkpoint=latest
+# Use archived checkpoints directly
+python train.py test=true checkpoint=runs_all/old_experiment_20231201/nn/checkpoint.pth
 ```
 
-### Disabling Workspace Management
+## Tips
 
-To use legacy behavior (all experiments directly in `runs/`):
+1. **Start simple**: Use basic commands first, add customization as needed
+2. **Monitor training**: Use `checkpoint=latest` with `testGamesNum=0` for live monitoring
+3. **Check configs**: Run with `--cfg job` to see resolved configuration
+4. **Experiment tracking**: Each run creates a timestamped directory in `runs/`
+5. **Physics tuning**: Use `/physics/fast` for testing, `/physics/accurate` for final training
 
-```bash
-python train.py experiment.useCleanWorkspace=false
-```
+## Related Documentation
+
+- [Configuration System](docs/guide-configuration-system.md) - Full configuration reference
+- [Indefinite Testing](docs/guide-indefinite-testing.md) - Continuous policy monitoring
+- [Task Creation](docs/guide-task-creation.md) - Create custom tasks
+- [Physics Tuning](docs/guide-physics-tuning.md) - Optimize simulation settings
