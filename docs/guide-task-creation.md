@@ -402,35 +402,60 @@ def compute_task_observations(self):
     return obs
 ```
 
-## Best Practices
+## Task Implementation Checklist
 
-### Task Design
+### Required Task Methods
+```python
+# These methods MUST be implemented in your task:
+def initialize_task_buffers(self):
+    """Create task-specific tensors"""
+    self.target_positions = torch.zeros((self.num_envs, 3), device=self.device)
 
-1. **Start Simple**: Begin with basic reach/touch tasks before complex manipulation
-2. **Incremental Complexity**: Add complexity gradually (reach → grasp → manipulate)
-3. **Clear Success Criteria**: Define objective, measurable success conditions
-4. **Balanced Rewards**: Avoid reward engineering that leads to unexpected behaviors
+def compute_task_reward_terms(self):
+    """Return dict of raw reward values (no weights)"""
+    return {"reach_distance": -torch.norm(hand_pos - target_pos, dim=-1)}
 
-### Implementation Guidelines
+def compute_task_terminations(self):
+    """Return success/failure dictionaries"""
+    return {"target_reached": distance < 0.05}, {"timeout": False}
 
-1. **Follow Fail-Fast Philosophy**: Don't hide errors with defensive programming
-2. **Use Tensors**: All computations should be vectorized for parallel environments
-3. **Proper Reset**: Always reset task state in `reset_task_state()`
-4. **Observation Consistency**: Ensure observations are always the same shape/type
+def reset_task_state(self, env_indices):
+    """Reset task-specific state for given environments"""
+    self.target_positions[env_indices] = torch.rand(...) * 0.2 - 0.1
+```
 
-### Reward Engineering
+### Repository-Specific Patterns
 
-1. **Dense Rewards**: Provide continuous feedback for learning
-2. **Shaped Rewards**: Guide the agent toward desired behaviors
-3. **Avoid Reward Hacking**: Test for unintended optimal policies
-4. **Scale Appropriately**: Balance different reward components
+**Reward Terms**: Always return raw values in `compute_task_reward_terms()`:
+```python
+# ✅ CORRECT - raw distance value
+return {"reach_distance": -distance}
 
-### Debugging Tips
+# ❌ WRONG - never apply weights in task
+return {"reach_distance": -distance * 5.0}  # Weight applied in wrong place!
+```
 
-1. **Visualization**: Use rendering to verify task setup
-2. **Logging**: Add debug prints for reward components
-3. **Small Scale**: Test with few environments first
-4. **Step Through**: Use debugger to verify tensor operations
+**Tensor Operations**: Use batch operations for all environments:
+```python
+# ✅ CORRECT - vectorized for all environments
+distances = torch.norm(self.hand_positions - self.targets, dim=-1)
+
+# ❌ WRONG - loop over environments
+for i in range(self.num_envs):
+    distances[i] = np.linalg.norm(...)  # CPU operation!
+```
+
+**Debug with Repository Tools**:
+```bash
+# Test task with visualization
+python train.py task=YourTask test=true viewer=true numEnvs=1
+
+# Log reward components
+python train.py task=YourTask train.logging.logLevel=DEBUG
+
+# Validate observations
+python examples/dexhand_test.py task=YourTask --episode-length 10
+```
 
 ## Common Patterns
 

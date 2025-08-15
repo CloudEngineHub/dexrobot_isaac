@@ -20,7 +20,7 @@ This guide explains how to tune physics parameters for stable simulation, partic
 
 ## Modular Physics Configuration System
 
-The DexHand system uses modular physics configurations that can be selected based on your use case:
+The DexHand system provides three physics configurations optimized for different scenarios:
 
 ### Available Physics Configurations
 
@@ -114,7 +114,7 @@ See the [Configuration System Guide](guide-configuration-system.md) for detailed
 - High-fidelity simulation timestep for dexterous manipulation
 - Smaller timesteps improve numerical stability and contact resolution
 - Excellent for capturing rapid finger-object interactions
-- Auto-detected control frequency typically 100-200 Hz
+- Control frequency auto-detected after physics measurement
 
 **`substeps: 1`**
 - Reduced from previous default (4) due to higher frequency
@@ -150,7 +150,7 @@ rest_offset: 0.0005     # Objects rest at 0.5mm (maintains contact)
 ### 1. Start with Default Configuration
 Use the settings above as your baseline.
 
-### 2. Test Your Specific Use Case
+### 2. Test Configuration
 ```bash
 python examples/dexhand_test.py --episode-length 50
 ```
@@ -163,49 +163,65 @@ Observe:
 ### 3. Iterative Tuning
 
 **For stability issues:**
-- Try increasing `num_position_iterations`
-- Try decreasing `dt` for finer time resolution
-- Try increasing `substeps`
-- Each change affects both stability and performance
+```yaml
+# Increase solver iterations (default: 16 → 32)
+physx:
+  num_position_iterations: 32
+
+# Decrease timestep (default: 0.01 → 0.005)
+sim:
+  dt: 0.005
+
+# Increase substeps (default: 4 → 8)
+sim:
+  substeps: 8
+```
 
 **For performance issues:**
-- Try reducing solver iterations
-- Try increasing `dt` (larger timesteps)
-- Try reducing `substeps`
-- Consider trade-offs for your application
+```yaml
+# Use fast physics configuration
+defaults: [/physics/fast, _self_]
+
+# Or manually reduce solver quality
+physx:
+  num_position_iterations: 8  # Reduced from 16
+```
 
 **For memory issues:**
-- Monitor GPU memory usage
-- Adjust contact buffer sizes if needed
-- Consider reducing number of environments
+```bash
+# Monitor GPU memory during execution
+watch -n 1 nvidia-smi
 
-### 4. Validate for Your Task
-- Test with your specific manipulation tasks
-- Ensure parameters work across different scenarios
-- Document what works best for your use case
+# Reduce environments if memory constrained
+python train.py env.numEnvs=512  # Instead of 8192
+```
 
-## General Principles
+### 4. Validate with Repository Test Commands
+```bash
+# Test stability with BaseTask
+python examples/dexhand_test.py task=BaseTask --episode-length 100
 
-### Joint Damping vs Solver Parameters
-- Increasing joint damping may not always improve stability
-- Solver parameters often have more impact
-- Experiment to find what works for your case
+# Test with BlindGrasping task (more complex contacts)
+python train.py task=BlindGrasping test=true numEnvs=4 viewer=true
 
-### Finding Balance
-- Very high solver iterations increase computation time
-- Very small timesteps can impact real-time performance
-- Each application has different requirements
+# Benchmark performance
+python train.py task=BaseTask numEnvs=8192 headless=true maxIterations=100
+```
 
-### Environment Differences
-- GPU and CPU pipelines may behave differently
-- Rendering vs headless modes can affect physics
-- Always test in your target deployment configuration
+## Physics Pipeline Specifics
 
-### Viewer Synchronization
-- IsaacGym automatically handles real-time synchronization via `gym.sync_frame_time()`
-- Viewer always syncs to real-time when rendering for smooth visualization
-- Performance profiling will show high rendering % when waiting for real-time sync
-- For training without visualization, use headless mode to run as fast as possible
+### GPU vs CPU Pipeline Differences
+The repository uses GPU pipeline by default with specific requirements:
+- `contact_collection: 1` (CC_LAST_SUBSTEP) required for GPU
+- Contact buffer automatically scaled: `gpu_contact_pairs_per_env × numEnvs`
+- GPU pipeline enforces specific tensor refresh order
+
+### Viewer Impact on Physics
+When `viewer=true`, Isaac Gym automatically:
+- Calls `gym.sync_frame_time()` for real-time synchronization
+- Limits simulation speed to match real-time for smooth visualization
+- Shows high rendering % in profiler when waiting for real-time sync (expected behavior)
+- For training without visualization, use `headless=true` to run at maximum speed
 
 ## Example Parameter Ranges
 
@@ -221,16 +237,6 @@ Consider trying:
 - Keep `substeps: 1` - Already minimal
 - Lower `num_position_iterations` (e.g., 4, 3) - Reduce solver quality
 
-### Modern Recommended Ranges
-**Dexterous Manipulation**: 200-500 Hz (dt: 0.005-0.002)
-**General Robotics**: 100-200 Hz (dt: 0.01-0.005)
-**Simple Tasks**: 50-100 Hz (dt: 0.02-0.01)
-
-### Finding Your Balance
-- Start with defaults
-- Adjust one parameter at a time
-- Test with your specific tasks
-- Document what works for your application
 
 ## Verification Commands
 
@@ -251,19 +257,11 @@ python examples/dexhand_test.py --episode-length 1000 --num-envs 128
 
 ## Interpreting Results
 
-### What to Look For
-- Monitor DOF position changes over time
-- Check if changes stabilize or continue drifting
-- Note any oscillations or sudden jumps
-- Observe computational performance (FPS)
-
-### Making Decisions
-- Small position drift may be acceptable for some tasks
-- High-precision tasks need tighter tolerances
-- Consider your real-time requirements
-- Balance accuracy with computational budget
-
-Your specific application will determine what constitutes acceptable performance.
+### Metrics to Monitor
+- DOF position changes over time (watch for drift)
+- Physics step timing (check FPS counter)
+- Contact buffer warnings in console output
+- Joint position stability
 
 ## Common Issues and Solutions
 

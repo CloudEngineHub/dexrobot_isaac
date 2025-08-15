@@ -22,7 +22,7 @@ The TerminationManager recognizes three mutually exclusive termination types:
 
 ### 3. Timeout Termination
 - **When**: Episode reaches maximum length without success or failure
-- **Reward**: Neutral reward (configurable via `timeoutReward`, usually 0.0)
+- **Reward**: Neutral reward (configurable via `timeoutReward`, default: 0.0)
 - **Purpose**: Prevents infinite episodes, enables RL training progress
 
 ## Key Methods
@@ -33,9 +33,9 @@ The TerminationManager recognizes three mutually exclusive termination types:
 
 **Parameters**:
 - `episode_step_count`: Current step count for each environment
-- `builtin_success`: Dictionary of built-in success criteria (usually empty for BaseTask)
+- `builtin_success`: Dictionary of built-in success criteria (empty for BaseTask)
 - `task_success`: Dictionary of task-specific success criteria
-- `builtin_failure`: Dictionary of built-in failure criteria (usually empty for BaseTask)
+- `builtin_failure`: Dictionary of built-in failure criteria (empty for BaseTask)
 - `task_failure`: Dictionary of task-specific failure criteria
 
 **Returns**:

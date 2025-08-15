@@ -103,6 +103,19 @@ numEnvs=1024          →  CLI override (alias expanded to env.numEnvs)
 
 See [guide-indefinite-testing.md](guide-indefinite-testing.md) for continuous monitoring setup.
 
+## Monitoring Training Progress
+
+### TensorBoard Visualization
+```bash
+# Start TensorBoard in another terminal
+tensorboard --logdir runs/
+```
+
+Navigate to `http://localhost:6006` to see training curves. The system logs:
+- Episode rewards and individual reward components
+- Training loss and learning rate
+- Success/failure rates (task-specific)
+
 ## Common Training Scenarios
 
 ### Debug Training
@@ -210,13 +223,32 @@ ls runs_all/ | grep BlindGrasping
 python train.py test=true checkpoint=runs_all/old_experiment_20231201/nn/checkpoint.pth
 ```
 
+## Repository-Specific Features
+
+### CLI Aliases System
+This repository defines custom CLI aliases in `CLIPreprocessor.ALIASES` for convenience:
+- `numEnvs` → expands to `env.numEnvs`
+- `checkpoint` → expands to `train.checkpoint` with smart resolution
+- `config` → converted to `--config-name` for Hydra
+
+### Checkpoint Resolution Logic
+The `checkpoint=latest` uses intelligent resolution:
+1. Follows `runs/latest_train` symlink
+2. Finds newest `.pth` file in `nn/` subdirectory
+3. Supports hot-reload for continuous monitoring
+
+### Experiment Management Structure
+Unique dual-directory system:
+- `runs/` - Clean workspace with symlinks (auto-cleanup after 10 runs)
+- `runs_all/` - Permanent archive of all experiments
+- Latest symlinks always point to newest runs
+
 ## Tips
 
-1. **Start simple**: Use basic commands first, add customization as needed
-2. **Monitor training**: Use `checkpoint=latest` with `testGamesNum=0` for live monitoring
-3. **Check configs**: Run with `--cfg job` to see resolved configuration
-4. **Experiment tracking**: Each run creates a timestamped directory in `runs/`
-5. **Physics tuning**: Use `/physics/fast` for testing, `/physics/accurate` for final training
+1. **Use task-specific configs**: Each task has optimized defaults in `task/*.yaml`
+2. **Monitor with hot-reload**: `testGamesNum=0` with `reloadInterval=30` for live updates
+3. **Check resolved config**: Run with `--cfg job` to see final configuration
+4. **Use physics presets**: `/physics/fast` for debugging, `/physics/accurate` for training
 
 ## Related Documentation
 

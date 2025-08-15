@@ -281,28 +281,40 @@ euler = Rotation.from_quat(aligned_quat).as_euler('xyz', degrees=True)
 - No loops over environments
 - Efficient tensor reshaping
 
-### Best Practices
-1. Enable only necessary observations for RL
-2. Use dictionary access for debugging/analysis
-3. Batch compute related observations
-4. Validate shapes during development
+### Repository-Specific Configuration
 
-## Troubleshooting
+**Observation Selection**: Configured via `policy_observation_keys` in task YAML:
+```yaml
+# In task/BaseTask.yaml or task-specific configs
+env:
+  policy_observation_keys:
+    - "base_dof_pos"            # Base DOF positions
+    - "active_finger_dof_pos"   # Active finger positions
+    - "hand_pose"               # Hand root pose
+    - "contact_binary"          # Contact indicators
+    # Add/remove keys to customize observation tensor
+```
 
-### Zero or Constant Values
-- Check tensor refresh before reading
-- Verify correct tensor indexing
-- Ensure shape matches expectation
+**Observation Size Determination**:
+The system performs a dry run during initialization to concatenate all configured observations and determine the final tensor size automatically. No manual shape registration needed.
 
-### Missing Observations
-- Verify key exists in `obs_dict`
-- Check computation method called
-- Ensure shape defined in `OBSERVATION_SHAPES`
+## Troubleshooting Repository-Specific Issues
 
-### Performance Issues
-- Profile observation computation
-- Check for unnecessary loops
-- Use vectorized operations
+### Zero Values in Observations
+```python
+# Check tensor refresh order in PhysicsManager
+self.gym.refresh_dof_state_tensor(self.sim)  # Must be called before reading
+positions = self.dof_pos  # Now contains valid data
+```
+
+### Adding Task-Specific Observations
+```python
+# In task's compute_task_observations()
+def compute_task_observations(self, obs_dict):
+    obs_dict["target_distance"] = torch.norm(
+        self.target_pos - self.hand_pos, dim=-1
+    )
+    return obs_dict
 
 ## Example Usage
 

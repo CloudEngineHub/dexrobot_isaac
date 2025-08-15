@@ -147,7 +147,7 @@ Hydra's ability to combine multiple YAML files (base configs, task configs, trai
 A saved model state that can be loaded for testing or resumed training. Supports smart resolution (e.g., `checkpoint=latest` automatically finds the most recent checkpoint).
 
 ### **Test Mode**
-A training script mode (`train.test=true`) that loads a checkpoint and runs the policy without further training, typically with rendering enabled.
+A training script mode (`train.test=true`) that loads a checkpoint and runs the policy without further training. Default configs enable rendering (`test_viewer.yaml`, `test_stream.yaml`).
 
 ### **Hot Reload**
 A test mode feature that automatically reloads checkpoints at specified intervals, useful for debugging during training.
@@ -188,7 +188,7 @@ Writing computations that operate on entire batches of environments simultaneous
 ## Research Workflow
 
 ### **Domain Randomization (DexHand-Specific)**
-Systematic variation of simulation parameters in the DexHand environment, typically applied through the ResetManager component with configurable randomization ranges for hand position, orientation, and object properties.
+Systematic variation of simulation parameters in the DexHand environment, applied through the ResetManager component with configurable randomization ranges for hand position, orientation, and object properties.
 
 This glossary serves as the authoritative reference for terminology used throughout the DexHand project documentation and codebase.
 

@@ -434,18 +434,34 @@ if not validate_config(cfg):
 - Task-specific parameters are valid
 - Physics parameters are compatible
 
-### Best Practices
+### Configuration Patterns in This Repository
 
-#### 1. Configuration Organization
-- **Use inheritance** - Extend base configs rather than duplicating
-- **Separate concerns** - Keep physics, task, and training settings distinct
-- **Document overrides** - Comment why custom values are needed
-- **Validate early** - Test configurations before long training runs
+#### 1. Task Configuration Structure
+All tasks follow this exact pattern in `dexhand_env/cfg/task/`:
+```yaml
+defaults:
+  - BaseTask            # Inherit base configuration
+  - /physics/default    # Choose physics preset
+  - _self_             # Apply task-specific overrides last
 
-#### 2. Performance Optimization
-- **Choose appropriate physics** - fast for debugging, accurate for training
-- **Scale environments wisely** - More envs need more GPU memory
-- **Monitor resource usage** - Use appropriate batch sizes and iteration counts
+# Task-specific overrides
+task:
+  episodeLength: 500
+  reward_weights:
+    component_name: 1.0
+```
+
+#### 2. Physics Preset Selection
+```yaml
+# For interactive debugging (2-3x faster)
+defaults: [/physics/fast, _self_]
+
+# For training (balanced)
+defaults: [/physics/default, _self_]
+
+# For high-precision contact scenarios
+defaults: [/physics/accurate, _self_]
+```
 
 #### 3. Debugging Configuration Issues
 ```bash
