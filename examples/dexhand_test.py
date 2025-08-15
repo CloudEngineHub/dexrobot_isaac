@@ -1129,7 +1129,6 @@ def main(cfg: DictConfig):
             sim_device=sim_device,
             graphics_device_id=graphics_device_id,
             force_render=not viewer_enabled or has_video,
-            virtual_screen_capture=has_video and not viewer_enabled,
             video_config=video_config,
         )
         logger.info("Environment created successfully!")

@@ -20,7 +20,6 @@ from loguru import logger
 
 # Global variable to store the simulation instance
 EXISTING_SIM = None
-SCREEN_CAPTURE_RESOLUTION = (1027, 768)
 
 
 def _create_sim_once(gym, *args, **kwargs):
@@ -178,7 +177,6 @@ class VecTask(Env):
         sim_device: str,
         graphics_device_id: int,
         headless: bool,
-        virtual_screen_capture: bool = False,
         force_render: bool = False,
     ):
         """Initialize the vectorized task.
@@ -188,17 +186,9 @@ class VecTask(Env):
             sim_device: the device to simulate physics on. eg. 'cuda:0' or 'cpu'
             graphics_device_id: the device ID to render with.
             headless: Set to False to disable viewer rendering.
-            virtual_screen_capture: Set to True to allow the users get captured screen in RGB array.
             force_render: Set to True to always force rendering in the steps.
         """
         super().__init__(config, rl_device, sim_device, graphics_device_id, headless)
-        self.virtual_screen_capture = virtual_screen_capture
-        self.virtual_display = None
-        if self.virtual_screen_capture:
-            from pyvirtualdisplay.smartdisplay import SmartDisplay
-
-            self.virtual_display = SmartDisplay(size=SCREEN_CAPTURE_RESOLUTION)
-            self.virtual_display.start()
         self.force_render = force_render
 
         self.sim_params = self._parse_sim_params(

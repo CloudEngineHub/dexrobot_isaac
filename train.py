@@ -86,7 +86,6 @@ def create_env_fn(
     sim_device: str,
     rl_device: str,
     graphics_device_id: int,
-    virtual_screen_capture: bool = False,
     force_render: bool = False,
     video_config: dict = None,
 ):
@@ -100,7 +99,6 @@ def create_env_fn(
             rl_device=rl_device,
             graphics_device_id=graphics_device_id,
             cfg=cfg,
-            virtual_screen_capture=virtual_screen_capture,
             force_render=force_render,
             video_config=video_config,
         )
@@ -275,13 +273,9 @@ def main(cfg: DictConfig):
     # Apply RL Games compatibility patches (hot-reload + device compatibility)
     apply_rl_games_patches()
 
-    # Use explicit viewer configuration (no assumption logic)
-    should_render = cfg.env.viewer
-
     # Handle video recording and streaming
     record_video = cfg.env.videoRecord
     stream_video = cfg.env.videoStream
-    virtual_screen_capture = (record_video or stream_video) and not should_render
     force_render = (
         record_video or stream_video
     )  # Force rendering for video capture even in headless
@@ -322,9 +316,7 @@ def main(cfg: DictConfig):
                 f"  🌐 HTTP stream will be available at: http://{video_config['stream_host']}:{video_config['stream_port']}"
             )
 
-            logger.info(
-                f"  ⚙️  Render config: virtual_screen_capture={virtual_screen_capture}, force_render={force_render}"
-            )
+            logger.info(f"  ⚙️  Render config: force_render={force_render}")
     else:
         logger.info(
             "Video features disabled (env.videoRecord=false, env.videoStream=false)"
@@ -338,7 +330,6 @@ def main(cfg: DictConfig):
         sim_device=cfg.env.device,
         rl_device=cfg.env.device,
         graphics_device_id=cfg.sim.graphicsDeviceId,
-        virtual_screen_capture=virtual_screen_capture,
         force_render=force_render,
         video_config=video_config,
     )
