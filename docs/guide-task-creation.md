@@ -7,7 +7,7 @@ This guide walks through creating a new task for the DexHand environment.
 - [Terminology Glossary](GLOSSARY.md) - For key concepts and definitions
 - [Component Initialization](guide-component-initialization.md) - For two-stage initialization details
 - [Observation System](guide-observation-system.md) - For adding task-specific observations
-- [TRAINING.md](../TRAINING.md) - For using your task in training workflows
+- [TRAINING.md](TRAINING.md) - For using your task in training workflows
 
 ## Overview
 
@@ -20,69 +20,28 @@ Tasks in this environment define:
 
 ## Two-Stage Initialization Pattern
 
-**CRITICAL:** The DexHand environment uses a **two-stage initialization pattern** that is a core architectural principle and must be respected by all components. See [System Architecture](ARCHITECTURE.md) for more details on this pattern.
+**CRITICAL:** Tasks must follow the two-stage initialization pattern used throughout the DexHand environment.
 
-### Why Two-Stage is Necessary
+**→ See [Component Initialization Guide](guide-component-initialization.md) for the complete explanation of this pattern.**
 
-The pattern exists because `control_dt` can only be determined at runtime by measuring actual physics behavior:
+### Quick Summary for Task Implementation
 
+**Stage 1: Construction** - Store configuration, create data structures
 ```python
-# control_dt = physics_dt × physics_steps_per_control
-# where physics_steps_per_control is measured, not configured
+def __init__(self, cfg, *args, **kwargs):
+    # Store task-specific config (no dependencies on other components)
+    self.target_position = torch.tensor(cfg["task"]["target_position"], dtype=torch.float32)
+    self.success_threshold = cfg["task"]["success_threshold"]
+    super().__init__(cfg, *args, **kwargs)
 ```
 
-**Why measurement is required:**
-- Environment resets require variable physics steps to stabilize
-- Isaac Gym may add internal physics steps during state changes
-- GPU pipeline timing variations
-- Multi-environment synchronization effects
-
-This is **not a design flaw** - it's the correct engineering solution for interfacing with unpredictable simulation behavior.
-
-### The Two-Stage Lifecycle
-
-**Stage 1: Construction + Basic Initialization**
+**Stage 2: Finalization** - Complete setup after `control_dt` is available
 ```python
-# Create components with known dependencies
-task = YourTask(cfg=task_cfg)
-task.initialize_from_config(config)
-# Component is functional but cannot access control_dt yet
-```
-
-**Stage 2: Finalization After Measurement**
-```python
-# Measure control_dt by running dummy control cycle
-physics_manager.start_control_cycle_measurement()
-# ... run measurement cycle ...
-physics_manager.finish_control_cycle_measurement()
-
-# Now finalize all components
-task.finalize_setup()  # Can now access control_dt
-```
-
-### Implementation Guidelines
-
-**✅ CORRECT: Use property decorators for control_dt access**
-```python
-@property
-def control_dt(self):
-    """Access control_dt from physics manager (single source of truth)."""
-    return self.parent.physics_manager.control_dt
-```
-
-**❌ WRONG: Don't check if control_dt exists**
-```python
-# This violates "fail fast" principle
-if self.physics_manager.control_dt is None:
-    raise RuntimeError("control_dt not available")
-```
-
-**✅ CORRECT: Trust initialization order**
-```python
-# After finalize_setup(), control_dt is guaranteed to exist
-def compute_velocity_scaling(self):
-    dt = self.control_dt  # This WILL work post-finalization
-    return action_delta / dt
+def finalize_setup(self):
+    """Complete initialization after all components are ready."""
+    super().finalize_setup()
+    # Now safe to access control_dt and other component dependencies
+    # Setup any velocity-based computations that need control_dt here
 ```
 
 ## Step-by-Step Task Creation
@@ -598,6 +557,6 @@ This guide should get you started with creating custom tasks. Refer to `BlindGra
 - **[System Architecture](ARCHITECTURE.md)** - Component interaction patterns and design principles
 - **[Component Debugging](guide-debugging.md)** - Troubleshooting component interaction issues
 - **[Coordinate Systems](reference-coordinate-systems.md)** - Understanding fixed base motion and coordinate quirks
-- **[TRAINING.md](../TRAINING.md)** - Training your custom task with RL algorithms
+- **[TRAINING.md](TRAINING.md)** - Training your custom task with RL algorithms
 - **[Terminology Glossary](GLOSSARY.md)** - Definitions of concepts used in this guide
 - **[Component Initialization](guide-component-initialization.md)** - Detailed two-stage initialization documentation

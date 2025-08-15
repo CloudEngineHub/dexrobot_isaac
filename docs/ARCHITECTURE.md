@@ -5,7 +5,7 @@ This document explains the architecture of the DexHand system, why it's designed
 **Related Documentation:**
 - [Task Creation Guide](guide-task-creation.md) - For implementing custom tasks
 - [Component Initialization](guide-component-initialization.md) - For detailed component setup
-- [TRAINING.md](../TRAINING.md) - For usage workflows and configuration
+- [TRAINING.md](TRAINING.md) - For usage workflows and configuration
 - [Terminology Glossary](GLOSSARY.md) - For concept definitions and technical terms
 
 ## The Problem: GPU-Parallel Simulation Complexity
@@ -285,7 +285,7 @@ The DexHand architecture solves the unique challenges of GPU-parallel RL researc
 ## See Also
 
 - **[Task Creation Guide](guide-task-creation.md)** - Practical implementation guide for new tasks
-- **[TRAINING.md](../TRAINING.md)** - Training workflows and configuration
+- **[TRAINING.md](TRAINING.md)** - Training workflows and configuration
 - **[Terminology Glossary](GLOSSARY.md)** - Definitions of architectural concepts
 - **[Design Decisions](DESIGN_DECISIONS.md)** - Critical caveats and implementation details
 - **[Component Initialization](guide-component-initialization.md)** - Two-stage initialization deep dive

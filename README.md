@@ -4,7 +4,7 @@ This repository provides reinforcement learning environments for training dexter
 
 **📖 Quick Links:**
 - **[Getting Started](docs/GETTING_STARTED.md)** - 10-minute setup to first trained policy
-- **[Training Guide](TRAINING.md)** - Training, testing, and experiment management
+- **[Training Guide](docs/TRAINING.md)** - Training, testing, and experiment management
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Solutions to common issues
 - **[Full Documentation](docs/)** - Complete guides and API reference
 
@@ -144,7 +144,7 @@ python train.py config=debug  # Use debug.yaml config
 
 ### Essential Guides
 - **[Getting Started](docs/GETTING_STARTED.md)** - 10-minute setup to first trained policy
-- **[Training Guide](TRAINING.md)** - Quick commands for training, testing, and customization
+- **[Training Guide](docs/TRAINING.md)** - Quick commands for training, testing, and customization
 - **[Configuration System](docs/guide-configuration-system.md)** - Full config reference and physics tuning
 - **[Task Creation](docs/guide-task-creation.md)** - Build custom manipulation tasks
 

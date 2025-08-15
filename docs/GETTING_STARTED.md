@@ -21,7 +21,7 @@ DexHand provides a 10-minute path to your first working policy through:
 4. **Immediate visual feedback**: See your hand moving in minutes
 
 **Next Steps:**
-- [TRAINING.md](../TRAINING.md) - Complete training and testing guide
+- [TRAINING.md](TRAINING.md) - Complete training and testing guide
 - [Component Initialization](guide-component-initialization.md) - Understanding the system architecture
 - [Task Creation Guide](guide-task-creation.md) - Creating custom manipulation tasks
 - [Observation System](guide-observation-system.md) - Customizing observations for your task
@@ -275,7 +275,7 @@ python train.py test=true checkpoint=runs/BaseTask_train_20250709_123456/nn/Base
 ### Getting Help
 
 If you encounter issues not covered here:
-1. Check the [Training Guide](../TRAINING.md) for advanced configuration
+1. Check the [Training Guide](TRAINING.md) for advanced configuration
 2. Review the [System Architecture](ARCHITECTURE.md) for deeper understanding
 3. Consult the [API Reference](reference-dof-control-api.md) for technical details
 4. Create an issue on the GitHub repository with your error message and system details

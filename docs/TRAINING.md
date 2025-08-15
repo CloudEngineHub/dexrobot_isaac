@@ -1,6 +1,6 @@
 # Training and Testing Guide
 
-Get your RL policies training in 30 seconds. This guide covers the essentials - for deep configuration details, see [docs/guide-configuration-system.md](docs/guide-configuration-system.md).
+Get your RL policies training in 30 seconds. This guide covers the essentials - for deep configuration details, see [guide-configuration-system.md](guide-configuration-system.md).
 
 ## Quick Start
 
@@ -101,7 +101,7 @@ numEnvs=1024          →  CLI override (alias expanded to env.numEnvs)
 
 **With hot-reload enabled:** The system monitors the resolved directory every 30 seconds (configurable via `reloadInterval`) and automatically loads newer checkpoints as they appear
 
-See [docs/guide-indefinite-testing.md](docs/guide-indefinite-testing.md) for continuous monitoring setup.
+See [guide-indefinite-testing.md](guide-indefinite-testing.md) for continuous monitoring setup.
 
 ## Common Training Scenarios
 
@@ -220,7 +220,7 @@ python train.py test=true checkpoint=runs_all/old_experiment_20231201/nn/checkpo
 
 ## Related Documentation
 
-- [Configuration System](docs/guide-configuration-system.md) - Full configuration reference
-- [Indefinite Testing](docs/guide-indefinite-testing.md) - Continuous policy monitoring
-- [Task Creation](docs/guide-task-creation.md) - Create custom tasks
-- [Physics Tuning](docs/guide-physics-tuning.md) - Optimize simulation settings
+- [Configuration System](guide-configuration-system.md) - Full configuration reference
+- [Indefinite Testing](guide-indefinite-testing.md) - Continuous policy monitoring
+- [Task Creation](guide-task-creation.md) - Create custom tasks
+- [Physics Tuning](guide-physics-tuning.md) - Optimize simulation settings

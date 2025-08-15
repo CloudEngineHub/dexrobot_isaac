@@ -18,7 +18,7 @@ Welcome to the DexHand documentation. This directory contains comprehensive guid
 
 **Complete guide for training RL policies and managing experiments:**
 
-- **[../TRAINING.md](../TRAINING.md)** - Comprehensive training workflows, configuration options, and experiment management
+- **[TRAINING.md](TRAINING.md)** - Comprehensive training workflows, configuration options, and experiment management
 
 ### 📚 Core Guides
 
@@ -67,7 +67,7 @@ Welcome to the DexHand documentation. This directory contains comprehensive guid
 
 ### For New Users
 1. [GETTING_STARTED.md](GETTING_STARTED.md) → [../README.md](../README.md) → [ARCHITECTURE.md](ARCHITECTURE.md)
-2. [../TRAINING.md](../TRAINING.md) for comprehensive training workflows
+2. [TRAINING.md](TRAINING.md) for comprehensive training workflows
 3. [guide-environment-lifecycle.md](guide-environment-lifecycle.md) for understanding component interactions
 4. [guide-task-creation.md](guide-task-creation.md) for implementing custom tasks
 5. [guide-debugging.md](guide-debugging.md) when things go wrong

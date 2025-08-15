@@ -5,7 +5,7 @@ This guide explains the DexHand configuration system, including the 4-section hi
 **Related Documentation:**
 - [System Architecture](ARCHITECTURE.md) - Overall system design principles
 - [Physics Tuning Guide](guide-physics-tuning.md) - Detailed physics parameter reference
-- [Training Guide](../TRAINING.md) - CLI usage and training workflows
+- [Training Guide](TRAINING.md) - CLI usage and training workflows
 - [Getting Started](GETTING_STARTED.md) - Quick setup and basic usage
 
 ## Overview
