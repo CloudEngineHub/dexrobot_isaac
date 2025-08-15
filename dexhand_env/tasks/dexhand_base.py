@@ -88,7 +88,6 @@ class DexHandBase(VecTask):
         sim_device,
         graphics_device_id,
         headless,
-        virtual_screen_capture=False,
         force_render=False,
         video_config=None,
     ):
@@ -102,7 +101,6 @@ class DexHandBase(VecTask):
             sim_device: The device to use for simulation.
             graphics_device_id: The device ID to use for rendering.
             headless: If True, don't render to a window.
-            virtual_screen_capture: If True, allow capturing screen for rgb_array mode.
             force_render: If True, always render in the steps.
             video_config: Optional video recording configuration dictionary.
         """
@@ -183,7 +181,6 @@ class DexHandBase(VecTask):
             sim_device=sim_device,
             graphics_device_id=graphics_device_id,
             headless=headless,
-            virtual_screen_capture=virtual_screen_capture,
             force_render=force_render,
         )
         logger.info("VecTask parent class initialized, creating simulation...")
