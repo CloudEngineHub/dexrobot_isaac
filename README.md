@@ -2,12 +2,11 @@
 
 This repository provides reinforcement learning environments for training dexterous manipulation policies with robotic hands using NVIDIA's Isaac Gym simulator.
 
-**📖 Documentation Navigation:**
-- **[Getting Started](docs/GETTING_STARTED.md)** - Quick setup and first training run
-- **[Training Guide](TRAINING.md)** - Complete training and testing workflows
-- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design and component structure
-- **[Task Creation Guide](docs/guide-task-creation.md)** - Creating custom manipulation tasks
-- **[API Reference](docs/)** - Complete API documentation and technical guides
+**📖 Quick Links:**
+- **[Getting Started](docs/GETTING_STARTED.md)** - 10-minute setup to first trained policy
+- **[Training Guide](docs/TRAINING.md)** - Training, testing, and experiment management
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Solutions to common issues
+- **[Full Documentation](docs/)** - Complete guides and API reference
 
 ## Project Philosophy
 
@@ -141,32 +140,30 @@ python train.py test=true checkpoint=path/to/checkpoint.pth
 python train.py config=debug  # Use debug.yaml config
 ```
 
-## Quick Start
+## Documentation
 
-**New to DexHand?** Follow our [Getting Started Guide](docs/GETTING_STARTED.md) for a 10-minute setup and your first trained policy.
+### Essential Guides
+- **[Getting Started](docs/GETTING_STARTED.md)** - 10-minute setup to first trained policy
+- **[Training Guide](docs/TRAINING.md)** - Quick commands for training, testing, and customization
+- **[Configuration System](docs/guide-configuration-system.md)** - Full config reference and physics tuning
+- **[Task Creation](docs/guide-task-creation.md)** - Build custom manipulation tasks
 
-For detailed training instructions, hyperparameter tuning, and advanced usage, see [TRAINING.md](TRAINING.md).
+### Practical Workflows
+- **[Indefinite Testing](docs/guide-indefinite-testing.md)** - Live policy monitoring during training
+- **[HTTP Video Streaming](docs/guide-http-video-streaming.md)** - Remote visualization setup
+- **[Physics Tuning](docs/guide-physics-tuning.md)** - Optimize simulation settings
+- **[Debugging Guide](docs/guide-debugging.md)** - Component troubleshooting
 
-## Documentation Hub
+### Technical Reference
+- **[System Architecture](docs/ARCHITECTURE.md)** - Design principles and component structure
+- **[Design Decisions](docs/DESIGN_DECISIONS.md)** - Critical caveats and quirks
+- **[DOF Control API](docs/reference-dof-control-api.md)** - Action spaces and control modes
+- **[Observation System](docs/guide-observation-system.md)** - Observation encoding
+- **[Glossary](docs/GLOSSARY.md)** - Project terminology
 
-**Getting Started:**
-- **[Getting Started Guide](docs/GETTING_STARTED.md)** - 10-minute setup to first trained policy
-- **[TRAINING.md](TRAINING.md)** - Comprehensive training guide with CLI options and configuration
-- **[Task Creation Guide](docs/guide-task-creation.md)** - Step-by-step guide for implementing new tasks
-
-**Development & Reference:**
-- **[CLAUDE.md](CLAUDE.md)** - Development guidelines, architectural principles, and build commands
-- **[ROADMAP.md](ROADMAP.md)** - Project status, completed features, and development plans
-
-**Architecture & Reference:**
-- **[System Architecture](docs/ARCHITECTURE.md)** - High-level architecture overview and design principles
-- **[Terminology Glossary](docs/GLOSSARY.md)** - Definitions of project-specific terms and concepts
-- **[Component Debugging](docs/guide-debugging.md)** - Troubleshooting component interaction issues
-- **[Coordinate Systems](docs/reference-coordinate-systems.md)** - Fixed base motion and coordinate quirks
-- **[Design Decisions](docs/DESIGN_DECISIONS.md)** - Critical caveats and architectural decisions
-- **[DOF Control API](docs/reference-dof-control-api.md)** - Reference for degrees of freedom and control modes
-- **[Observation System](docs/guide-observation-system.md)** - How observations are structured and encoded
-- **[Component Initialization](docs/guide-component-initialization.md)** - Two-stage initialization pattern details
+### Development
+- **[CLAUDE.md](CLAUDE.md)** - Development guidelines and architectural principles
+- **[ROADMAP.md](ROADMAP.md)** - Project status and future plans
 
 ## Configuration
 

@@ -20,7 +20,7 @@ This glossary provides authoritative definitions that:
 3. **Provide context**: Explain why certain terms matter
 4. **Enable precise communication**: Reduce ambiguity in technical discussions
 
-> **How to Use:** This glossary supports all other documentation. See [System Architecture](ARCHITECTURE.md) for design overview, [Task Creation Guide](guide-task-creation.md) for implementation details, and [TRAINING.md](../TRAINING.md) for usage workflows.
+> **How to Use:** This glossary supports all other documentation. See [System Architecture](ARCHITECTURE.md) for design overview, [Task Creation Guide](guide-task-creation.md) for implementation details, and [TRAINING.md](TRAINING.md) for usage workflows.
 
 ## Core Concepts
 
@@ -28,14 +28,14 @@ This glossary provides authoritative definitions that:
 A modular software unit with a single responsibility that follows the two-stage initialization pattern. Examples: `PhysicsManager`, `ActionProcessor`, `RewardCalculator`. Components communicate through well-defined interfaces and property decorators.
 
 ### **Two-Stage Initialization**
-An architectural pattern where component setup is split into two phases:
-1. **Stage 1**: Basic configuration and setup that doesn't depend on simulation
-2. **Stage 2**: Finalization after `control_dt` measurement and simulation startup
+An architectural pattern where component setup is split into configuration and finalization phases. Necessary because Isaac Gym's timing parameters can only be determined at runtime.
 
-This pattern is necessary because Isaac Gym's timing parameters can only be determined at runtime.
+**→ See [Component Initialization Guide](guide-component-initialization.md) for complete details.**
 
 ### **Fail-Fast**
-A design philosophy where the system crashes immediately on errors rather than hiding them with fallbacks or defensive programming. This exposes bugs at their source for faster debugging in research environments.
+A design philosophy where the system crashes immediately on errors rather than hiding them. Exposes bugs at their source for faster debugging.
+
+**→ See [System Architecture](ARCHITECTURE.md#fail-fast-philosophy) for rationale and examples.**
 
 ### **Single Source of Truth**
 An architectural principle ensuring shared state (like `control_dt`, `device`, `num_envs`) lives in exactly one location and is accessed through property decorators to prevent synchronization issues.
@@ -147,7 +147,7 @@ Hydra's ability to combine multiple YAML files (base configs, task configs, trai
 A saved model state that can be loaded for testing or resumed training. Supports smart resolution (e.g., `checkpoint=latest` automatically finds the most recent checkpoint).
 
 ### **Test Mode**
-A training script mode (`train.test=true`) that loads a checkpoint and runs the policy without further training, typically with rendering enabled.
+A training script mode (`train.test=true`) that loads a checkpoint and runs the policy without further training. Default configs enable rendering (`test_viewer.yaml`, `test_stream.yaml`).
 
 ### **Hot Reload**
 A test mode feature that automatically reloads checkpoints at specified intervals, useful for debugging during training.
@@ -188,7 +188,7 @@ Writing computations that operate on entire batches of environments simultaneous
 ## Research Workflow
 
 ### **Domain Randomization (DexHand-Specific)**
-Systematic variation of simulation parameters in the DexHand environment, typically applied through the ResetManager component with configurable randomization ranges for hand position, orientation, and object properties.
+Systematic variation of simulation parameters in the DexHand environment, applied through the ResetManager component with configurable randomization ranges for hand position, orientation, and object properties.
 
 This glossary serves as the authoritative reference for terminology used throughout the DexHand project documentation and codebase.
 
